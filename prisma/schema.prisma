@@ -1,0 +1,129 @@
+// اسکیمای دیتابیس «حساب‌یار» — SQLite + Prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id               String          @id @default(cuid())
+  name             String
+  type             String // CASH | BANK | CARD | SAVINGS | OTHER
+  color            String // hex
+  icon             String
+  initialBalance   Int             @default(0) // تومان
+  isArchived       Boolean         @default(false)
+  sortOrder        Int             @default(0)
+  createdAt        DateTime        @default(now())
+  transactionsFrom Transaction[]   @relation("transferFrom")
+  transactionsTo   Transaction[]   @relation("transferTo")
+  recurringRules   RecurringRule[]
+}
+
+model Category {
+  id              String          @id @default(cuid())
+  name            String
+  type            String // INCOME | EXPENSE
+  color           String
+  icon            String
+  transactions    Transaction[]
+  budgets         Budget[]
+  recurringRules  RecurringRule[]
+}
+
+model Transaction {
+  id              String         @id @default(cuid())
+  type            String // INCOME | EXPENSE | TRANSFER
+  amount          Int // تومان، همیشه مثبت
+  accountId       String
+  account         Account        @relation("transferFrom", fields: [accountId], references: [id])
+  toAccountId     String?
+  toAccount       Account?       @relation("transferTo", fields: [toAccountId], references: [id])
+  categoryId      String?
+  category        Category?      @relation(fields: [categoryId], references: [id])
+  date            DateTime
+  note            String?
+  recurringRuleId String?
+  recurringRule   RecurringRule? @relation(fields: [recurringRuleId], references: [id])
+  debtId          String?
+  debt            Debt?          @relation(fields: [debtId], references: [id])
+  createdAt       DateTime       @default(now())
+
+  @@index([date])
+  @@index([accountId, date])
+  @@index([categoryId])
+}
+
+model Budget {
+  id             String   @id @default(cuid())
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id])
+  amount         Int // سقف ماهانه به تومان
+  monthJalali    String // "1404-08"
+  alertThreshold Int      @default(80) // درصد هشدار
+  createdAt      DateTime @default(now())
+
+  @@unique([categoryId, monthJalali])
+}
+
+model RecurringRule {
+  id         String        @id @default(cuid())
+  title      String
+  type       String // INCOME | EXPENSE
+  amount     Int
+  accountId  String
+  account    Account       @relation(fields: [accountId], references: [id])
+  categoryId String?
+  category   Category?     @relation(fields: [categoryId], references: [id])
+  frequency  String // DAILY | WEEKLY | MONTHLY_JALALI
+  interval   Int           @default(1)
+  dayOfMonth Int? // روز ماه شمسی برای MONTHLY_JALALI
+  nextRunAt  DateTime
+  lastRunAt  DateTime?
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+  generated  Transaction[]
+}
+
+model Debt {
+  id                  String        @id @default(cuid())
+  direction           String // I_OWE (بدهی من) | OWED_TO_ME (طلب من)
+  person              String
+  amount              Int
+  settledAmount       Int           @default(0)
+  dueDate             DateTime?
+  note                String?
+  isSettled           Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  settledTransactions Transaction[]
+}
+
+model AlertRule {
+  id          String    @id @default(cuid())
+  type        String // BUDGET_THRESHOLD | LOW_BALANCE | DEBT_DUE | RECURRING_RUN
+  accountId   String?
+  threshold   Int?
+  isActive    Boolean   @default(true)
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model NotificationLog {
+  id        String   @id @default(cuid())
+  chatId    String
+  message   String
+  alertType String?
+  status    String // SENT | FAILED
+  sentAt    DateTime @default(now())
+}
+
+model Setting {
+  id                String  @id @default("default")
+  botToken          String?
+  adminChatId       String?
+  miniAppUrl        String?
+  lowBalanceDefault Int     @default(100000)
+}

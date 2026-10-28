@@ -1,0 +1,213 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Vazirmatn", "Segoe UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Vazirmatn", ui-monospace, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.75rem; /* ۱۲px دکمه و input — کارت ۱۶px و باتم‌شیت ۲۴px */
+  --background: #f7f8fa;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #0e7c66;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f3f0;
+  --secondary-foreground: #0b5a4b;
+  --muted: #f1f3f6;
+  --muted-foreground: #6b7280;
+  --accent: #ecf5f3;
+  --accent-foreground: #0b5a4b;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --border: #eceef2;
+  --input: #e3e6ec;
+  --ring: #0e7c66;
+  --success: #16a34a;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #ffffff;
+  --income: #16a34a;
+  --expense: #e5484d;
+  --chart-1: #0e7c66;
+  --chart-2: #14b8a6;
+  --chart-3: #f59e0b;
+  --chart-4: #8b5cf6;
+  --chart-5: #ec4899;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #0e7c66;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ecf5f3;
+  --sidebar-accent-foreground: #0b5a4b;
+  --sidebar-border: #eceef2;
+  --sidebar-ring: #0e7c66;
+}
+
+.dark {
+  --background: #0d1117;
+  --foreground: #e6e8eb;
+  --card: #161b22;
+  --card-foreground: #e6e8eb;
+  --popover: #161b22;
+  --popover-foreground: #e6e8eb;
+  --primary: #17a585;
+  --primary-foreground: #ffffff;
+  --secondary: #12241f;
+  --secondary-foreground: #a7f3d0;
+  --muted: #1c2128;
+  --muted-foreground: #9aa4b2;
+  --accent: #12241f;
+  --accent-foreground: #a7f3d0;
+  --destructive: #f8717186;
+  --destructive: #ef5350;
+  --destructive-foreground: #ffffff;
+  --border: #232a33;
+  --input: #2a323d;
+  --ring: #17a585;
+  --success: #22c55e;
+  --success-foreground: #052e16;
+  --warning: #fbbf24;
+  --warning-foreground: #451a03;
+  --income: #22c55e;
+  --expense: #ef5350;
+  --chart-1: #17a585;
+  --chart-2: #2dd4bf;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-5: #f472b6;
+  --sidebar: #161b22;
+  --sidebar-foreground: #e6e8eb;
+  --sidebar-primary: #17a585;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #12241f;
+  --sidebar-accent-foreground: #a7f3d0;
+  --sidebar-border: #232a33;
+  --sidebar-ring: #17a585;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "ss02";
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+  }
+}
+
+/* سایه دولایه بسیار ملایم کارت‌ها */
+@utility shadow-card {
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 6px 20px -4px rgba(16, 24, 40, 0.05);
+}
+
+@utility shadow-card-hover {
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.05),
+    0 12px 32px -6px rgba(16, 24, 40, 0.09);
+}
+
+@utility shadow-fab {
+  box-shadow:
+    0 4px 12px rgba(14, 124, 102, 0.32),
+    0 2px 4px rgba(14, 124, 102, 0.24);
+}
+
+/* اعداد جدولی برای مبالغ */
+@utility nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* اسکرول‌بار ظریف */
+@layer utilities {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted-foreground) 26%, transparent);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--muted-foreground) 44%, transparent);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* گرادیان کارت قهرمان داشبورد */
+  .hero-gradient {
+    background:
+      radial-gradient(120% 140% at 85% -10%, rgba(255, 255, 255, 0.18) 0%, transparent 55%),
+      linear-gradient(135deg, #0e7c66 0%, #0a6353 55%, #084d41 100%);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
