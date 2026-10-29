@@ -79,11 +79,12 @@ export function AmountInput({
   const [display, setDisplay] = React.useState("")
   const inputRef = React.useRef<HTMLInputElement>(null)
 
-  // همگام‌سازی نمایش با مقدار خارجی
+  // همگام‌سازی نمایش با مقدار خارجی (مثل دکمه «استفاده از مانده فاکتور»)
   React.useEffect(() => {
-    const raw = toLatinDigits(inputRef.current?.value ?? "")
-    if (value === 0 && raw.replace(/[^\d]/g, "") === "") {
-      setDisplay("")
+    const raw = toLatinDigits(inputRef.current?.value ?? "").replace(/[^\d]/g, "")
+    const current = raw ? parseInt(raw, 10) : 0
+    if (current !== value) {
+      setDisplay(value > 0 ? toPersianDigits(formatNumberFa(value)) : "")
     }
   }, [value])
 

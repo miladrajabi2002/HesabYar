@@ -443,12 +443,12 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           </div>
           <div>
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">موبایل</label>
-            <input
+            <Input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               inputMode="tel"
               dir="ltr"
-              className="field nums text-end"
+              className="nums text-end"
             />
           </div>
           <div>

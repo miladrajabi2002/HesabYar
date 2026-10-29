@@ -10,6 +10,7 @@ import { createPortal } from "react-dom"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { acquireBodyScrollLock } from "@/lib/body-scroll-lock"
 
 const FOCUSABLE = [
   "button:not([disabled])",
@@ -97,8 +98,8 @@ export function BottomSheet({
     if (!open) return
     const returnFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = "hidden"
+    // قفل اسکرول با شمارش مرجع: با دو شیت تودرتو، فقط بسته‌شدن دومی قفل را آزاد می‌کند
+    const releaseScrollLock = acquireBodyScrollLock()
     const raf = window.requestAnimationFrame(() => closeRef.current?.focus())
 
     function onKeyDown(event: KeyboardEvent) {
@@ -135,7 +136,7 @@ export function BottomSheet({
     document.addEventListener("keydown", onKeyDown)
     return () => {
       window.cancelAnimationFrame(raf)
-      document.body.style.overflow = previousOverflow
+      releaseScrollLock()
       document.removeEventListener("keydown", onKeyDown)
       returnFocus?.focus({ preventScroll: true })
     }
@@ -231,7 +232,7 @@ export function BottomSheet({
               className={cn(
                 "min-h-0 flex-1 overscroll-contain px-4 py-4",
                 !footer &&
-                  "[padding-bottom:max(1rem,calc(env(safe-area-inset-bottom) + var(--tg-safe-bottom,0px)))]",
+                  "[padding-bottom:max(1.25rem,calc(env(safe-area-inset-bottom) + var(--tg-safe-bottom,0px)))]",
                 contentClassName
               )}
             >
@@ -240,7 +241,7 @@ export function BottomSheet({
 
             {/* فوتر */}
             {footer && (
-              <div className="shrink-0 border-t border-border/60 bg-card/95 px-4 pt-3 backdrop-blur-xl [padding-bottom:max(0.9rem,calc(env(safe-area-inset-bottom) + var(--tg-safe-bottom,0px)))]">
+              <div className="shrink-0 border-t border-border/60 bg-card/95 px-4 pt-3 backdrop-blur-xl [padding-bottom:max(1.5rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+0.75rem))]">
                 {footer}
               </div>
             )}

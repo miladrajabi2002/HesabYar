@@ -138,25 +138,25 @@ function AccountForm({
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
               شماره حساب
             </label>
-            <input
+            <Input
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value)}
               dir="ltr"
               inputMode="numeric"
-              className="field nums text-end"
+              className="nums text-end"
             />
           </div>
           <div>
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
               شماره کارت
             </label>
-            <input
+            <Input
               value={cardNumber}
               onChange={(e) => setCardNumber(e.target.value)}
               dir="ltr"
               inputMode="numeric"
               placeholder="۶۲۸۰…"
-              className="field nums text-end"
+              className="nums text-end"
             />
           </div>
         </div>

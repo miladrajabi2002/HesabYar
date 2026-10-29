@@ -70,6 +70,9 @@ export async function POST(req: NextRequest) {
     const subtotal = data.items.reduce((s, i) => s + Math.round(i.quantity * i.unitPrice), 0)
     const total = Math.max(0, subtotal - data.discount)
     const credit = Math.max(0, total - data.paidCash - checkTotal)
+    // مازاد پرداخت: نقدی + چک بیشتر از مبلغ فاکتور — نباید گم شود؛
+    // به‌عنوان تسویه آزاد (علی‌الحساب) در دفتر شخص ثبت می‌شود.
+    const excess = Math.max(0, data.paidCash + checkTotal - total)
     const date = dayKeyToDate(data.date)
 
     const invoice = await db.$transaction(async (tx) => {
@@ -143,11 +146,28 @@ export async function POST(req: NextRequest) {
         })
       }
 
+      // مازاد پرداخت → علی‌الحساب شخص (تسویه آزاد؛ گردش بانکی جداگانه ندارد
+      // چون نقدی/چک با مبلغ کامل خودشان ثبت شده‌اند)
+      if (excess > 0) {
+        await tx.settlement.create({
+          data: {
+            personId: data.personId,
+            invoiceId: null,
+            direction: data.type === "SALE" ? "RECEIVE" : "PAY",
+            method: checkTotal > 0 ? "CHECK" : "CASH",
+            amount: excess,
+            accountId: null,
+            date,
+            note: `مازاد پرداخت فاکتور ${invoice.number} (ref:${invoice.id})`,
+          },
+        })
+      }
+
       return invoice
     })
 
     const full = await db.invoice.findUnique({ where: { id: invoice.id }, include: invoiceInclude })
-    return ok({ invoice: full })
+    return ok({ invoice: full, excess })
   } catch (e) {
     return serverError(e)
   }

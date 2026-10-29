@@ -309,13 +309,13 @@ export function AddPersonSheet({
           <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
             شماره موبایل (اختیاری)
           </label>
-          <input
+          <Input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             inputMode="tel"
             dir="ltr"
             placeholder="09…"
-            className="field nums text-end"
+            className="nums text-end"
           />
         </div>
         <div>

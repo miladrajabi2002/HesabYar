@@ -55,6 +55,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
       if (settlementIds.length > 0) {
         await tx.settlement.deleteMany({ where: { id: { in: settlementIds } } })
       }
+      // ۵) حذف تسویه «مازاد پرداخت» (علی‌الحساب) ثبت‌شده موقع ایجاد فاکتور
+      await tx.settlement.deleteMany({
+        where: { invoiceId: null, note: { endsWith: `(ref:${id})` } },
+      })
       await tx.invoiceItem.deleteMany({ where: { invoiceId: id } })
       await tx.invoice.delete({ where: { id } })
     })

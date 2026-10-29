@@ -28,6 +28,7 @@ import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { AmountInput } from "@/components/ui/amount-input"
 import { JalaliDateField, todayKey } from "@/components/ui/jalali-date-picker"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 interface Invoice {
@@ -471,11 +472,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
                     سریال
                   </label>
-                  <input
+                  <Input
                     value={checkSerial}
                     onChange={(e) => setCheckSerial(e.target.value)}
+                    inputMode="numeric"
                     dir="ltr"
-                    className="field nums text-end"
+                    className="nums text-end"
                   />
                 </div>
                 <div>

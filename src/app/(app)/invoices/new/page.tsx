@@ -26,9 +26,11 @@ import {
 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
+import { normalizeDigits } from "@/lib/digits"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { AmountInput } from "@/components/ui/amount-input"
+import { NumberInput } from "@/components/ui/number-input"
 import { JalaliDateField, todayKey } from "@/components/ui/jalali-date-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -121,6 +123,8 @@ function NewInvoicePageInner() {
   const total = Math.max(0, subtotal - discount)
   const checkTotal = checks.reduce((s, c) => s + c.amount, 0)
   const credit = Math.max(0, total - paidCash - checkTotal)
+  // مازاد پرداخت: نقدی + چک بیشتر از مبلغ فاکتور → علی‌الحساب شخص می‌رود
+  const excess = Math.max(0, paidCash + checkTotal - total)
 
   const personTypeLabel = type === "SALE" ? "مشتری" : "تأمین‌کننده"
 
@@ -129,7 +133,7 @@ function NewInvoicePageInner() {
     if (items.length === 0) return toast.error("حداقل یک قلم اضافه کنید")
     setSaving(true)
     try {
-      const r = await apiPost<{ invoice: { id: string; number: number } }>("/api/invoices", {
+      const r = await apiPost<{ invoice: { id: string; number: number }; excess: number }>("/api/invoices", {
         type,
         personId: person.id,
         date,
@@ -146,6 +150,9 @@ function NewInvoicePageInner() {
         note: note || undefined,
       })
       toast.success(`فاکتور شماره ${toPersianDigits(r.invoice.number)} ثبت شد ✅`)
+      if (r.excess > 0) {
+        toast.info(`مازاد ${formatToman(r.excess)} به علی‌الحساب «${person.name}» اضافه شد`)
+      }
       await queryClient.invalidateQueries()
       router.push(`/invoices/${r.invoice.id}`)
     } catch (e) {
@@ -395,17 +402,27 @@ function NewInvoicePageInner() {
             </div>
           </div>
 
-          {/* مانده / نسیه */}
+          {/* مانده / نسیه / مازاد */}
           <div
             className={cn(
               "mt-3 flex items-center justify-between rounded-2xl px-4 py-3",
-              credit > 0 ? "bg-warning/10 text-warning" : "bg-income/10 text-income"
+              credit > 0
+                ? "bg-warning/10 text-warning"
+                : excess > 0
+                  ? "bg-primary/10 text-primary"
+                  : "bg-income/10 text-income"
             )}
           >
             <span className="text-xs font-bold">
-              {credit > 0 ? "مانده روی حساب (نسیه)" : "تسویه کامل ✅"}
+              {credit > 0
+                ? "مانده روی حساب (نسیه)"
+                : excess > 0
+                  ? "مازاد پرداخت → علی‌الحساب شخص"
+                  : "تسویه کامل ✅"}
             </span>
-            <span className="nums text-sm font-extrabold">{formatToman(credit, false)}</span>
+            <span className="nums text-sm font-extrabold">
+              {formatToman(excess > 0 ? excess : credit, false)}
+            </span>
           </div>
 
           <div className="mt-3">
@@ -533,12 +550,12 @@ function PersonPickerSheet({
   onQuickAdd: () => void
 }) {
   const [q, setQ] = useState("")
+  const latinQ = normalizeDigits(q)
+  // جستجو با ارقام فارسی/لاتین: مثلاً موبایل «۰۹۱۲…» یا «0912…» هر دو پیدا می‌شوند
+  const matches = (s: string | null | undefined) =>
+    !!s && (s.includes(q) || normalizeDigits(s).includes(latinQ))
   const filtered = people.filter(
-    (p) =>
-      !q ||
-      p.name.includes(q) ||
-      (p.company ?? "").includes(q) ||
-      (p.phone ?? "").includes(q)
+    (p) => !q || matches(p.name) || matches(p.company) || matches(p.phone)
   )
   return (
     <BottomSheet
@@ -644,13 +661,13 @@ function QuickPersonSheet({
           <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
             شماره موبایل
           </label>
-          <input
+          <Input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             inputMode="tel"
             dir="ltr"
             placeholder="09…"
-            className="field nums text-end"
+            className="nums text-end"
           />
         </div>
         <div>
@@ -708,8 +725,10 @@ function ItemPickerSheet({
     setCode("")
   }
 
+  const matches = (s: string | null | undefined) =>
+    !!s && (s.includes(q) || normalizeDigits(s).includes(normalizeDigits(q)))
   const filtered = products.filter(
-    (p) => !q || p.name.includes(q) || (p.brand ?? "").includes(q) || (p.code ?? "").includes(q)
+    (p) => !q || matches(p.name) || matches(p.brand) || matches(p.code)
   )
 
   const addItem = async () => {
@@ -888,17 +907,7 @@ function ItemPickerSheet({
         <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-muted/50 p-3">
           <div>
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">تعداد *</label>
-            <input
-              value={quantity || ""}
-              onChange={(e) => {
-                const latin = e.target.value.replace(/[^\d.]/g, "")
-                setQuantity(latin ? Number(latin) : 0)
-              }}
-              inputMode="decimal"
-              dir="ltr"
-              className="field nums text-end font-bold"
-              placeholder="۱"
-            />
+            <NumberInput value={quantity} onChange={setQuantity} placeholder="۱" />
           </div>
           <div>
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
@@ -1002,13 +1011,13 @@ function QuickCheckSheet({
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
               شماره سریال
             </label>
-            <input
+            <Input
               value={serial}
               onChange={(e) => setSerial(e.target.value)}
               inputMode="numeric"
               dir="ltr"
               placeholder="مثلاً ۸۸۴۵۱۲"
-              className="field nums text-end"
+              className="nums text-end"
             />
           </div>
           <div>
