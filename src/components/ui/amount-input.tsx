@@ -111,7 +111,7 @@ export function AmountInput({
           onChange={handleChange}
           onFocus={handleFocus}
           placeholder={placeholder || "۰"}
-          className="nums h-12 w-full rounded-xl border border-input bg-card px-3 text-end text-base font-semibold tracking-wide outline-none transition-[color,box-shadow] placeholder:text-muted-foreground/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/25"
+          className="nums field text-end font-semibold tracking-wide"
         />
         {suffix && (
           <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-xs text-muted-foreground">

@@ -9,8 +9,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
   ArrowRight,
-  ShoppingBag,
-  Package,
+  ArrowDownLeft,
+  ArrowUpRight,
   Printer,
   Trash2,
   HandCoins,
@@ -198,8 +198,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               : "bg-gradient-to-l from-destructive to-[#c73a3f]"
           )}
         >
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur">
-            {isSale ? <ShoppingBag className="size-6" /> : <Package className="size-6" />}
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/25 backdrop-blur">
+            {isSale ? (
+              <ArrowUpRight className="size-6" strokeWidth={2.4} />
+            ) : (
+              <ArrowDownLeft className="size-6" strokeWidth={2.4} />
+            )}
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-[0.7rem] opacity-85">
@@ -332,11 +336,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   )}
                 >
                   {c.status === "CASHED"
-                    ? "وصول ✓"
+                    ? "پاس ✓"
                     : c.status === "PENDING"
                       ? "در جریان"
                       : c.status === "BOUNCED"
-                        ? "برگشتی"
+                        ? "برگشت خورده"
                         : "لغو"}
                 </span>
               </div>
@@ -441,7 +445,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 <button
                   type="button"
                   onClick={() => setAccountSheet(true)}
-                  className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-card px-3"
+                  className="flex h-12 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3 transition-[color,border-color,box-shadow] hover:border-input/80"
                 >
                   {settleAccount ? (
                     <>
@@ -471,7 +475,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     value={checkSerial}
                     onChange={(e) => setCheckSerial(e.target.value)}
                     dir="ltr"
-                    className="nums h-12 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+                    className="field nums text-end"
                   />
                 </div>
                 <div>
@@ -482,8 +486,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               </div>
               <p className="rounded-xl bg-primary/5 px-3 py-2 text-[0.65rem] text-muted-foreground">
-                چک تا سررسید «در جریان» می‌ماند و ربات تلگرام قبل از سررسید یادآوری می‌کند. با وصول،
-                گردش بانکی ثبت می‌شود.
+                چک تا سررسید «در جریان» می‌ماند و ربات تلگرام قبل از سررسید یادآوری می‌کند. با پاس
+                شدن، گردش بانکی ثبت می‌شود.
               </p>
             </>
           )}

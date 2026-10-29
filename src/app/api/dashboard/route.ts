@@ -91,23 +91,6 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    // جنس‌های رو به اتمام
-    const products = await db.product.findMany({
-      where: { isArchived: false },
-      include: { invoiceItems: { select: { quantity: true, invoice: { select: { type: true } } } } },
-    })
-    const lowStock = products
-      .map((p) => {
-        const stock = p.invoiceItems.reduce(
-          (s, i) => s + (i.invoice.type === "PURCHASE" ? i.quantity : -i.quantity),
-          0
-        )
-        return { id: p.id, name: p.name, brand: p.brand, code: p.code, unit: p.unit, stock, minStock: p.minStock }
-      })
-      .filter((p) => p.stock <= p.minStock)
-      .sort((a, b) => a.stock - b.stock)
-      .slice(0, 8)
-
     return ok({
       today,
       week,
@@ -125,7 +108,6 @@ export async function GET(req: NextRequest) {
       },
       series,
       recentInvoices,
-      lowStock,
     })
   } catch (e) {
     return serverError(e)

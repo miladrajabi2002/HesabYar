@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * چک‌ها — دریافتی/صادره با وضعیت وصول، برگشت و سررسید
+ * چک‌ها — دریافتی/صادره با وضعیت پاس، برگشت و سررسید
  */
 import { useState } from "react"
 import Link from "next/link"
@@ -12,10 +12,12 @@ import {
   Loader2,
   ArrowDownToLine,
   ArrowUpFromLine,
-  Landmark,
   Undo2,
   XCircle,
   AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Ban,
 } from "lucide-react"
 import { apiGet, apiPatch } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
@@ -49,8 +51,8 @@ interface Account {
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "در جریان",
-  CASHED: "وصول‌شده",
-  BOUNCED: "برگشتی",
+  CASHED: "پاس‌شده",
+  BOUNCED: "برگشت خورده",
   CANCELED: "لغو‌شده",
 }
 
@@ -90,12 +92,12 @@ export default function ChecksPage() {
     setSaving(true)
     try {
       await apiPatch(`/api/checks/${check.id}`, { status: "CASHED", accountId })
-      toast.success("چک وصول شد ✅ گردش بانکی ثبت شد")
+      toast.success("چک پاس شد ✅ گردش بانکی ثبت شد")
       setActionSheet(null)
       setAccountSheet(false)
       await queryClient.invalidateQueries()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "خطا در ثبت وصول")
+      toast.error(e instanceof Error ? e.message : "خطا در ثبت پاس چک")
     } finally {
       setSaving(false)
     }
@@ -190,8 +192,8 @@ export default function ChecksPage() {
           {(
             [
               { key: "PENDING", label: "در جریان" },
-              { key: "CASHED", label: "وصول‌شده" },
-              { key: "BOUNCED", label: "برگشتی" },
+              { key: "CASHED", label: "پاس‌شده" },
+              { key: "BOUNCED", label: "برگشت خورده" },
               { key: "ALL", label: "همه" },
             ] as const
           ).map((s) => (
@@ -241,11 +243,16 @@ export default function ChecksPage() {
                 className={cn(
                   "block w-full rounded-3xl border bg-card p-4 text-start shadow-card transition-all",
                   c.status === "PENDING" && "hover:shadow-card-hover active:scale-[0.995]",
+                  c.status !== "PENDING" && "shadow-none",
                   overdue
                     ? "border-destructive/40"
                     : soon
                       ? "border-warning/40"
-                      : "border-border/70"
+                      : c.status === "CASHED"
+                        ? "border-income/25"
+                        : c.status === "BOUNCED"
+                          ? "border-destructive/25"
+                          : "border-border/70"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -269,28 +276,52 @@ export default function ChecksPage() {
                     </div>
                   </div>
                   <div className="shrink-0 text-end">
-                    <div className="nums text-sm font-extrabold">{formatToman(c.amount, false)}</div>
                     <div
                       className={cn(
-                        "mt-0.5 rounded-md px-1.5 py-px text-[0.6rem] font-bold",
-                        c.status === "CASHED"
-                          ? "bg-income/10 text-income"
-                          : c.status === "PENDING"
-                            ? overdue
-                              ? "bg-destructive/10 text-destructive"
-                              : soon
-                                ? "bg-warning/10 text-warning"
-                                : "bg-primary/10 text-primary"
-                            : "bg-muted text-muted-foreground"
+                        "nums text-sm font-extrabold",
+                        c.status !== "PENDING" && "text-muted-foreground"
                       )}
                     >
-                      {c.status === "PENDING"
-                        ? overdue
-                          ? `${toPersianDigits(Math.abs(daysLeft))} روز گذشته`
-                          : daysLeft === 0
-                            ? "امروز سررسید"
-                            : `${toPersianDigits(daysLeft)} روز مانده`
-                        : STATUS_LABEL[c.status]}
+                      {formatToman(c.amount, false)}
+                    </div>
+                    <div
+                      className={cn(
+                        "mt-0.5 inline-flex items-center gap-1 rounded-lg px-1.5 py-px text-[0.6rem] font-bold",
+                        c.status === "CASHED"
+                          ? "bg-income/10 text-income"
+                          : c.status === "BOUNCED"
+                            ? "bg-destructive/10 text-destructive"
+                            : c.status === "PENDING"
+                              ? overdue
+                                ? "bg-destructive/10 text-destructive"
+                                : soon
+                                  ? "bg-warning/10 text-warning"
+                                  : "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {c.status === "CASHED" ? (
+                        <>
+                          <CheckCircle2 className="size-3" />
+                          پاس شده
+                        </>
+                      ) : c.status === "BOUNCED" ? (
+                        <>
+                          <Ban className="size-3" />
+                          برگشت خورده
+                        </>
+                      ) : c.status === "PENDING" ? (
+                        <>
+                          <Clock3 className="size-3" />
+                          {overdue
+                            ? `${toPersianDigits(Math.abs(daysLeft))} روز گذشته`
+                            : daysLeft === 0
+                              ? "امروز سررسید"
+                              : `${toPersianDigits(daysLeft)} روز مانده`}
+                        </>
+                      ) : (
+                        STATUS_LABEL[c.status]
+                      )}
                     </div>
                   </div>
                 </div>
@@ -326,9 +357,9 @@ export default function ChecksPage() {
         {actionSheet && (
           <div className="space-y-2.5">
             <SheetOption
-              icon={<Landmark className="size-5" />}
-              title="وصول شد"
-              subtitle="پول به حساب بانکی واریز/برداشت شد"
+              icon={<CheckCircle2 className="size-5" />}
+              title="پاس شد"
+              subtitle="مبلغ به حساب بانکی واریز/برداشت شد"
               tone="primary"
               onClick={() => setAccountSheet(true)}
             />
@@ -350,11 +381,11 @@ export default function ChecksPage() {
         )}
       </BottomSheet>
 
-      {/* شیت انتخاب حساب برای وصول */}
+      {/* شیت انتخاب حساب برای پاس چک */}
       <BottomSheet
         open={accountSheet}
         onClose={() => setAccountSheet(false)}
-        title="وصول در کدام حساب؟"
+        title="چک در کدام حساب پاس شود؟"
         description={actionSheet ? formatToman(actionSheet.amount) : ""}
       >
         <div className="space-y-2">

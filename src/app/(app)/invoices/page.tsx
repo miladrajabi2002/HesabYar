@@ -10,8 +10,8 @@ import { useQuery } from "@tanstack/react-query"
 import {
   Plus,
   FileText,
-  ShoppingBag,
-  Package,
+  ArrowDownLeft,
+  ArrowUpRight,
   Filter,
   Loader2,
   ChevronLeft,
@@ -130,7 +130,7 @@ function InvoicesPageInner() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="جستجوی شخص یا شماره فاکتور…"
-              className="h-11 w-full rounded-2xl border border-input bg-card ps-9 pe-3 text-sm outline-none focus-visible:border-ring"
+              className="field ps-10"
             />
           </div>
           <button
@@ -173,11 +173,15 @@ function InvoicesPageInner() {
               <div className="flex items-center gap-3">
                 <span
                   className={cn(
-                    "flex size-11 shrink-0 items-center justify-center rounded-2xl",
-                    inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
+                    "flex size-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm",
+                    inv.type === "SALE" ? "bg-income" : "bg-destructive"
                   )}
                 >
-                  {inv.type === "SALE" ? <ShoppingBag className="size-5" /> : <Package className="size-5" />}
+                  {inv.type === "SALE" ? (
+                    <ArrowUpRight className="size-5.5" strokeWidth={2.4} />
+                  ) : (
+                    <ArrowDownLeft className="size-5.5" strokeWidth={2.4} />
+                  )}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

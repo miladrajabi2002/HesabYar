@@ -1,9 +1,11 @@
 "use client"
 
 /**
- * لوگوی بانک — اسپریت رسمی iranianbanklogos + رنگ برند خودکار
+ * لوگوی بانک — فایل تکی ۱۲۸px شفاف (برش‌خورده و وسط‌چین) + نوار رنگ برند
+ * منبع: iranianbanklogos (پردازش‌شده در scripts/gen_bank_logos.py)
  */
-import { getBank, spritePosition, spriteUrl } from "@/lib/banks"
+import { Landmark } from "lucide-react"
+import { getBank, spriteKeyOf } from "@/lib/banks"
 import { cn } from "@/lib/utils"
 
 export function BankLogo({
@@ -19,52 +21,59 @@ export function BankLogo({
 }) {
   const bank = getBank(bankKey)
 
+  // بانک «سایر» — کاشی خاکستری با آیکون
   if (bank.logoIndex < 0) {
-    // بانک سایر — نشان حرف‌دار
     return (
       <span
         className={cn(
-          "flex items-center justify-center rounded-2xl font-bold text-white",
+          "flex shrink-0 items-center justify-center rounded-[30%] text-white",
           className
         )}
         style={{
           width: size,
           height: size,
           background: bank.color,
-          fontSize: size * 0.34,
         }}
+        aria-hidden
       >
-        ؟
+        <Landmark style={{ width: size * 0.48, height: size * 0.48 }} />
       </span>
     )
   }
 
-  const px = size <= 24 ? 32 : size <= 48 ? 64 : 128
-  const scale = px / size
+  const strip = Math.max(3, Math.round(size * 0.075))
+  const logoSize = showBg ? Math.round(size * 0.78) : size
+
   return (
     <span
       className={cn(
-        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-2xl",
-        showBg && "bg-white",
+        "relative flex shrink-0 items-center justify-center overflow-hidden",
+        showBg &&
+          "bg-white shadow-[0_1px_2px_rgba(16,24,40,0.08)] ring-1 ring-black/[0.08]",
         className
       )}
-      style={{
-        width: size,
-        height: size,
-        boxShadow: showBg ? `inset 0 0 0 1.5px ${bank.color}33, inset 0 -3px 0 ${bank.color}` : undefined,
-      }}
+      style={{ width: size, height: size, borderRadius: Math.round(size * 0.3) }}
       aria-hidden
     >
-      <span
-        className="block bg-no-repeat"
+      {/* نوار رنگ برند در پایین کاشی */}
+      {showBg && (
+        <span
+          className="absolute inset-x-0 bottom-0"
+          style={{ height: strip, background: bank.color }}
+        />
+      )}
+      <img
+        src={`/banks/logos/${spriteKeyOf(bank)}.png`}
+        alt=""
+        width={logoSize}
+        height={logoSize}
+        draggable={false}
+        className="pointer-events-none select-none"
         style={{
-          width: px,
-          height: px,
-          transform: `scale(${1 / scale})`,
-          transformOrigin: "top left",
-          backgroundImage: `url(${spriteUrl(size)})`,
-          backgroundPosition: spritePosition(bank.logoIndex, size),
-          backgroundSize: `${px * 5}px auto`,
+          width: logoSize,
+          height: logoSize,
+          objectFit: "contain",
+          marginBottom: showBg ? Math.round(strip * 0.55) : 0,
         }}
       />
     </span>

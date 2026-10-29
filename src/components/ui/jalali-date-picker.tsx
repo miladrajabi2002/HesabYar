@@ -176,7 +176,7 @@ export function JalaliDateField({
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          "flex h-12 w-full items-center gap-2 rounded-xl border border-input bg-card px-3 text-sm transition-colors hover:border-ring/40",
+          "flex h-12 w-full items-center gap-2 rounded-2xl border border-input bg-card px-3.5 text-sm transition-[color,border-color,box-shadow] hover:border-input/80 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/15",
           className
         )}
       >

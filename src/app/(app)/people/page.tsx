@@ -108,7 +108,7 @@ function PeoplePageInner() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="جستجوی نام، موبایل، شرکت یا آدرس…"
-            className="h-11 w-full rounded-2xl border border-input bg-card ps-9 pe-3 text-sm outline-none focus-visible:border-ring"
+            className="field ps-10"
           />
         </div>
         <div className="flex gap-2">
@@ -315,7 +315,7 @@ export function AddPersonSheet({
             inputMode="tel"
             dir="ltr"
             placeholder="09…"
-            className="nums h-10 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+            className="field nums text-end"
           />
         </div>
         <div>

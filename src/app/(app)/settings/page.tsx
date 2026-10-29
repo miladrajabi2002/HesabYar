@@ -226,7 +226,7 @@ export default function SettingsPage() {
           ))}
         </div>
         <p className="mt-2 text-[0.62rem] text-muted-foreground">
-          چک سررسید‌شده هم (وصول‌نشده) هر ساعت یک‌بار پیگیری و خبر داده می‌شود.
+          چک سررسید‌شده هم (پاس‌نشده) هر ساعت یک‌بار پیگیری و خبر داده می‌شود.
         </p>
       </section>
 

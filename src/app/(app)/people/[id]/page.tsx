@@ -10,6 +10,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
   ArrowRight,
+  ArrowDownLeft,
+  ArrowUpRight,
   Pencil,
   HandCoins,
   FileText,
@@ -17,8 +19,6 @@ import {
   Phone,
   Building2,
   MapPin,
-  ShoppingBag,
-  Package,
   Loader2,
   CheckCheck,
 } from "lucide-react"
@@ -324,7 +324,11 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
                 )}
               >
-                {inv.type === "SALE" ? <ShoppingBag className="size-4" /> : <Package className="size-4" />}
+                {inv.type === "SALE" ? (
+                  <ArrowUpRight className="size-4" strokeWidth={2.3} />
+                ) : (
+                  <ArrowDownLeft className="size-4" strokeWidth={2.3} />
+                )}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-bold">
@@ -380,7 +384,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                       : "bg-destructive/10 text-destructive"
                 )}
               >
-                {c.status === "CASHED" ? "وصول ✓" : c.status === "PENDING" ? "در جریان" : c.status === "BOUNCED" ? "برگشتی" : "لغو"}
+                {c.status === "CASHED" ? "پاس ✓" : c.status === "PENDING" ? "در جریان" : c.status === "BOUNCED" ? "برگشت خورده" : "لغو"}
               </span>
             </Link>
           ))}
@@ -444,7 +448,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               onChange={(e) => setPhone(e.target.value)}
               inputMode="tel"
               dir="ltr"
-              className="nums h-10 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+              className="field nums text-end"
             />
           </div>
           <div>
@@ -548,7 +552,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               <button
                 type="button"
                 onClick={() => setAccountSheet(true)}
-                className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-card px-3"
+                className="flex h-12 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3 transition-[color,border-color,box-shadow] hover:border-input/80"
               >
                 {account ? (
                   <>
@@ -569,7 +573,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                     value={checkSerial}
                     onChange={(e) => setCheckSerial(e.target.value)}
                     dir="ltr"
-                    className="nums h-12 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+                    className="field nums text-end"
                   />
                 </div>
                 <div>

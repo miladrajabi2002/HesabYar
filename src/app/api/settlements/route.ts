@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 
 /**
  * POST /api/settlements — تسویه طلب/بدهی یک شخص (نقدی یا چکی)
- * چکِ تسویه تا سررسید «در جریان» می‌ماند و با وصول، گردش بانکی ثبت می‌شود.
+ * چکِ تسویه تا سررسید «در جریان» می‌ماند و با پاس شدن، گردش بانکی ثبت می‌شود.
  */
 export async function POST(req: NextRequest) {
   const auth = await requireApiAuth(req)

@@ -325,7 +325,7 @@ function NewInvoicePageInner() {
                   <button
                     type="button"
                     onClick={() => setAccountSheet(true)}
-                    className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-card px-3"
+                    className="flex h-12 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3 transition-[color,border-color,box-shadow] hover:border-input/80"
                   >
                     {account ? (
                       <>
@@ -420,7 +420,7 @@ function NewInvoicePageInner() {
       </div>
 
       {/* ───────── نوار چسبان پایین ───────── */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/92 px-4 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] pt-3 backdrop-blur-md lg:pb-5">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/92 px-4 pb-[calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+7rem)] pt-3 backdrop-blur-md lg:pb-5">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-[0.65rem] text-muted-foreground">مبلغ نهایی فاکتور</div>
@@ -559,7 +559,7 @@ function PersonPickerSheet({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="جستجوی نام یا موبایل…"
-          className="h-11 w-full rounded-xl border border-input bg-card ps-9 pe-3 text-sm outline-none focus-visible:border-ring"
+          className="field ps-10"
         />
       </div>
       <div className="max-h-[55vh] space-y-2 overflow-y-auto pe-1">
@@ -650,7 +650,7 @@ function QuickPersonSheet({
             inputMode="tel"
             dir="ltr"
             placeholder="09…"
-            className="nums h-10 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+            className="field nums text-end"
           />
         </div>
         <div>
@@ -813,7 +813,7 @@ function ItemPickerSheet({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="جستجوی نام جنس یا برند…"
-              className="h-11 w-full rounded-xl border border-input bg-card ps-9 pe-3 text-sm outline-none focus-visible:border-ring"
+              className="field ps-10"
             />
           </div>
           <div className="mb-3 max-h-56 space-y-2 overflow-y-auto pe-1">
@@ -896,7 +896,7 @@ function ItemPickerSheet({
               }}
               inputMode="decimal"
               dir="ltr"
-              className="nums h-11 w-full rounded-xl border border-input bg-card px-3 text-end text-base font-bold outline-none focus-visible:border-ring"
+              className="field nums text-end font-bold"
               placeholder="۱"
             />
           </div>
@@ -990,7 +990,7 @@ function QuickCheckSheet({
           <button
             type="button"
             onClick={() => setBankSheet(true)}
-            className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-card px-3"
+            className="flex h-12 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3 transition-[color,border-color,box-shadow] hover:border-input/80"
           >
             <BankLogo bankKey={bankKey} size={34} />
             <span className="flex-1 text-start text-sm">{getBank(bankKey).name}</span>
@@ -1008,7 +1008,7 @@ function QuickCheckSheet({
               inputMode="numeric"
               dir="ltr"
               placeholder="مثلاً ۸۸۴۵۱۲"
-              className="nums h-12 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+              className="field nums text-end"
             />
           </div>
           <div>

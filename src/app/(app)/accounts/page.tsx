@@ -44,7 +44,7 @@ interface Account {
 
 const TX_LABEL: Record<string, string> = {
   INVOICE_CASH: "فاکتور نقدی",
-  CHECK_CASHED: "وصول چک",
+  CHECK_CASHED: "پاس چک",
   SETTLEMENT_CASH: "تسویه نقدی",
   TRANSFER: "انتقال",
   OPENING: "مانده اولیه",
@@ -126,7 +126,7 @@ function AccountForm({
           <button
             type="button"
             onClick={() => setBankSheet(true)}
-            className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-card px-3"
+            className="flex h-12 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3 transition-[color,border-color,box-shadow] hover:border-input/80"
           >
             <BankLogo bankKey={bankKey} size={34} />
             <span className="flex-1 text-start text-sm">{getBank(bankKey).name}</span>
@@ -143,7 +143,7 @@ function AccountForm({
               onChange={(e) => setAccountNumber(e.target.value)}
               dir="ltr"
               inputMode="numeric"
-              className="nums h-11 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+              className="field nums text-end"
             />
           </div>
           <div>
@@ -156,7 +156,7 @@ function AccountForm({
               dir="ltr"
               inputMode="numeric"
               placeholder="۶۲۸۰…"
-              className="nums h-11 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+              className="field nums text-end"
             />
           </div>
         </div>
@@ -302,7 +302,7 @@ export default function AccountsPage() {
           <Landmark className="mx-auto size-10 text-muted-foreground/40" />
           <p className="mt-3 text-sm font-bold">حساب بانکی ثبت نشده</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            حساب‌های بانکی‌تان را اضافه کنید تا نقدی فاکتورها و وصول چک‌ها ثبت شود
+            حساب‌های بانکی‌تان را اضافه کنید تا نقدی فاکتورها و پاس چک‌ها ثبت شود
           </p>
         </div>
       ) : (

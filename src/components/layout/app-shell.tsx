@@ -17,6 +17,8 @@ import {
   BarChart3,
   LogOut,
   Send,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTelegram } from "@/hooks/use-telegram"
@@ -38,7 +40,7 @@ export const NAV_ITEMS = [
 
 /** آیتم‌های منوی «بیشتر» موبایل */
 const MORE_ITEMS = [
-  { href: "/checks", label: "چک‌ها", icon: CheckSquare, desc: "سررسید و وصول چک‌ها" },
+  { href: "/checks", label: "چک‌ها", icon: CheckSquare, desc: "سررسید و پاس چک‌ها" },
   { href: "/products", label: "اجناس", icon: Package, desc: "موجودی انبار" },
   { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark, desc: "گردش حساب‌ها" },
   { href: "/reports", label: "گزارش‌ها", icon: BarChart3, desc: "سود و فروش" },
@@ -238,7 +240,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <div className="space-y-2.5">
           <SheetOption
-            icon={<FileText className="size-5" />}
+            icon={<ArrowUpRight className="size-5" strokeWidth={2.4} />}
             title="فاکتور فروش"
             subtitle="جنس فروختم — به مشتری"
             tone="primary"
@@ -248,7 +250,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             }}
           />
           <SheetOption
-            icon={<Package className="size-5" />}
+            icon={<ArrowDownLeft className="size-5" strokeWidth={2.4} />}
             title="فاکتور خرید"
             subtitle="جنس خریدم — از تأمین‌کننده"
             onClick={() => {

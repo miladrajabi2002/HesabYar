@@ -109,17 +109,8 @@ export function getBank(key: string | null | undefined): BankInfo {
   return BANK_MAP[normalized] || BANK_MAP.other
 }
 
-/** مسیر اسپریت مناسب برای هر اندازه نمایش */
-export function spriteUrl(displaySize: number): string {
-  const file = displaySize <= 24 ? 32 : displaySize <= 48 ? 64 : 128
-  return `/banks/ibls${file}.png`
-}
-
-/** موقعیت پس‌زمینه اسپریت ۵ ستونه */
-export function spritePosition(logoIndex: number, size: number): string {
-  if (logoIndex < 0) return "0px 0px"
-  const row = Math.floor(logoIndex / 5)
-  const col = logoIndex % 5
-  const px = size <= 24 ? 32 : size <= 48 ? 64 : 128
-  return `${-col * px}px ${-row * px}px`
+/** کلید اسپریت → نام فایل لوگوی تکی در /public/banks/logos */
+export function spriteKeyOf(bank: BankInfo): string {
+  if (bank.logoIndex < 0) return "other"
+  return SPRITE_ORDER[bank.logoIndex]
 }

@@ -230,7 +230,8 @@ export function BottomSheet({
             <div
               className={cn(
                 "min-h-0 flex-1 overscroll-contain px-4 py-4",
-                !footer && "[padding-bottom:max(1rem,env(safe-area-inset-bottom))]",
+                !footer &&
+                  "[padding-bottom:max(1rem,calc(env(safe-area-inset-bottom) + var(--tg-safe-bottom,0px)))]",
                 contentClassName
               )}
             >
@@ -239,7 +240,7 @@ export function BottomSheet({
 
             {/* فوتر */}
             {footer && (
-              <div className="shrink-0 border-t border-border/60 bg-card/95 px-4 pt-3 backdrop-blur-xl [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]">
+              <div className="shrink-0 border-t border-border/60 bg-card/95 px-4 pt-3 backdrop-blur-xl [padding-bottom:max(0.9rem,calc(env(safe-area-inset-bottom) + var(--tg-safe-bottom,0px)))]">
                 {footer}
               </div>
             )}

@@ -96,6 +96,10 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       } catch {
         /* ignore */
       }
+      // داخل مینی‌اپ تلگرام: فاصله امن پایین (نوار پایین تلگرام روی محتوا می‌افتد)
+      if (tg.initData) {
+        document.documentElement.classList.add("tg-mini")
+      }
     }, 0)
     return () => clearTimeout(t)
   }, [])

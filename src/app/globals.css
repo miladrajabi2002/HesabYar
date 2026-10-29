@@ -175,6 +175,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* فیلد متنی یکدست — ارتفاع ۴۸، گوشه ۲۰، فوکوس حلقه‌ای */
+@utility field {
+  @apply h-12 w-full rounded-2xl border border-input bg-card px-3.5 text-base outline-none transition-[color,border-color,box-shadow] placeholder:text-muted-foreground/70 hover:border-input/80 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/15 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
 /* اسکرول‌بار ظریف */
 @layer utilities {
   ::-webkit-scrollbar {
@@ -209,5 +214,14 @@
 
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* داخل مینی‌اپ تلگرام env(safe-area-inset-bottom) صفر است؛
+     فاصله امن پایین را خودمان تأمین می‌کنیم تا دکمه‌های شیت زیر نوار تلگرام نروند */
+  :root {
+    --tg-safe-bottom: 0px;
+  }
+  .tg-mini {
+    --tg-safe-bottom: 1.25rem;
   }
 }

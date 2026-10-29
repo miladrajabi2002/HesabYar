@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic"
 
 const listQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
-  lowStock: z.coerce.boolean().optional(),
 })
 
 /** GET /api/products — لیست اجناس + موجودی زنده + آخرین قیمت خرید/فروش */
@@ -56,14 +55,12 @@ export async function GET(req: NextRequest) {
       lastPrices.set(it.productId, cur)
     }
 
-    let result = products.map((p) => ({
+    const result = products.map((p) => ({
       ...p,
       stock: stocks.get(p.id) ?? 0,
       lastPurchasePrice: lastPrices.get(p.id)?.purchase ?? 0,
       lastSalePrice: lastPrices.get(p.id)?.sale ?? 0,
-      lowStock: (stocks.get(p.id) ?? 0) <= p.minStock,
     }))
-    if (f.lowStock) result = result.filter((p) => p.lowStock)
 
     return ok({ products: result })
   } catch (e) {

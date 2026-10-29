@@ -17,14 +17,13 @@ import {
 } from "recharts"
 import {
   TrendingUp,
-  ShoppingBag,
-  Package,
   Wallet,
   HandCoins,
+  ArrowDownLeft,
+  ArrowUpRight,
   ArrowUpLeftSquare,
   CheckSquare2,
   ChevronLeft,
-  AlertTriangle,
   FileText,
   Loader2,
   Plus,
@@ -71,7 +70,6 @@ interface DashboardData {
     status: string
     person: { id: string; name: string }
   }[]
-  lowStock: { id: string; name: string; brand: string | null; code: string | null; unit: string; stock: number; minStock: number }[]
 }
 
 interface PeriodSum {
@@ -198,7 +196,7 @@ export default function DashboardPage() {
         </Link>
         <div className="rounded-2xl border border-border/70 bg-card p-3.5 shadow-card sm:p-4">
           <div className="flex items-center gap-1.5 text-muted-foreground">
-            <ShoppingBag className="size-3.5" />
+            <ArrowUpRight className="size-3.5" />
             <span className="text-[0.7rem] font-medium">فروش {monthLabel}</span>
           </div>
           <p className="nums mt-1.5 text-lg font-extrabold text-income sm:text-xl">
@@ -389,9 +387,9 @@ export default function DashboardPage() {
                     )}
                   >
                     {inv.type === "SALE" ? (
-                      <ShoppingBag className="size-4" />
+                      <ArrowUpRight className="size-4" strokeWidth={2.3} />
                     ) : (
-                      <Package className="size-4" />
+                      <ArrowDownLeft className="size-4" strokeWidth={2.3} />
                     )}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -525,37 +523,6 @@ export default function DashboardPage() {
               {data.accounts.length === 0 && (
                 <p className="py-3 text-center text-xs text-muted-foreground">
                   هنوز حساب بانکی نساخته‌اید
-                </p>
-              )}
-            </div>
-          </SectionCard>
-
-          {/* جنس‌های رو به اتمام */}
-          <SectionCard
-            title="جنس‌های رو به اتمام"
-            icon={<AlertTriangle className="size-4 text-warning" />}
-            href="/products"
-          >
-            <div className="space-y-1">
-              {data.lowStock.map((p) => (
-                <Link
-                  key={p.id}
-                  href="/products"
-                  className="flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-accent/60"
-                >
-                  <span className="size-2 shrink-0 rounded-full bg-warning" />
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                    {p.name}
-                    {p.brand ? <span className="text-muted-foreground"> — {p.brand}</span> : null}
-                  </span>
-                  <span className="nums shrink-0 text-[0.7rem] font-bold text-warning">
-                    {toPersianDigits(p.stock)} {p.unit}
-                  </span>
-                </Link>
-              ))}
-              {data.lowStock.length === 0 && (
-                <p className="py-3 text-center text-xs text-muted-foreground">
-                  موجودی همه اجناس خوب است
                 </p>
               )}
             </div>

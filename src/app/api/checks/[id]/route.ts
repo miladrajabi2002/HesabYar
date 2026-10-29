@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
 /**
  * PATCH /api/checks/[id] — تغییر وضعیت چک:
- *  CASHED  → وصول: ثبت گردش بانکی روی حساب انتخابی
+ *  CASHED  → پاس: ثبت گردش بانکی روی حساب انتخابی
  *  BOUNCED → برگشت: بازگشت مبلغ به مانده فاکتور / حذف تسویه چکی
  *  CANCELED → لغو: فقط وقتی چک بابت فاکتور است و هنوز سررسید نشده
  */
@@ -40,12 +40,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (!check) return fail("چک پیدا نشد", 404)
     if (check.status === data.status) return fail("چک هم‌اکنون در این وضعیت است", 400)
     if (check.status === "CASHED" && data.status !== "CASHED") {
-      return fail("چک وصول‌شده قابل تغییر نیست", 400)
+      return fail("چک پاس‌شده قابل تغییر نیست", 400)
     }
 
-    // ───────── وصول چک ─────────
+    // ───────── پاس شدن چک ─────────
     if (data.status === "CASHED") {
-      if (!data.accountId) return fail("حساب محل وصول را انتخاب کنید", 400)
+      if (!data.accountId) return fail("حساب محل پاس چک را انتخاب کنید", 400)
       const account = await db.account.findFirst({ where: { id: data.accountId, isArchived: false } })
       if (!account) return fail("حساب بانکی پیدا نشد", 404)
 
@@ -59,7 +59,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
             refId: check.id,
             description:
               check.direction === "RECEIVED"
-                ? `وصول چک «${check.person.name}»`
+                ? `پاس چک «${check.person.name}»`
                 : `برداشت سررسید چک صادره «${check.person.name}»`,
             date: nowTehran(),
           },
@@ -85,7 +85,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
             await tx.settlement.delete({ where: { id: st.id } }).catch(() => null)
           }
         }
-        // گردش وصول قبلی (اگر اشتباهاً وصول شده بود و حالا برگشت) حذف می‌شود
+        // گردش پاس قبلی (اگر اشتباهاً پاس شده بود و حالا برگشت) حذف می‌شود
         if (check.status === "CASHED") {
           await tx.transaction.deleteMany({ where: { type: "CHECK_CASHED", refId: check.id } }).catch(() => null)
         }
