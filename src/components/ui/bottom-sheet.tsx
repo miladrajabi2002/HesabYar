@@ -180,6 +180,7 @@ export function BottomSheet({
             aria-modal="true"
             aria-labelledby={title ? titleId : undefined}
             tabIndex={-1}
+            style={{ maxHeight }}
             variants={asDialog ? dialogVariants : reduceMotion ? undefined : sheetVariants}
             initial={asDialog ? "hidden" : reduceMotion ? { opacity: 0 } : "hidden"}
             animate={asDialog ? "visible" : reduceMotion ? { opacity: 1 } : "visible"}
@@ -227,10 +228,11 @@ export function BottomSheet({
               />
             )}
 
-            {/* محتوا */}
+            {/* محتوا — اسکرول عمودی فعال تا محتوای بلند (مثل انتخاب بانک) قابل مرور باشد */}
             <div
+              style={{ WebkitOverflowScrolling: "touch" }}
               className={cn(
-                "min-h-0 flex-1 overscroll-contain px-4 py-4",
+                "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4",
                 !footer &&
                   "[padding-bottom:max(1.25rem,calc(env(safe-area-inset-bottom) + var(--tg-safe-bottom,0px)))]",
                 contentClassName

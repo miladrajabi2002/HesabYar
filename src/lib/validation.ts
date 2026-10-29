@@ -83,10 +83,32 @@ export const productUpdateSchema = productCreateSchema.partial()
 
 // ───────────────────────── حساب‌های بانکی ─────────────────────────
 
+/**
+ * شماره شبا (IRAN IBAN) — ورودی آزاد پذیرفته می‌شود:
+ * ارقام فارسی/عربی/لاتین، با یا بدون پیشوند IR، با یا بدون فاصله/خط تیره.
+ * خروجی همیشه به شکل استاندارد «IR + ۲۴ رقم لاتین» ذخیره می‌شود.
+ * خالی/null → null (فیلد اختیاری است).
+ */
+export const shebaSchema = z
+  .string()
+  .trim()
+  .max(60, "شماره شبا نامعتبر است")
+  .optional()
+  .nullable()
+  .transform((v) => {
+    if (!v) return null
+    // ارقام فارسی/عربی → لاتین؛ حروف (IR)، فاصله و هر کاراکتر غیررقمی حذف می‌شود
+    const digits = toLatinDigits(v.toUpperCase()).replace(/[^0-9]/g, "").slice(0, 24)
+    return digits ? `IR${digits}` : null
+  })
+  .refine((v) => v === null || /^IR\d{24}$/.test(v), {
+    message: "شماره شبا باید بعد از IR دقیقاً ۲۴ رقم باشد",
+  })
+
 export const accountCreateSchema = z.object({
   name: requiredText(2, 80, "نام حساب"),
   bankKey: z.string().trim().min(1, "بانک را انتخاب کنید"),
-  accountNumber: optionalText(40),
+  accountNumber: shebaSchema,
   cardNumber: optionalText(25),
   initialBalance: nonNegativeAmount.default(0),
 })

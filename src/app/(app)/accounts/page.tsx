@@ -15,7 +15,7 @@ import {
   Archive,
 } from "lucide-react"
 import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
-import { formatToman, toPersianDigits } from "@/lib/money"
+import { formatToman, toLatinDigits, toPersianDigits } from "@/lib/money"
 import { BANKS, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
@@ -63,7 +63,12 @@ function AccountForm({
 }) {
   const [name, setName] = useState(editing?.name ?? "")
   const [bankKey, setBankKey] = useState(editing?.bankKey ?? "mellat")
-  const [accountNumber, setAccountNumber] = useState(editing?.accountNumber ?? "")
+  // فقط ارقام شبا (بدون IR) — IR پیشوند ثابت رابط کاربری است
+  const [shebaDigits, setShebaDigits] = useState(() =>
+    toLatinDigits((editing?.accountNumber ?? "").toUpperCase())
+      .replace(/[^0-9]/g, "")
+      .slice(0, 24)
+  )
   const [cardNumber, setCardNumber] = useState(editing?.cardNumber ?? "")
   const [initialBalance, setInitialBalance] = useState(editing?.initialBalance ?? 0)
   const [bankSheet, setBankSheet] = useState(false)
@@ -71,13 +76,17 @@ function AccountForm({
 
   const submit = async () => {
     if (name.trim().length < 2) return toast.error("نام حساب را وارد کنید")
+    if (shebaDigits && shebaDigits.length !== 24)
+      return toast.error("شماره شبا باید بعد از IR دقیقاً ۲۴ رقم باشد")
+    // همیشه مقدار می‌فرستیم تا پاک‌کردن شبا در ویرایش هم ذخیره شود
+    const accountNumber = shebaDigits ? `IR${shebaDigits}` : null
     setSaving(true)
     try {
       if (editing) {
         await apiPatch(`/api/accounts/${editing.id}`, {
           name: name.trim(),
           bankKey,
-          accountNumber: accountNumber || undefined,
+          accountNumber,
           cardNumber: cardNumber || undefined,
           initialBalance,
         })
@@ -86,7 +95,7 @@ function AccountForm({
         await apiPost("/api/accounts", {
           name: name.trim(),
           bankKey,
-          accountNumber: accountNumber || undefined,
+          accountNumber,
           cardNumber: cardNumber || undefined,
           initialBalance,
         })
@@ -133,32 +142,56 @@ function AccountForm({
             <span className="text-[0.65rem] text-muted-foreground">تغییر</span>
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-              شماره حساب
-            </label>
+        <div>
+          <label className="mb-1.5 flex items-center justify-between text-[0.7rem] font-medium text-muted-foreground">
+            <span>شماره شبا</span>
+            {shebaDigits.length > 0 && (
+              <span
+                className={cn(
+                  "nums text-[0.62rem] font-bold",
+                  shebaDigits.length === 24 ? "text-income" : "text-muted-foreground"
+                )}
+              >
+                {toPersianDigits(shebaDigits.length)}/۲۴
+              </span>
+            )}
+          </label>
+          {/* فیلد بزرگ شبا با پیشوند ثابت IR */}
+          <div className="flex h-14 items-center gap-2 rounded-2xl border border-input bg-card px-3.5 transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/15 hover:border-input/80">
+            <span className="shrink-0 select-none rounded-lg bg-muted px-2 py-1 text-[0.72rem] font-extrabold tracking-widest text-muted-foreground">
+              IR
+            </span>
             <Input
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value)}
+              value={shebaDigits}
+              onChange={(e) => {
+                // ارقام فارسی/لاتین → لاتین؛ حروف و جداکننده‌ها حذف؛ حداکثر ۲۴ رقم
+                const digits = toLatinDigits(e.target.value.toUpperCase())
+                  .replace(/[^0-9]/g, "")
+                  .slice(0, 24)
+                setShebaDigits(digits)
+              }}
               dir="ltr"
               inputMode="numeric"
-              className="nums text-end"
+              placeholder="۲۴ رقم شبا را وارد کنید"
+              className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 text-base font-bold tracking-wider focus-visible:ring-0 dark:bg-transparent"
             />
           </div>
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-              شماره کارت
-            </label>
-            <Input
-              value={cardNumber}
-              onChange={(e) => setCardNumber(e.target.value)}
-              dir="ltr"
-              inputMode="numeric"
-              placeholder="۶۲۸۰…"
-              className="nums text-end"
-            />
-          </div>
+          <p className="mt-1 text-[0.62rem] text-muted-foreground">
+            شبا با IR شروع می‌شود — عدد فارسی یا انگلیسی بنویسید، خودش مرتب می‌شود
+          </p>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            شماره کارت
+          </label>
+          <Input
+            value={cardNumber}
+            onChange={(e) => setCardNumber(e.target.value)}
+            dir="ltr"
+            inputMode="numeric"
+            placeholder="۶۲۸۰…"
+            className="nums text-end"
+          />
         </div>
         <div>
           <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
@@ -318,7 +351,7 @@ export default function AccountsPage() {
                   <BankLogo bankKey={a.bankKey} size={46} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-extrabold">{a.name}</div>
-                    <div className="text-[0.65rem]" style={{ color: bank.color }}>
+                    <div className="break-all text-[0.65rem]" style={{ color: bank.color }}>
                       {bank.name}
                       {a.accountNumber ? ` • ${toPersianDigits(a.accountNumber)}` : ""}
                     </div>
