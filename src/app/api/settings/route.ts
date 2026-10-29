@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
-import { settingsUpdateSchema } from "@/lib/validation"
 import { resolveTelegramConfig, maskSecret } from "@/lib/telegram/config"
+import { settingsSchema } from "@/lib/validation"
 
 export const dynamic = "force-dynamic"
 
@@ -22,19 +22,19 @@ export async function GET(req: NextRequest) {
       adminChatIdSource: setting?.adminChatId ? "db" : cfg.chatId ? "env" : null,
       miniAppUrl: cfg.miniAppUrl ?? "",
       miniAppUrlSource: setting?.miniAppUrl ? "db" : cfg.miniAppUrl ? "env" : null,
-      lowBalanceDefault: cfg.lowBalanceDefault,
+      checkDueDaysBefore: setting?.checkDueDaysBefore ?? 3,
     })
   } catch (e) {
     return serverError(e)
   }
 }
 
-/** PUT /api/settings — ذخیره تنظیمات (مقادیر خالی یعنی بدون تغییر توکن/چت‌آیدی) */
+/** PUT /api/settings — ذخیره تنظیمات (توکن/چت‌آیدی خالی یعنی بدون تغییر) */
 export async function PUT(req: NextRequest) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
   try {
-    const { data, error } = await parseBody(req, settingsUpdateSchema)
+    const { data, error } = await parseBody(req, settingsSchema)
     if (error) return error
 
     await db.setting.upsert({
@@ -51,10 +51,10 @@ export async function PUT(req: NextRequest) {
       update.adminChatId = data.adminChatId.trim()
     }
     if (data.miniAppUrl !== undefined) {
-      update.miniAppUrl = (data.miniAppUrl ?? "").trim() || null
+      update.miniAppUrl = data.miniAppUrl || null
     }
-    if (data.lowBalanceDefault !== undefined) {
-      update.lowBalanceDefault = data.lowBalanceDefault
+    if (data.checkDueDaysBefore !== undefined) {
+      update.checkDueDaysBefore = data.checkDueDaysBefore
     }
 
     if (Object.keys(update).length > 0) {
@@ -62,12 +62,13 @@ export async function PUT(req: NextRequest) {
     }
 
     const cfg = await resolveTelegramConfig()
+    const setting = await db.setting.findUnique({ where: { id: "default" } })
     return ok({
       ok: true,
       botTokenMasked: maskSecret(cfg.token),
       adminChatId: cfg.chatId,
       miniAppUrl: cfg.miniAppUrl ?? "",
-      lowBalanceDefault: cfg.lowBalanceDefault,
+      checkDueDaysBefore: setting?.checkDueDaysBefore ?? 3,
     })
   } catch (e) {
     return serverError(e)

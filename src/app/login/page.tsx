@@ -49,7 +49,7 @@ export default function LoginPage() {
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-extrabold">حساب‌یار</h1>
-            <p className="mt-1 text-sm text-muted-foreground">حسابداری شخصی هوشمند شما</p>
+            <p className="mt-1 text-sm text-muted-foreground">حسابداری فروشگاه شما</p>
           </div>
         </div>
 

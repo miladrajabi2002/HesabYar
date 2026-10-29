@@ -2,24 +2,20 @@
 
 import { create } from "zustand"
 
-export type QuickAddTab = "EXPENSE" | "INCOME" | "TRANSFER"
+export type NewInvoiceType = "SALE" | "PURCHASE"
 
 interface UIState {
-  quickAddOpen: boolean
-  quickAddTab: QuickAddTab
   moreSheetOpen: boolean
-  openQuickAdd: (tab?: QuickAddTab) => void
-  closeQuickAdd: () => void
-  setQuickAddTab: (tab: QuickAddTab) => void
+  addSheetOpen: boolean
   setMoreSheetOpen: (open: boolean) => void
+  openAddSheet: () => void
+  closeAddSheet: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  quickAddOpen: false,
-  quickAddTab: "EXPENSE",
   moreSheetOpen: false,
-  openQuickAdd: (tab) => set({ quickAddOpen: true, quickAddTab: tab ?? "EXPENSE" }),
-  closeQuickAdd: () => set({ quickAddOpen: false }),
-  setQuickAddTab: (tab) => set({ quickAddTab: tab }),
+  addSheetOpen: false,
   setMoreSheetOpen: (open) => set({ moreSheetOpen: open }),
+  openAddSheet: () => set({ addSheetOpen: true }),
+  closeAddSheet: () => set({ addSheetOpen: false }),
 }))

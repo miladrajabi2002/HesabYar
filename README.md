@@ -1,217 +1,134 @@
-# 🌿 حساب‌یار — اپلیکیشن حسابداری شخصی
+# حساب‌یار — نرم‌افزار حسابداری فروشگاهی 🏪
 
-حساب‌یار یک اپلیکیشن کامل حسابداری شخصی فارسی است که شامل سه بخش یکپارچه در یک کدبیس واحد است:
+سامانه جامع حسابداری برای مغازه‌های خرید و فروش (طراحی‌شده برای فروش الکترود و مواد جوشکاری) با:
+**فاکتور چندقلمی خرید و فروش، مدیریت چک و سررسید، طلب و بستانکار اشخاص، موجودی انبار، حساب‌های بانکی با لوگوی رسمی، گزارش سود شمسی و هشدارهای هوشمند ربات تلگرام.**
 
-- **وب‌اپلیکیشن کامل** — داشبورد مالی، مدیریت حساب‌ها، تراکنش‌ها، بودجه، بدهی/طلب و گزارش‌ها
-- **Telegram Mini App** — همان وب‌اپ با اعتبارسنجی امن `initData` داخل تلگرام
-- **ربات تلگرام** — ارسال هشدارها و اعلان‌های مالی (بودجه، موجودی کم، سررسید بدهی، تکرارشونده)
-
-> همه مبالغ **تومان با ارقام فارسی** و همه تاریخ‌ها **شمسی** هستند. داده‌ها در **SQLite** محلی ذخیره می‌شوند و پس از ری‌استارت کاملاً حفظ هستند.
-
----
-
-## 🧰 پیش‌نیازها
-
-| ابزار | نسخه |
-|---|---|
-| Node.js | ۲۰ یا بالاتر (پیشنهادی ۲۲ LTS) |
-| npm | همراه Node |
-
-هیچ دیتابیس سروری، Redis یا Docker لازم نیست — فقط `npm install && npm run dev`.
+- 🌐 وب‌اپ کامل: `https://hesabyar.miladrajabi.com`
+- 🤖 ربات تلگرام (هشدار سررسید چک): [@HesabYarBot](https://t.me/HesabYar_bot)
+- 📱 مینی‌اپ تلگرام: همان وب‌اپ، داخل تلگرام
 
 ---
 
-## 🚀 نصب و اجرا
+## ✨ امکانات
+
+| بخش | شرح |
+|------|------|
+| **داشبورد** | فروش و سود امروز/هفته/ماه، طلبکاران و بستانکاران، چک‌های نزدیک سررسید، نمودار ۳۰ روز، جنس‌های رو به اتمام |
+| **فاکتورها** | خرید و فروش چندقلمی (نام/برند/کد/واحد)، تخفیف، پرداخت نقدی + چند چک + نسیه، شماره‌گذاری خودکار |
+| **اشخاص** | مشتری/تأمین‌کننده با موبایل، شرکت، آدرس مغازه؛ تراز لحظه‌ای طلب/بدهی + افزودن سریع داخل فاکتور |
+| **چک‌ها** | دریافتی/صادره، سریال، بانک، سررسید؛ وصول (ثبت گردش بانکی)، برگشت (بازگشت مانده به حساب شخص)، لغو؛ هشدار تلگرام قبل از سررسید |
+| **اجناس** | موجودی زنده انبار (خرید منهای فروش)، آخرین قیمت خرید/فروش، حد هشدار موجودی |
+| **حساب‌های بانکی** | فقط بانک (نقدی نداریم)؛ لوگوی رسمی و رنگ برند خودکار ۳۳ بانک ایران + انتقال بین حساب‌ها |
+| **گزارش‌ها** | سود و فروش روزانه/هفتگی/ماهانه شمسی، حاشیه سود، پرفروش‌ترین اجناس، بهترین مشتری‌ها |
+| **تسویه** | دریافت/پرداخت نقدی یا چکی از پروفایل شخص یا صفحه فاکتور؛ مانده فاکتور خودکار بروز می‌شود |
+| **بکاپ** | دانلود/بازیابی + بکاپ خودکار روزانه (۷ نسخه) |
+| **امنیت** | ورود با نام کاربری/رمز، کوکی امضاشده HMAC، اعتبارسنجی HMAC مینی‌اپ تلگرام |
+
+## 🧰 استک فنی
+
+- **Next.js 16 (App Router)** + TypeScript
+- **Prisma + SQLite** (بدون نیاز به دیتابیس خارجی)
+- **Tailwind CSS 4** + shadcn/ui + Framer Motion + Recharts
+- **grammY** (ربات تلگرام، حالت polling) + **node-cron** (زمان‌بند)
+- **jalaali-js** (تقویم شمسی) + **Vazirmatn** (فونت فارسی)
+- **iranianbanklogos** (لوگوی رسمی بانک‌های ایران)
+
+## 📁 ساختار پروژه
+
+```
+prisma/schema.prisma        # مدل‌ها: Account, Person, Product, Invoice, InvoiceItem,
+                           #         CheckPaper, Settlement, Transaction, NotificationLog, Setting
+prisma/seed.ts              # داده نمونه فروشگاه الکترود
+src/lib/finance.ts          # تنها مرجع محاسبه تراز اشخاص/حساب‌ها/موجودی/سود
+src/lib/jalali.ts           # تبدیل تاریخ شمسی (مرجع زمان: تهران)
+src/lib/banks.ts            # رجیستری ۳۳ بانک ایران + رنگ برند
+src/lib/telegram/           # ربات polling + ارسال هشدار + اعتبارسنجی initData
+src/lib/scheduler.ts        # اسکن سررسید چک (هر ساعت) + بکاپ روزانه
+src/app/(app)/              # صفحات: داشبورد، فاکتورها، اشخاص، چک‌ها، اجناس، حساب‌ها، گزارش‌ها، تنظیمات
+src/app/api/                # REST API با اعتبارسنجی Zod
+public/banks/               # اسپریت لوگوی بانک‌ها
+instrumentation.ts          # راه‌انداز زمان‌بند و ربات
+```
+
+## 🚀 راه‌اندازی روی سرور
 
 ```bash
 # ۱) نصب وابستگی‌ها
 npm install
 
-# ۲) ساخت فایل تنظیمات از نمونه
-cp .env.example .env
-# مقادیر .env را ویرایش کنید (رمز ورود، SESSION_SECRET و…)
+# ۲) ساخت دیتابیس (اولین بار)
+npx prisma db push
 
-# ۳) ساخت دیتابیس (prisma/dev.db)
-npm run db:push
-
-# ۴) اجرا در حالت توسعه
-npm run dev
-# → http://localhost:3000
-
-# اجرای production
-npm run build
-npm start
-```
-
-### داده نمونه (اختیاری)
-
-```bash
+# ۳) داده نمونه (اختیاری — برای دیدن اپ با داده)
 npm run seed
-```
 
-۲ حساب، ۸ دسته، ~۵۵ تراکنش سه ماه اخیر، ۲ بودجه، ۱ قاعده تکرارشونده و ۱ بدهی/طلب **با برچسب «نمونه»** می‌سازد.
-⚠️ seed فقط روی **دیتابیس خالی** اجرا می‌شود و هرگز به‌صورت خودکار در جریان اپ تزریق نمی‌شود.
-
-### تست‌ها
-
-```bash
-npm run test
-```
-
-تست‌های `money` (ارقام فارسی)، `jalali` (تقویم شمسی)، `auth` (توکن نشست + initData تلگرام) و `finance` (فرمول موجودی).
-
----
-
-## 🤖 راه‌اندازی ربات تلگرام از BotFather
-
-1. در تلگرام به [@BotFather](https://t.me/BotFather) بروید و `/newbot` بزنید
-2. نام و یوزرنیم ربات را انتخاب کنید → **توکن** را دریافت کنید (شکل `123456:ABC-DEF…`)
-3. **شناسه عددی خود** را از [@userinfobot](https://t.me/userinfobot) بگیرید
-4. توکن و شناسه را در یکی از این دو محل وارد کنید:
-   - فایل `.env` → `BOT_TOKEN` و `ADMIN_CHAT_ID`
-   - یا صفحه **تنظیمات** داخل اپ (اولویت با همین است)
-5. آدرس مینی‌اپ (https) را در `MINI_APP_URL` یا صفحه تنظیمات بگذارید، مثلاً `https://hesabyar.miladrajabi.com`
-6. یک‌بار سرویس را ری‌استارت کنید تا polling فعال شود
-
-### فعال‌سازی دکمه مینی‌اپ روی ربات
-
-پس از بالا آمدن دامنه با SSL، این دستور را اجرا کنید تا دکمه «حساب‌یار» در منوی ربات ثبت شود:
-
-```bash
-curl -s "https://api.telegram.org/bot<توکن>/setChatMenuButton" \
-  -H "content-type: application/json" \
-  -d '{"menu_button": {"type": "web_app", "text": "حساب‌یار", "web_app": {"url": "https://hesabyar.miladrajabi.com"}}}'
-```
-
-راه دستی: در BotFather → `/mybots` → ربات → **Bot Settings** → **Menu Button** → آدرس مینی‌اپ را وارد کنید.
-
-سپس در تلگرام به ربات `/start` بدهید و دکمه «باز کردن حساب‌یار» را بزنید.
-
----
-
-## 🖥 استقرار روی سرور (Ubuntu + nginx + pm2)
-
-نمونه واقعی: `hesabyar.miladrajabi.com`
-
-```bash
-# در پوشه پروژه روی سرور
-cd /var/www/miladrajabi.com/bot/hesabyar
-
-npm install
-cp .env.example .env      # مقادیر واقعی را بگذارید (پورت و دامنه)
-npm run db:push
+# ۴) بیلد و اجرا
 npm run build
-
-# اجرای دائمی با pm2 روی پورت ۳۱۰۰
-PORT=3100 pm2 start npm --name hesabyar -- start
+pm2 start npm --name hesabyar -- start   # یا: npm start
 pm2 save
-
-# کانفیگ nginx (ساب‌دامین + SSL)
-sudo tee /etc/nginx/sites-available/hesabyar.miladrajabi.com << 'NGINX'
-server {
-    listen 80;
-    server_name hesabyar.miladrajabi.com;
-    location / {
-        proxy_pass http://127.0.0.1:3100;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-NGINX
-sudo ln -sf /etc/nginx/sites-available/hesabyar.miladrajabi.com /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-
-# گواهی SSL رایگان
-sudo certbot --nginx -d hesabyar.miladrajabi.com
 ```
 
-⚠️ نکته nginx: هدر `X-Frame-Options` عمداً ست نمی‌شود تا مینی‌اپ داخل iframe تلگرام باز شود.
+### فایل `.env`
 
-### دستورات راهنمای pm2
+```env
+DATABASE_URL="file:./prisma/dev.db"
+APP_USERNAME="milad"
+APP_PASSWORD="رمز-قوی-انتخاب-کنید"
+SESSION_SECRET="یک-رشته-تصادفی-طولانی"
+BOT_TOKEN="توکن-ربات-از-@BotFather"
+ADMIN_CHAT_ID="شناسه-چت-شما"
+MINI_APP_URL="https://hesabyar.miladrajabi.com"
+```
+
+> توکن ربات و چت‌آیدی از داخل خود اپ (تنظیمات ← ربات تلگرام) هم قابل تغییر است و اولویت با آن است.
+
+## 🛠 دستورات کمکی
 
 ```bash
-pm2 logs hesabyar       # مشاهده لاگ
-pm2 restart hesabyar    # ری‌استارت (بعد از تغییر توکن ربات لازم است)
-pm2 status              # وضعیت
-pm2 monit               # مانیتور زنده
+npx prisma db push          # اعمال تغییرات اسکیما (بدون از دست رفتن داده تا جای ممکن)
+npx prisma studio           # مشاهده و ویرایش دیتابیس در مرورگر
+npm run seed                # بازسازی داده نمونه (داده قبلی را پاک می‌کند)
+npm run lint                # بررسی کیفیت کد
+pm2 logs hesabyar           # لاگ برنامه
+pm2 restart hesabyar        # ری‌استارت بعد از تغییرات
+pm2 monit                   # مانیتور منابع
+
+# بکاپ دستی دیتابیس
+sqlite3 prisma/dev.db ".backup backup.db"
+
+# بازیابی
+sqlite3 prisma/dev.db ".restore backup.db" && pm2 restart hesabyar
 ```
 
-### بکاپ
+## 🤖 فعال‌سازی ربات تلگرام (گام‌به‌گام)
 
-- **دستی**: صفحه تنظیمات → «دانلود بکاپ» (فایل با تاریخ شمسی)
-- **خودکار**: روزانه ۰۳:۳۰ در پوشه `backups/` با نگهداری ۷ نسخه
-- **بازیابی**: صفحه تنظیمات → «بازیابی از فایل» (قبل از جایگزینی، بکاپ خودکار می‌گیرد)
+1. در تلگرام به [@BotFather](https://t.me/BotFather) پیام بدهید: `/newbot` — نام و یوزرنیم انتخاب کنید و **توکن** را بردارید.
+2. **Chat ID خودتان** را بگیرید: به [@userinfobot](https://t.me/userinfobot) پیام بدهید.
+3. وارد حساب‌یار شوید: `تنظیمات ← ربات تلگرام` — توکن و چت‌آیدی را بگذارید و ذخیره کنید.
+4. دکمه **«ارسال پیام آزمایشی»** را بزنید — پیامی در تلگرامتان می‌آید.
+5. به رباتتان در تلگرام `/start` بدهید و دکمه **«باز کردن حساب‌یار»** را بزنید تا مینی‌اپ باز شود.
+6. از این پس، **قبل از سررسید چک‌ها** (تعداد روزها در تنظیمات، پیش‌فرض ۳ روز) و **چک‌های سررسیدشده** ربات به شما خبر می‌دهد.
 
----
+> حالت ربات polling است؛ نیازی به دامنه، SSL یا وب‌هوک ندارد. ربات فقط ادمین (Chat ID تنظیم‌شده) را می‌پذیرد.
 
-## 📁 ساختار پروژه
+## 🔄 آپدیت نسخه‌های بعدی
 
-```
-├── prisma/                  # schema.prisma (۹ مدل)، seed.ts، dev.db
-├── src/
-│   ├── app/
-│   │   ├── (app)/           # صفحات محافظت‌شده: داشبورد، تراکنش‌ها، حساب‌ها،
-│   │   │                    # بودجه، تکرارشونده، بدهی، گزارش، تنظیمات
-│   │   ├── login/           # ورود تک‌کاربره
-│   │   └── api/             # ۲۵+ مسیر API (Zod + احراز هویت)
-│   ├── components/          # FarsiUI سفارشی + کامپوننت‌های برنامه
-│   ├── lib/
-│   │   ├── db.ts            # Prisma singleton
-│   │   ├── finance.ts       # getAccountBalances و خلاصه‌ها (Aggregate)
-│   │   ├── jalali.ts        # تبدیل/گروه‌بندی شمسی (UTC+3:30 ثابت)
-│   │   ├── money.ts         # formatToman و ارقام فارسی
-│   │   ├── validation.ts    # اسکیماهای Zod
-│   │   ├── auth.ts          # کوکی نشست HMAC
-│   │   ├── recurring.ts     # catch-up تکرارشونده‌ها
-│   │   ├── backup.ts        # بکاپ/بازیابی SQLite
-│   │   ├── scheduler.ts     # node-cron (هر ۵ دقیقه + بکاپ روزانه)
-│   │   └── telegram/        # bot (polling)، validateInitData، alerts
-│   └── instrumentation.ts   # فعال‌سازی زمان‌بند و ربات
-├── tests/                   # تست‌های node:test
-└── backups/                 # بکاپ خودکار (۷ نسخه)
+```bash
+cd /var/www/miladrajabi.com/bot/hesabyar
+git pull
+npm install
+npx prisma db push
+npm run build
+pm2 restart hesabyar
 ```
 
-## 🔌 APIها (خلاصه)
+## 🔐 نکات امنیتی
 
-| مسیر | متدها | توضیح |
-|---|---|---|
-| `/api/auth/*` | POST | ورود/خروج/بررسی نشست |
-| `/api/accounts` | GET, POST | لیست با موجودی زنده / ایجاد |
-| `/api/accounts/[id]` | PATCH, DELETE | ویرایش / حذف امن (جابه‌جایی یا پاک‌سازی تراکنش‌ها) |
-| `/api/categories` | GET, POST | لیست / ایجاد |
-| `/api/transactions` | GET, POST | فیلتر شمسی (monthJalali)، جست‌وجو، صفحه‌بندی / ثبت |
-| `/api/transfers` | POST | انتقال بین دو حساب (یک رکورد TRANSFER) |
-| `/api/budgets` | GET, POST | بودجه ماه شمسی با درصد مصرف |
-| `/api/recurring` + `/run` | GET/POST/PATCH/DELETE | قواعد تکرارشونده + اجرای دستی |
-| `/api/debts` + `/settle` | CRUD + POST | بدهی/طلب + تسویه با تراکنش واقعی |
-| `/api/dashboard` | GET | کل داده داشبورد در یک پاسخ |
-| `/api/reports/summary` | GET | خلاصه بازه + مقایسه دوره قبل |
-| `/api/alerts`، `/api/settings` | CRUD | هشدارها و تنظیمات (توکن ماسک می‌شود) |
-| `/api/backup`، `/api/backup/restore` | GET, POST | دانلود / بازیابی بکاپ |
-| `/api/telegram/test` | POST | پیام آزمایشی ربات |
+- رمز `APP_PASSWORD` را حتماً از پیش‌فرض تغییر دهید.
+- `SESSION_SECRET` باید یک رشته تصادفی طولانی باشد (مثلاً `openssl rand -hex 32`).
+- کوکی نشست با HMAC امضا می‌شود؛ مینی‌اپ تلگرام با اعتبارسنجی رسمی `initData` (HMAC-SHA256 + محدودیت ۲۴ ساعت) پذیرفته می‌شود.
+- فایل `.env` و `prisma/dev.db` را هرگز commit نکنید (در `.gitignore` هستند).
 
-## 🔐 امنیت
+## 📜 لایسنس
 
-- اعتبارسنجی **Zod** روی همه ورودی‌ها → خطای ۴۰۰ فارسی
-- نشست وب با کوکی **HttpOnly + HMAC** و مقایسه زمان-ثابت
-- مینی‌اپ: `initData` دقیقاً طبق مستندات تلگرام (HMAC-SHA256 دو مرحله‌ای + `timingSafeEqual` + انقضای ۲۴ ساعت) → hash جعلی = **401**
-- توکن ربات و chatId هرگز خام به کلاینت ارسال نمی‌شوند (ماسک `1234…ABCD`)
-- Rate limit در حافظه برای ورود، بکاپ/بازیابی، تست تلگرام و وبهوک
-- فقط Prisma Client — بدون SQL خام
-
-## 🛠 پشته فناوری
-
-Next.js 16 (App Router) + TypeScript strict • Tailwind CSS 4 + **FarsiUI** • SQLite + Prisma • Framer Motion • Recharts • jalaali-js • Zod • grammY (polling) • node-cron • Vazirmatn
-
-## 📝 نکته درباره FarsiUI
-
-کامپوننت‌های [FarsiUI](https://github.com/MiladJoodi/FarsiUI) (دکمه، Input، Dialog، Drawer، Select، Switch، Tabs، PriceInput با حروف‌نویسی فارسی، Empty و…) واقعاً از رجیستری رسمی `npx farsiui add` نصب و با توکن‌های رنگی برند (سبز-تیل `#0E7C66`، گوشه ۱۲/۱۶/۲۴ پیکسل) سفارشی‌سازی شده‌اند.
-
----
-
-ساخته‌شده با ❤️ — «حساب‌یار»
+ساخته‌شده برای فروشگاه [miladrajabi.com](https://miladrajabi.com) ❤️

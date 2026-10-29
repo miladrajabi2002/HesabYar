@@ -1,118 +1,131 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { ok, requireApiAuth, serverError } from "@/lib/api-helpers"
-import { getAccountBalances, getRangeTotals, getExpenseByCategory } from "@/lib/finance"
-import { txInclude } from "@/lib/includes"
-import { addJalaliMonths, currentMonthKey, jalaliMonthKey, monthKeyLabel, monthKeyRange, previousMonthKey } from "@/lib/jalali"
+import {
+  getAccountBalances,
+  getPersonBalances,
+  periodSummary,
+  dailySeries,
+} from "@/lib/finance"
+import {
+  nowTehran,
+  startOfJalaliDay,
+  endOfJalaliDay,
+  startOfJalaliMonth,
+  endOfJalaliMonth,
+  diffJalaliDays,
+} from "@/lib/jalali"
 
 export const dynamic = "force-dynamic"
 
-/** GET /api/dashboard — تمام داده‌های داشبورد در یک پاسخ */
+/** GET /api/dashboard — همه چیز برای داشبورد فروشگاه */
 export async function GET(req: NextRequest) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
   try {
-    const now = new Date()
-    const monthKey = currentMonthKey()
-    const { start: monthStart, end: monthEnd } = monthKeyRange(monthKey)
-    const prevKey = previousMonthKey(monthKey)
-    const { start: prevStart, end: prevEnd } = monthKeyRange(prevKey)
+    const now = nowTehran()
+    const [dayStart, dayEnd] = [startOfJalaliDay(now), endOfJalaliDay(now)]
+    const [monthStart, monthEnd] = [startOfJalaliMonth(now), endOfJalaliMonth(now)]
+    // هفته: از ابتدای شنبه این هفته
+    const wall = new Date(now.getTime() + 3.5 * 3600_000)
+    const gteDay = wall.getUTCDay() // 0=یکشنبه میلادی → شنبه‌محور
+    const saturdayOffset = (gteDay + 1) % 7
+    const weekStart = new Date(startOfJalaliDay(now).getTime() - saturdayOffset * 86_400_000)
 
-    const [balances, activeAccounts, month, prevMonth, lastTx, debts] = await Promise.all([
+    const [today, week, month, accounts, personBalances] = await Promise.all([
+      periodSummary(dayStart, dayEnd),
+      periodSummary(weekStart, dayEnd),
+      periodSummary(monthStart, monthEnd),
       getAccountBalances(),
-      db.account.findMany({ where: { isArchived: false }, select: { id: true } }),
-      getRangeTotals(monthStart, monthEnd),
-      getRangeTotals(prevStart, prevEnd),
-      db.transaction.findMany({ include: txInclude, orderBy: [{ date: "desc" }, { createdAt: "desc" }], take: 5 }),
-      db.debt.findMany({ where: { isSettled: false } }),
+      getPersonBalances(),
     ])
 
-    let totalBalance = 0
-    for (const a of activeAccounts) totalBalance += balances.get(a.id) ?? 0
-
-    // سری ۶ ماه اخیر شمسی
-    const monthKeys: string[] = []
-    for (let i = 5; i >= 0; i--) {
-      monthKeys.push(jalaliMonthKey(i === 0 ? now : addJalaliMonths(now, -i)))
-    }
-    const series = await Promise.all(
-      monthKeys.map(async (key) => {
-        const { start, end } = monthKeyRange(key)
-        const t = await getRangeTotals(start, end)
-        return { key, label: monthKeyLabel(key), income: t.income, expense: t.expense }
-      })
-    )
-
-    // تفکیک هزینه ماه جاری بر اساس دسته
-    const [spentMap, categories] = await Promise.all([
-      getExpenseByCategory(monthStart, monthEnd),
-      db.category.findMany({ where: { type: "EXPENSE" } }),
-    ])
-    const catMap = new Map(categories.map((c) => [c.id, c]))
-    const totalExpense = month.expense
-    const expenseByCategory = [...spentMap.entries()]
-      .map(([categoryId, amount]) => ({
-        categoryId,
-        name: catMap.get(categoryId)?.name ?? "بدون دسته",
-        color: catMap.get(categoryId)?.color ?? "#9CA3AF",
-        icon: catMap.get(categoryId)?.icon ?? "CircleDollarSign",
-        amount,
-        percent: totalExpense > 0 ? Math.round((amount / totalExpense) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 6)
-
-    // بودجه‌های ماه
-    const budgets = await db.budget.findMany({
-      where: { monthJalali: monthKey },
-      include: { category: true },
-      orderBy: { createdAt: "asc" },
+    // طلبکاران و بستانکاران (۱۵ نفر اول هر کدام)
+    const people = await db.person.findMany({
+      where: { isArchived: false },
+      select: { id: true, name: true, phone: true, company: true },
     })
-    const budgetsAtRisk = budgets
-      .map((b) => {
-        const spent = spentMap.get(b.categoryId) ?? 0
-        const percent = b.amount > 0 ? (spent / b.amount) * 100 : 0
-        return {
-          id: b.id,
-          categoryId: b.categoryId,
-          categoryName: b.category.name,
-          categoryColor: b.category.color,
-          categoryIcon: b.category.icon,
-          amount: b.amount,
-          spent,
-          percent: Math.round(percent * 10) / 10,
-          alertThreshold: b.alertThreshold,
-        }
-      })
-      .sort((a, b) => b.percent - a.percent)
+    const withBalance = people
+      .map((p) => ({ ...p, balance: personBalances.get(p.id) ?? 0 }))
+      .filter((p) => p.balance !== 0)
+    const debtors = withBalance
+      .filter((p) => p.balance > 0)
+      .sort((a, b) => b.balance - a.balance)
+      .slice(0, 15)
+    const creditors = withBalance
+      .filter((p) => p.balance < 0)
+      .sort((a, b) => a.balance - b.balance)
+      .slice(0, 15)
+    const totalReceivable = withBalance.reduce((s, p) => s + Math.max(0, p.balance), 0)
+    const totalPayable = -withBalance.reduce((s, p) => s + Math.min(0, p.balance), 0)
 
-    let iOweRemaining = 0
-    let owedToMeRemaining = 0
-    for (const d of debts) {
-      const rem = d.amount - d.settledAmount
-      if (d.direction === "I_OWE") iOweRemaining += rem
-      else owedToMeRemaining += rem
-    }
+    // چک‌های در جریان نزدیک سررسید
+    const pendingChecks = await db.checkPaper.findMany({
+      where: { status: "PENDING" },
+      include: { person: { select: { name: true } } },
+      orderBy: { dueDate: "asc" },
+      take: 50,
+    })
+    const checksWithDays = pendingChecks
+      .map((c) => ({ ...c, daysLeft: diffJalaliDays(now, c.dueDate) }))
+      .sort((a, b) => a.daysLeft - b.daysLeft)
+    const upcomingChecks = checksWithDays.slice(0, 8)
+    const pendingReceivedTotal = pendingChecks
+      .filter((c) => c.direction === "RECEIVED")
+      .reduce((s, c) => s + c.amount, 0)
+    const pendingIssuedTotal = pendingChecks
+      .filter((c) => c.direction === "ISSUED")
+      .reduce((s, c) => s + c.amount, 0)
+
+    // سری ۳۰ روز اخیر برای نمودار
+    const chartStart = new Date(startOfJalaliDay(now).getTime() - 29 * 86_400_000)
+    const series = await dailySeries(chartStart, dayEnd)
+
+    // آخرین فاکتورها
+    const recentInvoices = await db.invoice.findMany({
+      orderBy: [{ date: "desc" }, { number: "desc" }],
+      take: 6,
+      include: {
+        person: { select: { id: true, name: true } },
+        checks: { select: { id: true, amount: true, bankKey: true, dueDate: true, status: true } },
+      },
+    })
+
+    // جنس‌های رو به اتمام
+    const products = await db.product.findMany({
+      where: { isArchived: false },
+      include: { invoiceItems: { select: { quantity: true, invoice: { select: { type: true } } } } },
+    })
+    const lowStock = products
+      .map((p) => {
+        const stock = p.invoiceItems.reduce(
+          (s, i) => s + (i.invoice.type === "PURCHASE" ? i.quantity : -i.quantity),
+          0
+        )
+        return { id: p.id, name: p.name, brand: p.brand, code: p.code, unit: p.unit, stock, minStock: p.minStock }
+      })
+      .filter((p) => p.stock <= p.minStock)
+      .sort((a, b) => a.stock - b.stock)
+      .slice(0, 8)
 
     return ok({
-      totalBalance,
-      accountsCount: activeAccounts.length,
-      month: {
-        key: monthKey,
-        label: monthKeyLabel(monthKey),
-        income: month.income,
-        expense: month.expense,
-        profit: month.profit,
-        count: month.count,
-        prevIncome: prevMonth.income,
-        prevExpense: prevMonth.expense,
-        prevProfit: prevMonth.profit,
+      today,
+      week,
+      month,
+      accounts,
+      totalBankBalance: accounts.reduce((s, a) => s + a.balance, 0),
+      debtors,
+      creditors,
+      totalReceivable,
+      totalPayable,
+      checks: {
+        upcoming: upcomingChecks,
+        pendingReceivedTotal,
+        pendingIssuedTotal,
       },
       series,
-      expenseByCategory,
-      lastTransactions: lastTx,
-      budgetsAtRisk,
-      debtsSummary: { iOweRemaining, owedToMeRemaining },
+      recentInvoices,
+      lowStock,
     })
   } catch (e) {
     return serverError(e)

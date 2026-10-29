@@ -6,7 +6,11 @@ export async function register() {
     const { startScheduler } = await import("./lib/scheduler")
     const { startBotPolling } = await import("./lib/telegram/bot")
 
-    await startScheduler().catch((e) => console.error("[hesabyar] خطای زمان‌بند:", e))
+    try {
+      startScheduler()
+    } catch (e) {
+      console.error("[hesabyar] خطای زمان‌بند:", e)
+    }
     await startBotPolling().catch((e) => console.error("[hesabyar] خطای ربات:", e))
   }
 }

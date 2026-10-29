@@ -1,305 +1,452 @@
 "use client"
 
+/**
+ * حساب‌های بانکی — فقط بانک؛ لوگوی رسمی + رنگ برند خودکار + انتقال بین‌حساب
+ */
 import { useState } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { motion } from "framer-motion"
-import { Pencil, Trash2, Archive, ArchiveRestore, Plus, Wallet, TrendingDown, TrendingUp } from "lucide-react"
-import { apiGet, apiDelete, apiPatch, apiPost, ApiError } from "@/lib/api-client"
-import type { AccountDTO } from "@/types"
-import { PageHeader } from "@/components/shared/page-header"
-import { AccountFormModal } from "@/components/accounts/account-form-modal"
-import { ConfirmDialog } from "@/components/shared/confirm-dialog"
-import { EntityIcon } from "@/components/shared/money-display"
-import { CountUp } from "@/components/shared/count-up"
-import { CategoryManager } from "@/components/accounts/category-manager"
+import {
+  Landmark,
+  Plus,
+  ArrowLeftRight,
+  Loader2,
+  Pencil,
+  Archive,
+} from "lucide-react"
+import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
+import { formatToman, toPersianDigits } from "@/lib/money"
+import { BANKS, getBank } from "@/lib/banks"
+import { BankLogo } from "@/components/ui/bank-logo"
+import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
+import { AmountInput } from "@/components/ui/amount-input"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { formatToman } from "@/lib/money"
-import { ACCOUNT_TYPE_LABELS } from "@/lib/validation"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { useTelegram } from "@/hooks/use-telegram"
+
+interface Account {
+  id: string
+  name: string
+  bankKey: string
+  accountNumber: string | null
+  cardNumber: string | null
+  initialBalance: number
+  balance: number
+  recent: {
+    id: string
+    direction: string
+    amount: number
+    type: string
+    description: string
+    date: string
+  }[]
+}
+
+const TX_LABEL: Record<string, string> = {
+  INVOICE_CASH: "فاکتور نقدی",
+  CHECK_CASHED: "وصول چک",
+  SETTLEMENT_CASH: "تسویه نقدی",
+  TRANSFER: "انتقال",
+  OPENING: "مانده اولیه",
+}
+
+function AccountForm({
+  open,
+  onClose,
+  onSaved,
+  editing,
+}: {
+  open: boolean
+  onClose: () => void
+  onSaved: () => Promise<void>
+  editing: Account | null
+}) {
+  const [name, setName] = useState(editing?.name ?? "")
+  const [bankKey, setBankKey] = useState(editing?.bankKey ?? "mellat")
+  const [accountNumber, setAccountNumber] = useState(editing?.accountNumber ?? "")
+  const [cardNumber, setCardNumber] = useState(editing?.cardNumber ?? "")
+  const [initialBalance, setInitialBalance] = useState(editing?.initialBalance ?? 0)
+  const [bankSheet, setBankSheet] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const submit = async () => {
+    if (name.trim().length < 2) return toast.error("نام حساب را وارد کنید")
+    setSaving(true)
+    try {
+      if (editing) {
+        await apiPatch(`/api/accounts/${editing.id}`, {
+          name: name.trim(),
+          bankKey,
+          accountNumber: accountNumber || undefined,
+          cardNumber: cardNumber || undefined,
+          initialBalance,
+        })
+        toast.success("حساب ویرایش شد ✅")
+      } else {
+        await apiPost("/api/accounts", {
+          name: name.trim(),
+          bankKey,
+          accountNumber: accountNumber || undefined,
+          cardNumber: cardNumber || undefined,
+          initialBalance,
+        })
+        toast.success("حساب اضافه شد ✅")
+      }
+      onClose()
+      await onSaved()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا در ذخیره")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      title={editing ? "ویرایش حساب" : "حساب بانکی جدید"}
+      size="tall"
+      footer={
+        <Button onClick={submit} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
+          {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+          ذخیره
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        <div>
+          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            نام حساب *
+          </label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً جاری ملت" />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">بانک *</label>
+          <button
+            type="button"
+            onClick={() => setBankSheet(true)}
+            className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-input bg-card px-3"
+          >
+            <BankLogo bankKey={bankKey} size={34} />
+            <span className="flex-1 text-start text-sm">{getBank(bankKey).name}</span>
+            <span className="text-[0.65rem] text-muted-foreground">تغییر</span>
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              شماره حساب
+            </label>
+            <input
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              dir="ltr"
+              inputMode="numeric"
+              className="nums h-11 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              شماره کارت
+            </label>
+            <input
+              value={cardNumber}
+              onChange={(e) => setCardNumber(e.target.value)}
+              dir="ltr"
+              inputMode="numeric"
+              placeholder="۶۲۸۰…"
+              className="nums h-11 w-full rounded-xl border border-input bg-card px-3 text-end text-sm outline-none focus-visible:border-ring"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            مانده اولیه حساب (تومان)
+          </label>
+          <AmountInput value={initialBalance} onChange={setInitialBalance} showWords={false} />
+          <p className="mt-1 text-[0.62rem] text-muted-foreground">
+            مبلغی که موقع ساخت حساب، داخلش بود
+          </p>
+        </div>
+      </div>
+
+      <BottomSheet
+        open={bankSheet}
+        onClose={() => setBankSheet(false)}
+        title="انتخاب بانک"
+        size="tall"
+      >
+        <div className="grid grid-cols-2 gap-2">
+          {BANKS.map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => {
+                setBankKey(b.key)
+                setBankSheet(false)
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-2xl border p-2.5 text-start transition-all active:scale-[0.98]",
+                bankKey === b.key
+                  ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                  : "border-border hover:bg-accent/60"
+              )}
+            >
+              <BankLogo bankKey={b.key} size={36} />
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{b.name}</span>
+            </button>
+          ))}
+        </div>
+      </BottomSheet>
+    </BottomSheet>
+  )
+}
 
 export default function AccountsPage() {
-  const qc = useQueryClient()
-  const { haptic } = useTelegram()
-  const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<AccountDTO | null>(null)
-  const [deleting, setDeleting] = useState<AccountDTO | null>(null)
-  const [deleteMode, setDeleteMode] = useState<"DELETE_TRANSACTIONS" | "MOVE_TRANSACTIONS">("MOVE_TRANSACTIONS")
-  const [moveTo, setMoveTo] = useState<string>("")
-  const [deleteCount, setDeleteCount] = useState<number | null>(null)
+  const queryClient = useQueryClient()
+  const [formSheet, setFormSheet] = useState(false)
+  const [editing, setEditing] = useState<Account | null>(null)
+  const [transferSheet, setTransferSheet] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ["accounts"],
-    queryFn: () => apiGet<{ accounts: AccountDTO[] }>("/api/accounts"),
+    queryFn: () => apiGet<{ accounts: Account[] }>("/api/accounts"),
   })
 
   const accounts = data?.accounts ?? []
-  const active = accounts.filter((a) => !a.isArchived)
-  const archived = accounts.filter((a) => a.isArchived)
-  const totalBalance = active.reduce((s, a) => s + a.balance, 0)
+  const total = accounts.reduce((s, a) => s + a.balance, 0)
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!deleting) return
-      if (deleteCount === null) {
-        // مرحله اول: حذف بدون action — اگر تراکنش داشته باشد 409 برمی‌گردد
-        return apiDelete(`/api/accounts/${deleting.id}`)
-      }
-      if (deleteMode === "MOVE_TRANSACTIONS" && !moveTo) {
-        throw new Error("حساب مقصد را انتخاب کنید")
-      }
-      const params = new URLSearchParams({ action: deleteMode })
-      if (deleteMode === "MOVE_TRANSACTIONS") params.set("moveTo", moveTo)
-      return apiDelete(`/api/accounts/${deleting.id}?${params.toString()}`)
-    },
-    onSuccess: () => {
-      toast.success("حساب حذف شد")
-      haptic.success()
-      qc.invalidateQueries()
-      setDeleting(null)
-      setDeleteCount(null)
-    },
-    onError: (e: ApiError) => {
-      if (e.status === 409 && e.data && typeof e.data.transactionCount === "number") {
-        setDeleteCount(e.data.transactionCount)
-        const others = active.filter((a) => a.id !== deleting?.id)
-        if (others.length > 0) setMoveTo((prev) => prev || others[0].id)
-        if (others.length === 0) setDeleteMode("DELETE_TRANSACTIONS")
-      } else {
-        toast.error(e.message)
-      }
-    },
-  })
+  // فرم انتقال
+  const [fromId, setFromId] = useState("")
+  const [toId, setToId] = useState("")
+  const [transferAmount, setTransferAmount] = useState(0)
+  const [transferring, setTransferring] = useState(false)
 
-  const archiveMutation = useMutation({
-    mutationFn: ({ id, isArchived }: { id: string; isArchived: boolean }) =>
-      apiPatch(`/api/accounts/${id}`, { isArchived }),
-    onSuccess: (_d, vars) => {
-      toast.success(vars.isArchived ? "حساب آرشیو شد" : "حساب از آرشیو خارج شد")
-      qc.invalidateQueries()
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
+  const transfer = async () => {
+    if (!fromId || !toId) return toast.error("هر دو حساب را انتخاب کنید")
+    if (fromId === toId) return toast.error("حساب مبدأ و مقصد یکسان است")
+    if (transferAmount <= 0) return toast.error("مبلغ را وارد کنید")
+    setTransferring(true)
+    try {
+      await apiPost("/api/accounts/transfer", {
+        fromAccountId: fromId,
+        toAccountId: toId,
+        amount: transferAmount,
+      })
+      toast.success("انتقال انجام شد ✅")
+      setTransferSheet(false)
+      setFromId("")
+      setToId("")
+      setTransferAmount(0)
+      await queryClient.invalidateQueries()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا در انتقال")
+    } finally {
+      setTransferring(false)
+    }
+  }
+
+  const archive = async (a: Account) => {
+    if (!confirm(`حساب «${a.name}» بایگانی شود؟ از لیست حذف می‌شود ولی تاریخچه می‌ماند.`)) return
+    try {
+      await apiPatch(`/api/accounts/${a.id}`, { isArchived: true })
+      toast.success("بایگانی شد")
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا")
+    }
+  }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="حساب‌ها و دسته‌ها"
-        subtitle={
-          data ? (
-            <span>
-              موجودی کل: <span className="nums font-bold text-primary">{formatToman(totalBalance)}</span>
-            </span>
-          ) : (
-            "در حال بارگذاری…"
-          )
-        }
-        actions={
-          <Button
-            className="rounded-xl"
-            onClick={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
-          >
-            <Plus className="size-4" />
-            حساب جدید
+    <div>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="text-lg font-extrabold sm:text-xl">حساب‌های بانکی</h1>
+        <Button
+          onClick={() => {
+            setEditing(null)
+            setFormSheet(true)
+          }}
+          className="h-10 rounded-2xl px-4 text-xs font-bold shadow-fab"
+        >
+          <Plus className="size-4" />
+          حساب جدید
+        </Button>
+      </div>
+
+      {/* جمع موجودی */}
+      <div className="mb-4 rounded-3xl bg-gradient-to-l from-primary to-[#0a6353] p-4 text-white shadow-card sm:p-5">
+        <p className="text-xs opacity-80">جمع موجودی همه حساب‌ها</p>
+        <p className="nums mt-1 text-2xl font-extrabold sm:text-3xl">{formatToman(total, false)}</p>
+        <p className="text-[0.65rem] opacity-75">تومان — در {toPersianDigits(accounts.length)} حساب</p>
+      </div>
+
+      {accounts.length >= 2 && (
+        <Button
+          onClick={() => setTransferSheet(true)}
+          variant="outline"
+          className="mb-4 h-11 w-full rounded-2xl border-primary/40 text-xs font-bold text-primary hover:bg-primary/10"
+        >
+          <ArrowLeftRight className="size-4" />
+          انتقال بین حساب‌ها
+        </Button>
+      )}
+
+      {/* لیست حساب‌ها */}
+      {isLoading ? (
+        <div className="flex min-h-[30vh] items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-primary" />
+        </div>
+      ) : accounts.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-border bg-card p-10 text-center">
+          <Landmark className="mx-auto size-10 text-muted-foreground/40" />
+          <p className="mt-3 text-sm font-bold">حساب بانکی ثبت نشده</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            حساب‌های بانکی‌تان را اضافه کنید تا نقدی فاکتورها و وصول چک‌ها ثبت شود
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {accounts.map((a) => {
+            const bank = getBank(a.bankKey)
+            return (
+              <div
+                key={a.id}
+                className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-card"
+              >
+                <div className="flex items-center gap-3 p-4">
+                  <BankLogo bankKey={a.bankKey} size={46} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-extrabold">{a.name}</div>
+                    <div className="text-[0.65rem]" style={{ color: bank.color }}>
+                      {bank.name}
+                      {a.accountNumber ? ` • ${toPersianDigits(a.accountNumber)}` : ""}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-end">
+                    <div className="nums text-sm font-extrabold">{formatToman(a.balance, false)}</div>
+                    <div className="text-[0.6rem] text-muted-foreground">تومان</div>
+                  </div>
+                </div>
+                {a.recent.length > 0 && (
+                  <div className="border-t border-dashed px-4 py-2">
+                    {a.recent.slice(0, 3).map((t) => (
+                      <div key={t.id} className="flex items-center justify-between py-1 text-[0.65rem]">
+                        <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+                          <span
+                            className={cn(
+                              "size-1.5 shrink-0 rounded-full",
+                              t.direction === "IN" ? "bg-income" : "bg-destructive"
+                            )}
+                          />
+                          <span className="truncate">
+                            {TX_LABEL[t.type] ?? t.type} — {t.description}
+                          </span>
+                        </span>
+                        <span
+                          className={cn(
+                            "nums shrink-0 font-bold",
+                            t.direction === "IN" ? "text-income" : "text-destructive"
+                          )}
+                        >
+                          {t.direction === "IN" ? "+" : "−"}
+                          {formatToman(t.amount, false)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex border-t border-border/60">
+                  <button
+                    onClick={() => {
+                      setEditing(a)
+                      setFormSheet(true)
+                    }}
+                    className="flex flex-1 items-center justify-center gap-1 py-2.5 text-[0.7rem] font-bold text-muted-foreground transition-colors hover:bg-accent/60"
+                  >
+                    <Pencil className="size-3.5" />
+                    ویرایش
+                  </button>
+                  <button
+                    onClick={() => archive(a)}
+                    className="flex flex-1 items-center justify-center gap-1 border-s border-border/60 py-2.5 text-[0.7rem] font-bold text-muted-foreground transition-colors hover:bg-destructive/5 hover:text-destructive"
+                  >
+                    <Archive className="size-3.5" />
+                    بایگانی
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* فرم حساب */}
+      {formSheet && (
+        <AccountForm
+          key={editing?.id ?? "new"}
+          open={formSheet}
+          editing={editing}
+          onClose={() => {
+            setFormSheet(false)
+            setEditing(null)
+          }}
+          onSaved={async () => {
+            await queryClient.invalidateQueries({ queryKey: ["accounts"] })
+          }}
+        />
+      )}
+
+      {/* شیت انتقال */}
+      <BottomSheet
+        open={transferSheet}
+        onClose={() => setTransferSheet(false)}
+        title="انتقال بین حساب‌ها"
+        size="tall"
+        footer={
+          <Button onClick={transfer} disabled={transferring} className="h-12 w-full rounded-2xl font-bold">
+            {transferring ? <Loader2 className="size-4 animate-spin" /> : <ArrowLeftRight className="size-4" />}
+            انتقال
           </Button>
         }
-      />
-
-      <Tabs defaultValue="accounts" dir="rtl">
-        <TabsList className="rounded-xl">
-          <TabsTrigger value="accounts">حساب‌ها</TabsTrigger>
-          <TabsTrigger value="categories">دسته‌بندی‌ها</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="accounts" className="mt-4 space-y-4">
-          {isLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {[...Array(4)].map((_, i) => (
-                <Skeleton key={i} className="h-36 rounded-2xl" />
-              ))}
-            </div>
-          ) : active.length === 0 ? (
-            <div className="rounded-2xl border border-border bg-card p-10 text-center shadow-card">
-              <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-                <Wallet className="size-6" />
-              </span>
-              <h3 className="mt-4 font-bold">هنوز حسابی نساخته‌اید</h3>
-              <p className="mt-1 text-sm text-muted-foreground">اولین کیف پول یا حساب بانکی خود را بسازید</p>
-              <Button className="mt-4 rounded-xl" onClick={() => setFormOpen(true)}>
-                ساخت اولین حساب
-              </Button>
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {active.map((a, i) => (
-                <motion.div
-                  key={a.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05, duration: 0.3 }}
-                  className="group rounded-2xl border border-border bg-card p-5 shadow-card transition-shadow duration-200 hover:shadow-card-hover"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <EntityIcon icon={a.icon} color={a.color} size="lg" />
-                      <div>
-                        <div className="text-sm font-bold">{a.name}</div>
-                        <div className="text-xs text-muted-foreground">{ACCOUNT_TYPE_LABELS[a.type]}</div>
-                      </div>
-                    </div>
-                    <div className="flex gap-0.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 max-lg:opacity-100">
-                      <Button variant="ghost" size="icon-xs" aria-label="ویرایش" onClick={() => { setEditing(a); setFormOpen(true) }}>
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label="آرشیو"
-                        onClick={() => archiveMutation.mutate({ id: a.id, isArchived: true })}
-                      >
-                        <Archive />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label="حذف"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => {
-                          setDeleting(a)
-                          setDeleteCount(null)
-                        }}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="nums mt-4 text-2xl font-extrabold" dir="rtl">
-                    <CountUp value={a.balance} format={(n) => formatToman(n)} />
-                  </div>
-
-                  <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="nums flex items-center gap-1">
-                      <TrendingUp className="size-3.5 text-income" />
-                      ماه: {formatToman(a.monthIn, false)}
-                    </span>
-                    <span className="nums flex items-center gap-1">
-                      <TrendingDown className="size-3.5 text-expense" />
-                      {formatToman(a.monthOut, false)}
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-
-          {archived.length > 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/40 p-4">
-              <div className="mb-3 text-xs font-semibold text-muted-foreground">حساب‌های آرشیوشده</div>
-              <div className="space-y-2">
-                {archived.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-xl bg-card px-4 py-2.5">
-                    <div className="flex items-center gap-2.5 text-sm">
-                      <EntityIcon icon={a.icon} color={a.color} size="sm" />
-                      <span className="font-medium">{a.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="nums text-xs text-muted-foreground">{formatToman(a.balance, false)}</span>
-                      <Button variant="ghost" size="icon-xs" aria-label="بازگردانی" onClick={() => archiveMutation.mutate({ id: a.id, isArchived: false })}>
-                        <ArchiveRestore />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </TabsContent>
-
-        <TabsContent value="categories" className="mt-4">
-          <CategoryManager />
-        </TabsContent>
-      </Tabs>
-
-      {formOpen ? (
-        <AccountFormModal key={editing?.id ?? "new"} account={editing} onClose={() => setFormOpen(false)} />
-      ) : null}
-
-      {/* حذف امن حساب */}
-      <ConfirmDialog
-        open={!!deleting}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeleting(null)
-            setDeleteCount(null)
-          }
-        }}
-        title={`حذف حساب «${deleting?.name ?? ""}»`}
-        description={
-          deleteCount === null
-            ? "آیا از حذف این حساب مطمئن هستید؟"
-            : `این حساب ${deleteCount} تراکنش دارد. برای حذف، تکلیف تراکنش‌ها را مشخص کنید:`
-        }
-        confirmText={deleteCount === null ? "حذف کن" : "حذف نهایی"}
-        destructive
-        onConfirm={() => deleteMutation.mutate()}
       >
-        {deleteCount !== null && deleteCount > 0 ? (
-          <div className="space-y-3 py-2">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setDeleteMode("MOVE_TRANSACTIONS")}
-                className={cn(
-                  "rounded-xl border p-3 text-xs font-semibold transition-colors",
-                  deleteMode === "MOVE_TRANSACTIONS" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"
-                )}
-              >
-                جابه‌جایی تراکنش‌ها
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteMode("DELETE_TRANSACTIONS")}
-                className={cn(
-                  "rounded-xl border p-3 text-xs font-semibold transition-colors",
-                  deleteMode === "DELETE_TRANSACTIONS" ? "border-destructive bg-destructive/5 text-destructive" : "border-border text-muted-foreground"
-                )}
-              >
-                حذف همه تراکنش‌ها
-              </button>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">از حساب</label>
+            <div className="space-y-2">
+              {accounts.map((a) => (
+                <SheetOption
+                  key={a.id}
+                  icon={<BankLogo bankKey={a.bankKey} size={36} showBg={false} />}
+                  title={a.name}
+                  subtitle={`مانده ${formatToman(a.balance, false)}`}
+                  selected={fromId === a.id}
+                  onClick={() => setFromId(a.id)}
+                />
+              ))}
             </div>
-            {deleteMode === "MOVE_TRANSACTIONS" ? (
-              <Select
-                value={moveTo}
-                onValueChange={(v) => setMoveTo(v ?? "")}
-                items={active.filter((a) => a.id !== deleting?.id).map((a) => ({ value: a.id, label: a.name }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {active
-                    .filter((a) => a.id !== deleting?.id)
-                    .map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="text-xs text-destructive">⚠️ همه {deleteCount} تراکنش این حساب برای همیشه حذف می‌شوند.</p>
-            )}
           </div>
-        ) : null}
-      </ConfirmDialog>
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">به حساب</label>
+            <div className="space-y-2">
+              {accounts.map((a) => (
+                <SheetOption
+                  key={a.id}
+                  icon={<BankLogo bankKey={a.bankKey} size={36} showBg={false} />}
+                  title={a.name}
+                  subtitle={`مانده ${formatToman(a.balance, false)}`}
+                  selected={toId === a.id}
+                  onClick={() => setToId(a.id)}
+                />
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">مبلغ (تومان)</label>
+            <AmountInput value={transferAmount} onChange={setTransferAmount} showWords={false} />
+          </div>
+        </div>
+      </BottomSheet>
     </div>
   )
 }

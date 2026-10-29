@@ -8,7 +8,7 @@ export interface TelegramConfig {
   token: string | null
   chatId: string | null
   miniAppUrl: string | null
-  lowBalanceDefault: number
+  checkDueDaysBefore: number
 }
 
 export async function resolveTelegramConfig(): Promise<TelegramConfig> {
@@ -17,7 +17,7 @@ export async function resolveTelegramConfig(): Promise<TelegramConfig> {
     token: setting?.botToken?.trim() || process.env.BOT_TOKEN?.trim() || null,
     chatId: setting?.adminChatId?.trim() || process.env.ADMIN_CHAT_ID?.trim() || null,
     miniAppUrl: setting?.miniAppUrl?.trim() || process.env.MINI_APP_URL?.trim() || null,
-    lowBalanceDefault: setting?.lowBalanceDefault ?? 100_000,
+    checkDueDaysBefore: setting?.checkDueDaysBefore ?? 3,
   }
 }
 

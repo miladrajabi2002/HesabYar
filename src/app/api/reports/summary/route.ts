@@ -1,98 +1,127 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
-import { ok, parseQuery, requireApiAuth, serverError } from "@/lib/api-helpers"
-import { reportQuerySchema } from "@/lib/validation"
-import { getRangeTotals } from "@/lib/finance"
-import { jalaliDayKey, jalaliMonthKey, jalaliToInstant, monthKeyLabel, formatJalaliShort } from "@/lib/jalali"
+import { ok, fail, parseQuery, requireApiAuth, serverError } from "@/lib/api-helpers"
+import { periodSummary, dailySeries } from "@/lib/finance"
+import {
+  nowTehran,
+  startOfJalaliDay,
+  endOfJalaliDay,
+  startOfJalaliMonth,
+  endOfJalaliMonth,
+  monthKeyRange,
+  parseMonthKey,
+} from "@/lib/jalali"
+import { z } from "zod"
 
 export const dynamic = "force-dynamic"
 
-/** GET /api/reports/summary?from=&to= — خلاصه بازه + مقایسه با دوره قبل */
+const querySchema = z.object({
+  period: z.enum(["day", "week", "month"]).default("month"),
+  month: z
+    .string()
+    .regex(/^\d{3,4}-\d{1,2}$/, "قالب ماه شمسی نامعتبر است")
+    .optional(),
+})
+
+/** GET /api/reports/summary?period=day|week|month&month=1405-08 */
 export async function GET(req: NextRequest) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
   try {
-    const { data, error } = parseQuery(req, reportQuerySchema)
+    const { data: q, error } = parseQuery(req, querySchema)
     if (error) return error
 
-    const from = new Date(data.from)
-    const to = new Date(data.to)
+    const now = nowTehran()
+    let start: Date
+    let end = endOfJalaliDay(now)
 
-    // دوره قبل با همان طول
-    const spanMs = to.getTime() - from.getTime()
-    const prevTo = new Date(from.getTime() - 1)
-    const prevFrom = new Date(prevTo.getTime() - spanMs)
-
-    const [totals, prevTotals, txs, categories] = await Promise.all([
-      getRangeTotals(from, to),
-      getRangeTotals(prevFrom, prevTo),
-      db.transaction.findMany({
-        where: { date: { gte: from, lte: to } },
-        select: { type: true, amount: true, date: true, categoryId: true, note: true },
-        orderBy: { date: "asc" },
-      }),
-      db.category.findMany(),
-    ])
-
-    // سری زمانی: روزانه برای بازه‌های کوتاه، ماهانه برای بلند
-    const dayCount = Math.ceil(spanMs / 86_400_000)
-    const byMonth = dayCount > 45
-
-    const seriesMap = new Map<string, { income: number; expense: number }>()
-    const catAgg = new Map<string, { amount: number; count: number }>()
-    for (const t of txs) {
-      if (t.type === "TRANSFER") continue
-      const key = byMonth ? jalaliMonthKey(t.date) : jalaliDayKey(t.date)
-      const entry = seriesMap.get(key) ?? { income: 0, expense: 0 }
-      if (t.type === "INCOME") entry.income += t.amount
-      else entry.expense += t.amount
-      seriesMap.set(key, entry)
-
-      if (t.type === "EXPENSE" && t.categoryId) {
-        const c = catAgg.get(t.categoryId) ?? { amount: 0, count: 0 }
-        c.amount += t.amount
-        c.count += 1
-        catAgg.set(t.categoryId, c)
+    if (q.month) {
+      try {
+        parseMonthKey(q.month)
+      } catch {
+        return fail("قالب ماه شمسی نامعتبر است", 400)
       }
+      const r = monthKeyRange(q.month)
+      start = r.start
+      end = r.end
+    } else if (q.period === "day") {
+      start = startOfJalaliDay(now)
+    } else if (q.period === "week") {
+      const wall = new Date(now.getTime() + 3.5 * 3600_000)
+      const saturdayOffset = (wall.getUTCDay() + 1) % 7
+      start = new Date(startOfJalaliDay(now).getTime() - saturdayOffset * 86_400_000)
+    } else {
+      start = startOfJalaliMonth(now)
     }
 
-    const series = [...seriesMap.entries()]
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([key, v]) => ({
-        key,
-        label: byMonth ? monthKeyLabel(key) : formatJalaliShort(dayKeyToDate(key)),
-        income: v.income,
-        expense: v.expense,
-      }))
+    const [summary, series] = await Promise.all([
+      periodSummary(start, end),
+      // نمودار روزانه بازه (حداکثر ۶۰ روز)
+      dailySeries(start, end),
+    ])
 
-    const catMap = new Map(categories.map((c) => [c.id, c]))
-    const byCategory = [...catAgg.entries()]
-      .map(([categoryId, v]) => ({
-        categoryId,
-        name: catMap.get(categoryId)?.name ?? "بدون دسته",
-        color: catMap.get(categoryId)?.color ?? "#9CA3AF",
-        icon: catMap.get(categoryId)?.icon ?? "CircleDollarSign",
-        amount: v.amount,
-        count: v.count,
-        percent: totals.expense > 0 ? Math.round((v.amount / totals.expense) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount)
+    // پرفروش‌ترین اجناس و بهترین مشتری‌ها
+    const items = await db.invoiceItem.findMany({
+      where: { invoice: { date: { gte: start, lte: end } } },
+      select: {
+        productId: true,
+        productName: true,
+        brand: true,
+        unit: true,
+        quantity: true,
+        unitPrice: true,
+        total: true,
+        costPrice: true,
+        invoice: { select: { type: true, personId: true } },
+      },
+    })
+
+    const topProducts = new Map<
+      string,
+      { name: string; brand: string | null; unit: string; qty: number; revenue: number; profit: number }
+    >()
+    for (const it of items) {
+      if (it.invoice.type !== "SALE") continue
+      const cur = topProducts.get(it.productId) || {
+        name: it.productName,
+        brand: it.brand,
+        unit: it.unit,
+        qty: 0,
+        revenue: 0,
+        profit: 0,
+      }
+      cur.qty += it.quantity
+      cur.revenue += it.total
+      cur.profit += (it.unitPrice - it.costPrice) * it.quantity
+      topProducts.set(it.productId, cur)
+    }
+    const topSold = [...topProducts.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10)
+
+    const sales = await db.invoice.findMany({
+      where: { type: "SALE", date: { gte: start, lte: end } },
+      select: { personId: true, total: true },
+    })
+    const personIds = [...new Set(sales.map((s) => s.personId))]
+    const people = await db.person.findMany({ where: { id: { in: personIds } }, select: { id: true, name: true } })
+    const topCustomers = new Map<string, { name: string; total: number; count: number }>()
+    for (const s of sales) {
+      const name = people.find((p) => p.id === s.personId)?.name || "-"
+      const cur = topCustomers.get(s.personId) || { name, total: 0, count: 0 }
+      cur.total += s.total
+      cur.count += 1
+      topCustomers.set(s.personId, cur)
+    }
+    const topCustomerList = [...topCustomers.values()].sort((a, b) => b.total - a.total).slice(0, 10)
 
     return ok({
-      range: { from: data.from, to: data.to, days: dayCount + 1 },
-      totals,
-      previous: prevTotals,
+      start,
+      end,
+      summary,
       series,
-      byCategory,
+      topSold,
+      topCustomers: topCustomerList,
     })
   } catch (e) {
     return serverError(e)
   }
-}
-
-/** تبدیل کلید روز شمسی به تاریخ */
-function dayKeyToDate(key: string): Date {
-  const m = /^(\d{3,4})-(\d{1,2})-(\d{1,2})$/.exec(key)
-  if (!m) return new Date()
-  return jalaliToInstant(Number(m[1]), Number(m[2]), Number(m[3]), 12, 0, 0)
 }

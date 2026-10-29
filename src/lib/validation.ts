@@ -1,254 +1,224 @@
 /**
- * اسکیماهای اعتبارسنجی Zod — lib/validation.ts
- * تمام ورودی‌های API قبل از هر عملیاتی از این اسکیماها عبور می‌کنند.
+ * اعتبارسنجی ورودی API با Zod — lib/validation.ts
+ * همه پیام‌های خطا فارسی هستند.
  */
 import { z } from "zod"
+import { toLatinDigits } from "./money"
 
-export const ACCOUNT_TYPES = ["CASH", "BANK", "CARD", "SAVINGS", "OTHER"] as const
-export const CATEGORY_TYPES = ["INCOME", "EXPENSE"] as const
-export const TX_TYPES = ["INCOME", "EXPENSE", "TRANSFER"] as const
-export const FREQUENCIES = ["DAILY", "WEEKLY", "MONTHLY_JALALI"] as const
-export const DEBT_DIRECTIONS = ["I_OWE", "OWED_TO_ME"] as const
-export const ALERT_TYPES = ["BUDGET_THRESHOLD", "LOW_BALANCE", "DEBT_DUE", "RECURRING_RUN"] as const
+/** فقط ارقام (پارسی/لاتین) → عدد صحیح نامنفی تومان */
+export const amountSchema = z
+  .union([z.number(), z.string()])
+  .transform((v) => Math.round(Number(toLatinDigits(String(v)).replace(/[^\d-]/g, "")) || 0))
+  .refine((n) => Number.isFinite(n), "مبلغ نامعتبر است")
 
-export const ACCOUNT_TYPE_LABELS: Record<(typeof ACCOUNT_TYPES)[number], string> = {
-  CASH: "کیف پول",
-  BANK: "حساب بانکی",
-  CARD: "کارت",
-  SAVINGS: "پس‌انداز",
-  OTHER: "سایر",
-}
+export const positiveAmount = amountSchema.refine((n) => n > 0, "مبلغ باید بیشتر از صفر باشد")
+export const nonNegativeAmount = amountSchema.refine((n) => n >= 0, "مبلغ نمی‌تواند منفی باشد")
 
-export const FREQUENCY_LABELS: Record<(typeof FREQUENCIES)[number], string> = {
-  DAILY: "روزانه",
-  WEEKLY: "هفتگی",
-  MONTHLY_JALALI: "ماهانه شمسی",
-}
+export const quantitySchema = z
+  .union([z.number(), z.string()])
+  .transform((v) => {
+    const n = Number(toLatinDigits(String(v)).replace(/[^\d.-]/g, ""))
+    return Number.isFinite(n) ? n : 0
+  })
+  .refine((n) => n > 0, "تعداد باید بیشتر از صفر باشد")
 
-const isoDate = z
+/** رشته فارسی/لاتین اختیاری که null خالی شود */
+const optionalText = (max = 200) =>
+  z
+    .string()
+    .trim()
+    .max(max, `حداکثر ${max} کاراکتر مجاز است`)
+    .optional()
+    .nullable()
+    .transform((v) => (v ? v : null))
+
+const requiredText = (min: number, max: number, label: string) =>
+  z
+    .string()
+    .trim()
+    .min(min, `${label} را وارد کنید`)
+    .max(max, `${label} حداکثر ${max} کاراکتر است`)
+
+/** تاریخ شمسی «1404-08-15» → لحظه UTC ظهر تهران */
+export const jalaliDaySchema = z
   .string()
-  .refine((v) => !Number.isNaN(Date.parse(v)), { message: "تاریخ معتبر نیست" })
+  .trim()
+  .regex(/^1[34]\d{2}-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])$/, "قالب تاریخ باید شمسی مثل ۱۴۰۴-۰۸-۱۵ باشد")
 
-const positiveAmount = z
-  .number({ message: "مبلغ باید عدد باشد" })
-  .int("مبلغ باید عدد صحیح تومان باشد")
-  .gt(0, "مبلغ باید بزرگ‌تر از صفر باشد")
+// ───────────────────────── اشخاص ─────────────────────────
 
-const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "رنگ باید کد HEX معتبر باشد")
+export const personRoleSchema = z.enum(["CUSTOMER", "SUPPLIER", "BOTH"], {
+  message: "نقش شخص نامعتبر است",
+})
 
-const idField = z.string().min(1, "این فیلد الزامی است")
+export const personCreateSchema = z.object({
+  name: requiredText(2, 100, "نام"),
+  phone: optionalText(20),
+  company: optionalText(100),
+  shopAddress: optionalText(300),
+  role: personRoleSchema.default("BOTH"),
+  note: optionalText(500),
+})
 
-const monthKeyField = z
-  .string()
-  .regex(/^\d{3,4}-(0[1-9]|1[0-2])$/, "قالب ماه شمسی باید مثل 1404-08 باشد")
+export const personUpdateSchema = personCreateSchema.partial().extend({
+  isArchived: z.boolean().optional(),
+})
 
-const noteField = z.string().max(300, "یادداشت حداکثر ۳۰۰ کاراکتر است").optional().nullable()
+// ───────────────────────── اجناس ─────────────────────────
 
-/* ---------- Account ---------- */
+export const productCreateSchema = z.object({
+  name: requiredText(2, 150, "نام جنس"),
+  brand: optionalText(80),
+  code: optionalText(50),
+  unit: z.enum(["عدد", "کیلوگرم", "پاکت", "کارتن", "متر", "بسته"], {
+    message: "واحد شمارش نامعتبر است",
+  }).default("عدد"),
+  minStock: z
+    .union([z.number(), z.string()])
+    .optional()
+    .transform((v) => (v === undefined || v === "" ? 0 : Number(toLatinDigits(String(v)).replace(/[^\d.-]/g, "")) || 0)),
+})
+
+export const productUpdateSchema = productCreateSchema.partial()
+
+// ───────────────────────── حساب‌های بانکی ─────────────────────────
+
 export const accountCreateSchema = z.object({
-  name: z.string().min(1, "نام حساب الزامی است").max(50, "نام حساب حداکثر ۵۰ کاراکتر است"),
-  type: z.enum(ACCOUNT_TYPES, { message: "نوع حساب نامعتبر است" }),
-  color: hexColor,
-  icon: z.string().min(1, "آیکون الزامی است").max(60),
-  initialBalance: z.number().int("موجودی اولیه باید عدد صحیح باشد").gte(0, "موجودی اولیه نمی‌تواند منفی باشد").default(0),
-  sortOrder: z.number().int().optional(),
+  name: requiredText(2, 80, "نام حساب"),
+  bankKey: z.string().trim().min(1, "بانک را انتخاب کنید"),
+  accountNumber: optionalText(40),
+  cardNumber: optionalText(25),
+  initialBalance: nonNegativeAmount.default(0),
 })
 
 export const accountUpdateSchema = accountCreateSchema.partial().extend({
   isArchived: z.boolean().optional(),
 })
 
-export const accountSafeDeleteSchema = z.object({
-  action: z.enum(["DELETE_TRANSACTIONS", "MOVE_TRANSACTIONS"], { message: "نوع حذف نامعتبر است" }),
-  moveToAccountId: z.string().optional(),
+export const transferSchema = z.object({
+  fromAccountId: z.string().min(1, "حساب مبدأ را انتخاب کنید"),
+  toAccountId: z.string().min(1, "حساب مقصد را انتخاب کنید"),
+  amount: positiveAmount,
+  description: optionalText(200),
+  date: jalaliDaySchema.optional(),
 })
 
-/* ---------- Category ---------- */
-export const categoryCreateSchema = z.object({
-  name: z.string().min(1, "نام دسته الزامی است").max(40, "نام دسته حداکثر ۴۰ کاراکتر است"),
-  type: z.enum(CATEGORY_TYPES, { message: "نوع دسته نامعتبر است" }),
-  color: hexColor,
-  icon: z.string().min(1, "آیکون الزامی است").max(60),
+// ───────────────────────── اقلام فاکتور ─────────────────────────
+
+export const invoiceItemSchema = z.object({
+  productId: z.string().min(1, "جنس را انتخاب کنید"),
+  quantity: quantitySchema,
+  unitPrice: nonNegativeAmount,
 })
 
-export const categoryUpdateSchema = categoryCreateSchema.partial()
-
-export const categorySafeDeleteSchema = z.object({
-  action: z.enum(["CLEAR_CATEGORY", "MOVE_TRANSACTIONS"], { message: "نوع حذف نامعتبر است" }),
-  moveToCategoryId: z.string().optional(),
+/** جنس جدید به همراه قیمت — برای افزودن سریع در فاکتور */
+export const productQuickCreateSchema = productCreateSchema.extend({
+  unitPrice: nonNegativeAmount.optional().default(0),
 })
 
-/* ---------- Transaction ---------- */
-export const transactionCreateSchema = z
+// ───────────────────────── چک ─────────────────────────
+
+export const checkInputSchema = z.object({
+  serial: optionalText(40),
+  amount: positiveAmount,
+  bankKey: z.string().trim().min(1, "بانک چک را انتخاب کنید"),
+  dueDate: jalaliDaySchema,
+  note: optionalText(200),
+})
+
+// ───────────────────────── فاکتور خرید/فروش ─────────────────────────
+
+export const invoiceCreateSchema = z
   .object({
-    type: z.enum(TX_TYPES, { message: "نوع تراکنش نامعتبر است" }),
+    type: z.enum(["PURCHASE", "SALE"], { message: "نوع فاکتور نامعتبر است" }),
+    personId: z.string().min(1, "شخص را انتخاب کنید"),
+    date: jalaliDaySchema,
+    items: z.array(invoiceItemSchema).min(1, "حداقل یک قلم به فاکتور اضافه کنید"),
+    discount: nonNegativeAmount.default(0),
+    // پرداخت
+    accountId: z.string().optional().nullable(),
+    paidCash: nonNegativeAmount.default(0),
+    checks: z.array(checkInputSchema).default([]),
+    note: optionalText(500),
+  })
+  .refine((d) => (d.accountId ? true : d.paidCash === 0), {
+    message: "برای پرداخت نقدی، حساب بانکی را انتخاب کنید",
+    path: ["accountId"],
+  })
+  .refine((d) => !d.accountId || d.paidCash > 0 || d.checks.length > 0, {
+    message: "مبلغ نقدی صفر است؛ حساب را بردارید یا چک اضافه کنید",
+    path: ["paidCash"],
+  })
+
+// ───────────────────────── تسویه ─────────────────────────
+
+export const settleSchema = z
+  .object({
+    personId: z.string().min(1, "شخص را انتخاب کنید"),
+    invoiceId: z.string().optional().nullable(),
+    direction: z.enum(["RECEIVE", "PAY"], { message: "جهت تسویه نامعتبر است" }),
+    method: z.enum(["CASH", "CHECK"], { message: "روش تسویه نامعتبر است" }),
     amount: positiveAmount,
-    accountId: idField,
-    toAccountId: z.string().optional().nullable(),
-    categoryId: z.string().optional().nullable(),
-    date: isoDate,
-    note: noteField,
+    accountId: z.string().optional().nullable(),
+    check: checkInputSchema.optional().nullable(),
+    date: jalaliDaySchema.optional(),
+    note: optionalText(300),
   })
-  .superRefine((val, ctx) => {
-    if (val.type === "TRANSFER") {
-      if (!val.toAccountId) {
-        ctx.addIssue({ code: "custom", path: ["toAccountId"], message: "حساب مقصد انتقال الزامی است" })
-      } else if (val.toAccountId === val.accountId) {
-        ctx.addIssue({ code: "custom", path: ["toAccountId"], message: "حساب مبدأ و مقصد نباید یکسان باشند" })
-      }
-    }
+  .refine((d) => (d.method === "CASH" ? !!d.accountId : !!d.check), {
+    message: "برای تسویه نقدی حساب بانکی لازم است / برای تسویه چکی مشخصات چک لازم است",
+    path: ["accountId"],
   })
 
-export const transactionUpdateSchema = z
-  .object({
-    type: z.enum(TX_TYPES).optional(),
-    amount: positiveAmount.optional(),
-    accountId: idField.optional(),
-    toAccountId: z.string().optional().nullable(),
-    categoryId: z.string().optional().nullable(),
-    date: isoDate.optional(),
-    note: noteField,
-  })
-  .superRefine((val, ctx) => {
-    if (val.type === "TRANSFER" && val.toAccountId && val.accountId && val.toAccountId === val.accountId) {
-      ctx.addIssue({ code: "custom", path: ["toAccountId"], message: "حساب مبدأ و مقصد نباید یکسان باشند" })
-    }
-  })
+// ───────────────────────── تغییر وضعیت چک ─────────────────────────
 
-export const transferCreateSchema = z
-  .object({
-    fromAccountId: idField,
-    toAccountId: idField,
-    amount: positiveAmount,
-    date: isoDate,
-    note: noteField,
-  })
-  .superRefine((val, ctx) => {
-    if (val.fromAccountId === val.toAccountId) {
-      ctx.addIssue({ code: "custom", path: ["toAccountId"], message: "حساب مبدأ و مقصد نباید یکسان باشند" })
-    }
-  })
+export const checkStatusSchema = z.object({
+  status: z.enum(["CASHED", "BOUNCED", "CANCELED", "PENDING"], {
+    message: "وضعیت چک نامعتبر است",
+  }),
+  accountId: z.string().optional().nullable(),
+  note: optionalText(200),
+})
 
-export const transactionQuerySchema = z.object({
-  from: isoDate.optional(),
-  to: isoDate.optional(),
-  monthJalali: monthKeyField.optional(),
-  type: z.enum(TX_TYPES).optional(),
-  accountId: z.string().optional(),
-  categoryId: z.string().optional(),
-  q: z.string().max(100, "جست‌وجو حداکثر ۱۰۰ کاراکتر است").optional(),
+// ───────────────────────── فیلترهای لیست ─────────────────────────
+
+export const invoiceFilterSchema = z.object({
+  type: z.enum(["PURCHASE", "SALE"]).optional(),
+  personId: z.string().optional(),
+  month: z.string().regex(/^\d{3,4}-\d{1,2}$/, "قالب ماه شمسی نامعتبر است").optional(),
+  q: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(30),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 })
 
-/* ---------- Budget ---------- */
-export const budgetCreateSchema = z.object({
-  categoryId: idField,
-  amount: positiveAmount,
-  monthJalali: monthKeyField,
-  alertThreshold: z.number().int().min(1, "آستانه هشدار حداقل ۱ درصد است").max(100, "آستانه هشدار حداکثر ۱۰۰ درصد است").default(80),
+export const personFilterSchema = z.object({
+  role: personRoleSchema.optional(),
+  q: z.string().trim().max(100).optional(),
+  onlyWithBalance: z.coerce.boolean().optional(),
 })
 
-export const budgetUpdateSchema = z.object({
-  amount: positiveAmount.optional(),
-  alertThreshold: z.number().int().min(1).max(100).optional(),
+export const checkFilterSchema = z.object({
+  direction: z.enum(["RECEIVED", "ISSUED"]).optional(),
+  status: z.enum(["PENDING", "CASHED", "BOUNCED", "CANCELED"]).optional(),
+  personId: z.string().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 })
 
-export const budgetCopySchema = z.object({
-  fromMonth: monthKeyField,
-  toMonth: monthKeyField,
-})
+// ───────────────────────── تنظیمات ─────────────────────────
 
-/* ---------- Recurring ---------- */
-export const recurringCreateSchema = z
-  .object({
-    title: z.string().min(1, "عنوان الزامی است").max(80, "عنوان حداکثر ۸۰ کاراکتر است"),
-    type: z.enum(["INCOME", "EXPENSE"], { message: "نوع تکرارشونده نامعتبر است" }),
-    amount: positiveAmount,
-    accountId: idField,
-    categoryId: z.string().optional().nullable(),
-    frequency: z.enum(FREQUENCIES, { message: "تواتر نامعتبر است" }),
-    interval: z.number().int().min(1, "بازه حداقل ۱ است").max(365, "بازه حداکثر ۳۶۵ است").default(1),
-    dayOfMonth: z.number().int().min(1, "روز ماه بین ۱ تا ۳۱ است").max(31, "روز ماه بین ۱ تا ۳۱ است").optional().nullable(),
-    startDate: isoDate,
-  })
-  .superRefine((val, ctx) => {
-    if (val.frequency === "MONTHLY_JALALI" && (val.dayOfMonth === null || val.dayOfMonth === undefined)) {
-      ctx.addIssue({ code: "custom", path: ["dayOfMonth"], message: "برای تکرار ماهانه شمسی، روز ماه الزامی است" })
-    }
-  })
-
-export const recurringUpdateSchema = z
-  .object({
-    title: z.string().min(1, "عنوان الزامی است").max(80, "عنوان حداکثر ۸۰ کاراکتر است").optional(),
-    type: z.enum(["INCOME", "EXPENSE"]).optional(),
-    amount: positiveAmount.optional(),
-    accountId: idField.optional(),
-    categoryId: z.string().optional().nullable(),
-    frequency: z.enum(FREQUENCIES).optional(),
-    interval: z.number().int().min(1, "بازه حداقل ۱ است").max(365, "بازه حداکثر ۳۶۵ است").optional(),
-    dayOfMonth: z.number().int().min(1, "روز ماه بین ۱ تا ۳۱ است").max(31, "روز ماه بین ۱ تا ۳۱ است").optional().nullable(),
-    startDate: isoDate.optional(),
-    isActive: z.boolean().optional(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.frequency === "MONTHLY_JALALI" && val.dayOfMonth === null) {
-      ctx.addIssue({ code: "custom", path: ["dayOfMonth"], message: "برای تکرار ماهانه شمسی، روز ماه الزامی است" })
-    }
-  })
-
-/* ---------- Debt ---------- */
-export const debtCreateSchema = z.object({
-  direction: z.enum(DEBT_DIRECTIONS, { message: "نوع بدهی/طلب نامعتبر است" }),
-  person: z.string().min(1, "نام شخص الزامی است").max(60, "نام حداکثر ۶۰ کاراکتر است"),
-  amount: positiveAmount,
-  dueDate: isoDate.optional().nullable(),
-  note: noteField,
-})
-
-export const debtUpdateSchema = debtCreateSchema.partial()
-
-export const debtSettleSchema = z.object({
-  amount: positiveAmount,
-  accountId: idField,
-  date: isoDate.optional(),
-  note: noteField,
-})
-
-/* ---------- AlertRule ---------- */
-export const alertRuleCreateSchema = z.object({
-  type: z.enum(ALERT_TYPES, { message: "نوع هشدار نامعتبر است" }),
-  accountId: z.string().optional().nullable(),
-  threshold: z.number().int().min(0).optional().nullable(),
-  isActive: z.boolean().default(true),
-})
-
-export const alertRuleUpdateSchema = z.object({
-  threshold: z.number().int().min(0).optional().nullable(),
-  isActive: z.boolean().optional(),
-  accountId: z.string().optional().nullable(),
-})
-
-/* ---------- Settings ---------- */
-export const settingsUpdateSchema = z.object({
-  botToken: z.string().max(64).optional().nullable(),
-  adminChatId: z.string().regex(/^\d{3,15}$/, "شناسه عددی تلگرام معتبر نیست").optional().nullable(),
-  miniAppUrl: z.union([z.string().url("آدرس مینی‌اپ معتبر نیست"), z.literal("")]).optional().nullable(),
-  lowBalanceDefault: z.number().int().min(0, "حد موجودی نمی‌تواند منفی باشد").optional(),
-})
-
-/* ---------- Auth ---------- */
 export const loginSchema = z.object({
-  username: z.string().min(1, "نام کاربری الزامی است").max(60),
-  password: z.string().min(1, "رمز عبور الزامی است").max(100),
+  username: requiredText(1, 60, "نام کاربری"),
+  password: requiredText(1, 100, "رمز عبور"),
 })
 
-/* ---------- Reports ---------- */
-export const reportQuerySchema = z
-  .object({
-    from: isoDate,
-    to: isoDate,
-  })
-  .refine((v) => new Date(v.from).getTime() <= new Date(v.to).getTime(), {
-    message: "تاریخ شروع باید قبل از تاریخ پایان باشد",
-  })
+export const settingsSchema = z.object({
+  botToken: optionalText(100),
+  adminChatId: optionalText(30),
+  miniAppUrl: optionalText(200),
+  checkDueDaysBefore: z
+    .union([z.number(), z.string()])
+    .optional()
+    .transform((v) =>
+      v === undefined || v === "" ? 3 : Math.max(0, Math.min(30, Number(toLatinDigits(String(v)).replace(/[^\d]/g, "")) || 3))
+    ),
+})

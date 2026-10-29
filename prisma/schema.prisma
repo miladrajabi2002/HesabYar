@@ -1,4 +1,6 @@
-// اسکیمای دیتابیس «حساب‌یار» — SQLite + Prisma
+// اسکیمای «حساب‌یار فروشگاهی» — خرید و فروش الکترود | SQLite + Prisma
+// همه مبالغ «تومان» و Int؛ تاریخ‌ها UTC با تبدیل شمسی در مرز نمایش.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,122 +10,189 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ───────────────────────── حساب‌های بانکی ─────────────────────────
 model Account {
-  id               String          @id @default(cuid())
-  name             String
-  type             String // CASH | BANK | CARD | SAVINGS | OTHER
-  color            String // hex
-  icon             String
-  initialBalance   Int             @default(0) // تومان
-  isArchived       Boolean         @default(false)
-  sortOrder        Int             @default(0)
-  createdAt        DateTime        @default(now())
-  transactionsFrom Transaction[]   @relation("transferFrom")
-  transactionsTo   Transaction[]   @relation("transferTo")
-  recurringRules   RecurringRule[]
+  id             String        @id @default(cuid())
+  name           String // نام اختصاری: «جاری ملت»
+  bankKey        String // شناسه بانک از lib/banks.ts
+  accountNumber  String?
+  cardNumber     String?
+  initialBalance Int           @default(0)
+  isArchived     Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  invoices       Invoice[]
+  checks         CheckPaper[]
+  settlements    Settlement[]
+  transactions   Transaction[] @relation("TxAccount")
+  transfersTo    Transaction[] @relation("TxTransferTo")
+
+  @@index([isArchived])
 }
 
-model Category {
-  id              String          @id @default(cuid())
-  name            String
-  type            String // INCOME | EXPENSE
-  color           String
-  icon            String
-  transactions    Transaction[]
-  budgets         Budget[]
-  recurringRules  RecurringRule[]
+// ───────────────────────── اشخاص (مشتری / تأمین‌کننده) ─────────────────────────
+model Person {
+  id          String       @id @default(cuid())
+  name        String
+  phone       String?
+  company     String?
+  shopAddress String?
+  role        String       @default("BOTH") // CUSTOMER | SUPPLIER | BOTH
+  note        String?
+  isArchived  Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  invoices    Invoice[]
+  checks      CheckPaper[]
+  settlements Settlement[]
+
+  @@index([role])
+  @@index([isArchived])
 }
 
-model Transaction {
-  id              String         @id @default(cuid())
-  type            String // INCOME | EXPENSE | TRANSFER
-  amount          Int // تومان، همیشه مثبت
-  accountId       String
-  account         Account        @relation("transferFrom", fields: [accountId], references: [id])
-  toAccountId     String?
-  toAccount       Account?       @relation("transferTo", fields: [toAccountId], references: [id])
-  categoryId      String?
-  category        Category?      @relation(fields: [categoryId], references: [id])
-  date            DateTime
-  note            String?
-  recurringRuleId String?
-  recurringRule   RecurringRule? @relation(fields: [recurringRuleId], references: [id])
-  debtId          String?
-  debt            Debt?          @relation(fields: [debtId], references: [id])
-  createdAt       DateTime       @default(now())
+// ───────────────────────── اجناس ─────────────────────────
+model Product {
+  id           String        @id @default(cuid())
+  name         String // «الکترود E6013 قطر ۳.۲»
+  brand        String? // اختیاری: «اصفهان»
+  code         String? // اختیاری: کد جنس
+  unit         String        @default("عدد") // عدد | کیلوگرم | پاکت | کارتن
+  minStock     Float         @default(0) // حد هشدار موجودی
+  isArchived   Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  invoiceItems InvoiceItem[]
+
+  @@index([isArchived])
+}
+
+// ───────────────────────── فاکتور خرید / فروش ─────────────────────────
+model Invoice {
+  id         String       @id @default(cuid())
+  number     Int          @unique // شماره فاکتور خودکار
+  type       String // PURCHASE | SALE
+  personId   String
+  person     Person        @relation(fields: [personId], references: [id])
+  accountId  String? // حساب بانکی بخش نقدی
+  account    Account?     @relation(fields: [accountId], references: [id])
+  date       DateTime // تاریخ فاکتور (شمسی در ورودی، UTC در ذخیره)
+  subtotal   Int // جمع اقلام
+  discount   Int          @default(0) // تخفیف
+  total      Int // مبلغ نهایی = subtotal - discount
+  paidCash   Int          @default(0) // نقدی پرداخت‌شده
+  paidChecks Int          @default(0) // مجموع چک‌های سالم مرتبط
+  credit     Int          @default(0) // مانده تسویه‌نشده
+  status     String       @default("OPEN") // OPEN | SETTLED
+  note       String?
+  createdAt  DateTime     @default(now())
+  items      InvoiceItem[]
+  checks     CheckPaper[]
+  settlements Settlement[] @relation("InvoiceSettlement")
 
   @@index([date])
-  @@index([accountId, date])
-  @@index([categoryId])
+  @@index([type, date])
+  @@index([personId])
+  @@index([status])
 }
 
-model Budget {
-  id             String   @id @default(cuid())
-  categoryId     String
-  category       Category @relation(fields: [categoryId], references: [id])
-  amount         Int // سقف ماهانه به تومان
-  monthJalali    String // "1404-08"
-  alertThreshold Int      @default(80) // درصد هشدار
-  createdAt      DateTime @default(now())
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  productName String // تصویر لحظه‌ای نام جنس
+  brand       String?
+  code        String?
+  unit        String
+  quantity    Float // تعداد (عدد/کیلو/…)
+  unitPrice   Int // قیمت واحد
+  costPrice   Int     @default(0) // قیمت تمام‌شده لحظه فروش (میانگین خریدها) برای محاسبه سود
+  total       Int
 
-  @@unique([categoryId, monthJalali])
+  @@index([productId])
+  @@index([invoiceId])
 }
 
-model RecurringRule {
-  id         String        @id @default(cuid())
-  title      String
-  type       String // INCOME | EXPENSE
-  amount     Int
-  accountId  String
-  account    Account       @relation(fields: [accountId], references: [id])
-  categoryId String?
-  category   Category?     @relation(fields: [categoryId], references: [id])
-  frequency  String // DAILY | WEEKLY | MONTHLY_JALALI
-  interval   Int           @default(1)
-  dayOfMonth Int? // روز ماه شمسی برای MONTHLY_JALALI
-  nextRunAt  DateTime
-  lastRunAt  DateTime?
-  isActive   Boolean       @default(true)
-  createdAt  DateTime      @default(now())
-  generated  Transaction[]
+// ───────────────────────── چک ─────────────────────────
+model CheckPaper {
+  id           String      @id @default(cuid())
+  serial       String // شماره سریال چک
+  amount       Int
+  bankKey      String // بانک چک
+  direction    String // RECEIVED (دریافتی از مشتری) | ISSUED (صادره به تأمین‌کننده)
+  dueDate      DateTime // سررسید
+  personId     String
+  person       Person      @relation(fields: [personId], references: [id])
+  invoiceId    String? // اگر چک، بابت یک فاکتور است
+  invoice      Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  settlementId  String? // اگر چک، بابت تسویه‌ی طلب است
+  status       String      @default("PENDING") // PENDING | CASHED | BOUNCED | CANCELED
+  accountId    String? // حساب محل وصول / برداشت
+  account      Account?    @relation(fields: [accountId], references: [id])
+  note         String?
+  createdAt    DateTime    @default(now())
+
+  @@index([dueDate])
+  @@index([status])
+  @@index([personId])
+  @@index([direction])
 }
 
-model Debt {
-  id                  String        @id @default(cuid())
-  direction           String // I_OWE (بدهی من) | OWED_TO_ME (طلب من)
-  person              String
-  amount              Int
-  settledAmount       Int           @default(0)
-  dueDate             DateTime?
-  note                String?
-  isSettled           Boolean       @default(false)
-  createdAt           DateTime      @default(now())
-  settledTransactions Transaction[]
+// ───────────────────────── تسویه طلب/بدهی اشخاص ─────────────────────────
+model Settlement {
+  id        String   @id @default(cuid())
+  personId  String
+  person    Person   @relation(fields: [personId], references: [id])
+  invoiceId String? // بابت مانده کدام فاکتور (اختیاری)
+  invoice   Invoice? @relation("InvoiceSettlement", fields: [invoiceId], references: [id], onDelete: SetNull)
+  direction String // RECEIVE (دریافت از شخص) | PAY (پرداخت به شخص)
+  method    String // CASH | CHECK
+  amount    Int
+  accountId String? // برای نقدی
+  account   Account? @relation(fields: [accountId], references: [id])
+  date      DateTime
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([personId, date])
+  @@index([invoiceId])
 }
 
-model AlertRule {
+// ───────────────────────── گردش بانکی (دفتر تراکنش حساب‌ها) ─────────────────────────
+model Transaction {
   id          String    @id @default(cuid())
-  type        String // BUDGET_THRESHOLD | LOW_BALANCE | DEBT_DUE | RECURRING_RUN
-  accountId   String?
-  threshold   Int?
-  isActive    Boolean   @default(true)
-  lastFiredAt DateTime?
+  accountId   String
+  account     Account   @relation("TxAccount", fields: [accountId], references: [id])
+  direction   String // IN | OUT
+  amount      Int // همیشه مثبت
+  type        String // INVOICE_CASH | CHECK_CASHED | SETTLEMENT_CASH | TRANSFER | OPENING
+  refId       String? // شناسه رکورد منبع (فاکتور/چک/تسویه/…)
+  description String
+  date        DateTime
   createdAt   DateTime  @default(now())
+  toAccountId String? // مقصد انتقال
+  toAccount   Account?  @relation("TxTransferTo", fields: [toAccountId], references: [id])
+
+  @@index([accountId, date])
+  @@index([date])
+  @@index([type, refId])
 }
 
+// ───────────────────────── لاگ اعلان‌های تلگرام ─────────────────────────
 model NotificationLog {
   id        String   @id @default(cuid())
   chatId    String
   message   String
-  alertType String?
+  alertType String? // کلید یکتای جلوگیری از تکرار
   status    String // SENT | FAILED
   sentAt    DateTime @default(now())
+
+  @@index([alertType])
 }
 
+// ───────────────────────── تنظیمات ─────────────────────────
 model Setting {
   id                String  @id @default("default")
   botToken          String?
   adminChatId       String?
   miniAppUrl        String?
-  lowBalanceDefault Int     @default(100000)
+  checkDueDaysBefore Int    @default(3) // چند روز قبل سررسید چک خبر بدهد
 }

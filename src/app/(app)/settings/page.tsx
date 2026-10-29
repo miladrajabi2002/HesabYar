@@ -1,414 +1,331 @@
 "use client"
 
+/**
+ * تنظیمات — ربات تلگرام، هشدار سررسید چک، بکاپ/بازیابی، پاک‌سازی داده
+ */
 import { useRef, useState } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { motion } from "framer-motion"
 import {
   Send,
-  Save,
-  Download,
-  Upload,
-  Loader2,
   BellRing,
-  ShieldCheck,
-  Smartphone,
-  Eye,
-  EyeOff,
-  Database,
-  RefreshCcw,
+  DatabaseBackup,
+  Upload,
+  Download,
+  Loader2,
+  Trash2,
+  ShieldAlert,
+  Check,
 } from "lucide-react"
-import { apiGet, apiPut, apiPost, apiPatch, apiUpload } from "@/lib/api-client"
-import type { SettingsDTO, AlertRuleDTO, AccountDTO } from "@/types"
-import { PageHeader } from "@/components/shared/page-header"
+import { apiGet, apiPost, apiPut, apiUpload } from "@/lib/api-client"
+import { toPersianDigits } from "@/lib/money"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Skeleton } from "@/components/ui/skeleton"
-import { ConfirmDialog } from "@/components/shared/confirm-dialog"
-import { formatToman, toPersianDigits, toLatinDigits } from "@/lib/money"
-import { useTelegram } from "@/hooks/use-telegram"
+import { BottomSheet } from "@/components/ui/bottom-sheet"
+import { cn } from "@/lib/utils"
 
-export default function SettingsPage() {
-  const qc = useQueryClient()
-  const { isTelegram, webApp } = useTelegram()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [restoreOpen, setRestoreOpen] = useState(false)
-  const [restoreFile, setRestoreFile] = useState<File | null>(null)
-
-  // ---------- بخش‌های صفحه (بدون effect-sync؛ مقداردهی اولیه در mount با key) ----------
-
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => apiGet<SettingsDTO>("/api/settings"),
-  })
-  const { data: alertsData } = useQuery({
-    queryKey: ["alerts"],
-    queryFn: () => apiGet<{ rules: AlertRuleDTO[] }>("/api/alerts"),
-  })
-  const { data: accountsData } = useQuery({
-    queryKey: ["accounts"],
-    queryFn: () => apiGet<{ accounts: AccountDTO[] }>("/api/accounts"),
-  })
-
-  const testMessage = useMutation({
-    mutationFn: () => apiPost<{ message: string }>("/api/telegram/test"),
-    onSuccess: (res) => toast.success(res.message),
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const toggleAlert = useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      apiPatch(`/api/alerts/${id}`, { isActive }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const restoreMutation = useMutation({
-    mutationFn: (file: File) => {
-      const fd = new FormData()
-      fd.append("file", file)
-      return apiUpload<{ message: string }>("/api/backup/restore", fd)
-    },
-    onSuccess: (res) => {
-      toast.success(res.message + " — در حال بارگذاری مجدد…")
-      setRestoreOpen(false)
-      setTimeout(() => window.location.reload(), 1500)
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const alertRules = alertsData?.rules ?? []
-  const accounts = accountsData?.accounts ?? []
-
-  return (
-    <div className="space-y-5">
-      <PageHeader title="تنظیمات" subtitle="ربات تلگرام، هشدارها، بکاپ و وضعیت مینی‌اپ" />
-
-      {isLoading ? (
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-48 rounded-2xl" />
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* اتصال ربات تلگرام */}
-          {settings ? (
-            <TelegramSection
-              key={`${settings.adminChatId ?? ""}|${settings.miniAppUrl ?? ""}|${settings.lowBalanceDefault}|${settings.botTokenMasked ?? ""}`}
-              settings={settings}
-              onSaved={() => qc.invalidateQueries({ queryKey: ["settings"] })}
-            />
-          ) : null}
-
-          {/* هشدارها */}
-          <motion.section
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="rounded-2xl border border-border bg-card p-5 shadow-card"
-          >
-            <div className="mb-4 flex items-center gap-2">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-warning/10 text-warning">
-                <BellRing className="size-4.5" />
-              </span>
-              <div>
-                <h3 className="text-sm font-bold">هشدارهای تلگرام</h3>
-                <p className="text-xs text-muted-foreground">نوع اعلان‌های ارسالی به ربات</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {alertRules.length === 0 ? (
-                <p className="text-sm text-muted-foreground">قانون هشداری ثبت نشده است</p>
-              ) : (
-                alertRules.map((rule) => (
-                  <div key={rule.id} className="flex items-center justify-between rounded-xl bg-muted/50 px-4 py-3">
-                    <div>
-                      <div className="text-sm font-semibold">{rule.label}</div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        {rule.type === "LOW_BALANCE"
-                          ? `حد: ${formatToman(rule.threshold ?? settings?.lowBalanceDefault ?? 100000)} — برای همه حساب‌ها`
-                          : rule.type === "BUDGET_THRESHOLD"
-                            ? "در عبور از آستانه و سقف بودجه"
-                            : rule.type === "DEBT_DUE"
-                              ? "۳ روز، ۱ روز و روز سررسید"
-                              : "پس از هر ثبت خودکار"}
-                        {rule.lastFiredAt ? ` — آخرین ارسال: ${toPersianDigits(new Date(rule.lastFiredAt).toLocaleDateString("fa-IR"))}` : ""}
-                      </div>
-                    </div>
-                    <Switch
-                      checked={rule.isActive}
-                      onCheckedChange={(checked: boolean) => toggleAlert.mutate({ id: rule.id, isActive: checked })}
-                      aria-label={rule.label}
-                    />
-                  </div>
-                ))
-              )}
-            </div>
-          </motion.section>
-
-          {/* بکاپ و بازیابی */}
-          <motion.section
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="rounded-2xl border border-border bg-card p-5 shadow-card"
-          >
-            <div className="mb-4 flex items-center gap-2">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Database className="size-4.5" />
-              </span>
-              <div>
-                <h3 className="text-sm font-bold">بکاپ و بازیابی</h3>
-                <p className="text-xs text-muted-foreground">
-                  بکاپ خودکار روزانه (۰۳:۳۰) با نگهداری ۷ نسخه در پوشه backups
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                className="rounded-xl"
-                onClick={() => {
-                  window.location.href = "/api/backup"
-                  toast.success("در حال آماده‌سازی فایل بکاپ…")
-                }}
-              >
-                <Download className="size-4" />
-                دانلود بکاپ
-              </Button>
-              <Button variant="outline" className="rounded-xl" onClick={() => fileRef.current?.click()}>
-                <Upload className="size-4" />
-                بازیابی از فایل
-              </Button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".db"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) {
-                    setRestoreFile(f)
-                    setRestoreOpen(true)
-                  }
-                  e.target.value = ""
-                }}
-              />
-            </div>
-          </motion.section>
-
-          {/* وضعیت مینی‌اپ */}
-          <motion.section
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="rounded-2xl border border-border bg-card p-5 shadow-card"
-          >
-            <div className="mb-4 flex items-center gap-2">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Smartphone className="size-4.5" />
-              </span>
-              <div>
-                <h3 className="text-sm font-bold">وضعیت مینی‌اپ تلگرام</h3>
-                <p className="text-xs text-muted-foreground">اطلاعات اتصال و امنیت</p>
-              </div>
-            </div>
-
-            <div className="space-y-2.5 text-sm">
-              <div className="flex items-center justify-between rounded-xl bg-muted/50 px-4 py-2.5">
-                <span className="text-muted-foreground">آدرس مینی‌اپ</span>
-                <span dir="ltr" className="font-mono text-xs">
-                  {settings?.miniAppUrl || "تنظیم نشده"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-muted/50 px-4 py-2.5">
-                <span className="text-muted-foreground">محیط فعلی</span>
-                <span className="font-semibold">
-                  {isTelegram ? `داخل تلگرام (${webApp?.platform ?? "unknown"})` : "مرورگر وب"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-muted/50 px-4 py-2.5">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <ShieldCheck className="size-4 text-income" />
-                  اعتبارسنجی initData
-                </span>
-                <span className="text-xs">HMAC-SHA256 + کنترل زمان ۲۴ ساعته — فعال</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-muted/50 px-4 py-2.5">
-                <span className="text-muted-foreground">ورود وب</span>
-                <span className="text-xs">نام کاربری/رمز از فایل .env (APP_USERNAME / APP_PASSWORD)</span>
-              </div>
-            </div>
-          </motion.section>
-
-          <p className="pb-4 text-center text-xs leading-6 text-muted-foreground">
-            حساب‌یار — داده‌ها در SQLite محلی ذخیره می‌شوند و پس از ری‌استارت حفظ هستند.
-            <br />
-            نسخه <span className="nums">۱.۰.۰</span>
-          </p>
-        </>
-      )}
-
-      <ConfirmDialog
-        open={restoreOpen}
-        onOpenChange={setRestoreOpen}
-        title="بازیابی از فایل بکاپ"
-        description={
-          <>
-            فایل <span dir="ltr" className="font-mono">{restoreFile?.name}</span> بازیابی می‌شود.
-            پیش از جایگزینی، از وضعیت فعلی بکاپ خودکار گرفته می‌شود.
-          </>
-        }
-        confirmText="بازیابی کن"
-        destructive
-        onConfirm={() => restoreFile && restoreMutation.mutate(restoreFile)}
-      >
-        <div className="flex items-center gap-2 rounded-xl bg-warning/10 px-3 py-2.5 text-xs text-warning">
-          <RefreshCcw className="size-4 shrink-0" />
-          تمام داده‌های فعلی با محتوای فایل بکاپ جایگزین می‌شود.
-        </div>
-      </ConfirmDialog>
-    </div>
-  )
+interface Settings {
+  botTokenMasked: string | null
+  hasBotToken: boolean
+  botTokenSource: string | null
+  adminChatId: string | null
+  hasAdminChatId: boolean
+  miniAppUrl: string
+  checkDueDaysBefore: number
 }
 
-/** بخش اتصال ربات تلگرام — مقداردهی اولیه از props در mount (remount با key پس از ذخیره) */
-function TelegramSection({
-  settings,
-  onSaved,
-}: {
-  settings: SettingsDTO
-  onSaved: () => void
-}) {
-  const [botToken, setBotToken] = useState("")
-  const [adminChatId, setAdminChatId] = useState(settings.adminChatId ?? "")
-  const [miniAppUrl, setMiniAppUrl] = useState(settings.miniAppUrl ?? "")
-  const [lowBalance, setLowBalance] = useState(String(settings.lowBalanceDefault))
-  const [showToken, setShowToken] = useState(false)
-
-  const saveSettings = useMutation({
-    mutationFn: () => {
-      const body: Record<string, unknown> = {}
-      if (botToken.trim()) body.botToken = botToken.trim()
-      if (adminChatId.trim()) body.adminChatId = adminChatId.trim()
-      if (miniAppUrl !== (settings.miniAppUrl ?? "")) body.miniAppUrl = miniAppUrl.trim()
-      const lb = Math.round(Number(toLatinDigits(lowBalance).replace(/[^\d]/g, "") || "0"))
-      if (lb !== settings.lowBalanceDefault) body.lowBalanceDefault = lb
-      return apiPut("/api/settings", body)
-    },
-    onSuccess: () => {
-      toast.success("تنظیمات ذخیره شد")
-      setBotToken("")
-      onSaved()
-    },
-    onError: (e: Error) => toast.error(e.message),
+export default function SettingsPage() {
+  const queryClient = useQueryClient()
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => apiGet<Settings>("/api/settings"),
   })
 
+  const [token, setToken] = useState("")
+  const [chatId, setChatId] = useState("")
+  const [miniAppUrl, setMiniAppUrl] = useState("")
+  const [dueDays, setDueDays] = useState(3)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [wiping, setWiping] = useState(false)
+  const [wipeSheet, setWipeSheet] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  if (data) {
+    // مقداردهی اولیه فرم‌ها
+    if (chatId === "" && data.adminChatId) setChatId(data.adminChatId)
+    if (miniAppUrl === "" && data.miniAppUrl) setMiniAppUrl(data.miniAppUrl)
+    if (!miniAppUrl && !data.miniAppUrl) {
+      /* noop */
+    }
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await apiPut("/api/settings", {
+        botToken: token || undefined,
+        adminChatId: chatId || undefined,
+        miniAppUrl: miniAppUrl || undefined,
+        checkDueDaysBefore: dueDays,
+      })
+      toast.success("تنظیمات ذخیره شد ✅")
+      setToken("")
+      await refetch()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا در ذخیره")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const testTelegram = async () => {
+    setTesting(true)
+    try {
+      const r = await apiPost<{ message?: string }>("/api/telegram/test")
+      toast.success(r.message || "پیام آزمایشی ارسال شد ✅")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ارسال ناموفق")
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const downloadBackup = () => {
+    window.location.href = "/api/backup"
+    toast.info("فایل بکاپ در حال دانلود است")
+  }
+
+  const restoreBackup = async (file: File) => {
+    const fd = new FormData()
+    fd.append("file", file)
+    try {
+      const r = await apiUpload<{ message: string }>("/api/backup/restore", fd)
+      toast.success(r.message + " — صفحه دوباره بارگذاری می‌شود")
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "بازیابی ناموفق")
+    }
+  }
+
+  const wipe = async () => {
+    setWiping(true)
+    try {
+      await apiPost("/api/data/wipe", { confirm: "WIPE" })
+      toast.success("همه داده‌ها پاک شد")
+      setWipeSheet(false)
+      await queryClient.invalidateQueries()
+      setTimeout(() => window.location.reload(), 800)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا در پاک‌سازی")
+    } finally {
+      setWiping(false)
+    }
+  }
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-border bg-card p-5 shadow-card"
-    >
-      <div className="mb-4 flex items-center gap-2">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Send className="size-4.5" />
-        </span>
-        <div>
-          <h3 className="text-sm font-bold">اتصال ربات تلگرام</h3>
-          <p className="text-xs text-muted-foreground">هشدارها و اعلان‌های مالی به این ربات ارسال می‌شود</p>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <h1 className="text-lg font-extrabold sm:text-xl">تنظیمات</h1>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label>توکن ربات (BotFather)</Label>
-          <div className="relative">
+      {/* ربات تلگرام */}
+      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+          <Send className="size-4 -scale-x-100 text-primary" />
+          ربات تلگرام
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              توکن ربات
+              {data.hasBotToken && (
+                <span className={cn("ms-2 rounded-md px-1.5 py-px text-[0.6rem]", "bg-primary/10 text-primary")}>
+                  فعال ({data.botTokenMasked}) — از {data.botTokenSource === "db" ? "دیتابیس" : "env"}
+                </span>
+              )}
+            </label>
             <Input
-              value={botToken}
-              onChange={(e) => setBotToken(e.target.value)}
-              type={showToken ? "text" : "password"}
-              placeholder={
-                settings.hasBotToken
-                  ? `ذخیره‌شده: ${settings.botTokenMasked} — برای تغییر، مقدار جدید وارد کنید`
-                  : "مثلاً 123456:ABC-DEF…"
-              }
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={data.hasBotToken ? "برای تغییر، توکن جدید را وارد کنید" : "123456:ABC-DEF…"}
               dir="ltr"
-              lang="en"
-              className="pe-10 font-mono text-xs"
+              className="font-mono text-xs"
             />
-            <button
-              type="button"
-              onClick={() => setShowToken((s) => !s)}
-              className="absolute end-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
-              aria-label="نمایش/مخفی"
-            >
-              {showToken ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
           </div>
-          {settings.hasBotToken ? (
-            <p className="text-[0.68rem] text-muted-foreground">
-              وضعیت فعلی: <span dir="ltr" className="font-mono">{settings.botTokenMasked}</span>
-              {settings.botTokenSource === "env" ? " (از فایل .env)" : " (ذخیره‌شده در اپ)"}
-            </p>
-          ) : null}
-        </div>
 
-        <div className="space-y-1.5">
-          <Label>شناسه عددی چت ادمین</Label>
-          <Input
-            value={adminChatId}
-            onChange={(e) => setAdminChatId(e.target.value)}
-            placeholder="مثلاً 1253939828"
-            dir="ltr"
-            lang="en"
-            className="font-mono text-xs"
-          />
-        </div>
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              شناسه چت ادمین (Chat ID)
+            </label>
+            <Input
+              value={chatId}
+              onChange={(e) => setChatId(e.target.value)}
+              placeholder="مثلاً ۱۲۵۳۹۳۹۸۲۸"
+              dir="ltr"
+              className="nums font-mono text-xs"
+            />
+          </div>
 
-        <div className="space-y-1.5">
-          <Label>آدرس مینی‌اپ (https)</Label>
-          <Input
-            value={miniAppUrl}
-            onChange={(e) => setMiniAppUrl(e.target.value)}
-            placeholder="https://hesabyar.miladrajabi.com"
-            dir="ltr"
-            lang="en"
-            className="font-mono text-xs"
-          />
-        </div>
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              آدرس مینی‌اپ (دکمه «باز کردن حساب‌یار» داخل ربات)
+            </label>
+            <Input
+              value={miniAppUrl}
+              onChange={(e) => setMiniAppUrl(e.target.value)}
+              placeholder="https://hesabyar.miladrajabi.com"
+              dir="ltr"
+              className="text-xs"
+            />
+          </div>
 
-        <div className="space-y-1.5">
-          <Label>حد پیش‌فرض موجودی کم (تومان)</Label>
-          <Input
-            value={toPersianDigits(lowBalance)}
-            onChange={(e) => setLowBalance(e.target.value)}
-            inputMode="numeric"
-            className="nums"
-          />
-          <p className="text-[0.68rem] text-muted-foreground">
-            معادل {formatToman(Number(toLatinDigits(lowBalance).replace(/[^\d]/g, "") || "0"))}
-          </p>
+          <Button
+            onClick={testTelegram}
+            disabled={testing || !data.hasBotToken || !data.hasAdminChatId}
+            variant="outline"
+            className="h-11 w-full rounded-2xl border-primary/40 text-xs font-bold text-primary hover:bg-primary/10"
+          >
+            {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
+            ارسال پیام آزمایشی
+          </Button>
         </div>
-      </div>
+      </section>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button onClick={() => saveSettings.mutate()} className="rounded-xl" disabled={saveSettings.isPending}>
-          {saveSettings.isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          ذخیره تنظیمات
-        </Button>
-      </div>
-      {settings.hasBotToken ? (
-        <p className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-[0.68rem] leading-5 text-muted-foreground">
-          💡 اگر توکن را تغییر دادید، برای فعال‌شدن polling یک‌بار سرویس را ری‌استارت کنید
-          (<span dir="ltr" className="font-mono">pm2 restart hesabyar</span> روی سرور).
+      {/* هشدار سررسید چک */}
+      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+          <BellRing className="size-4 text-primary" />
+          هشدار سررسید چک
+        </div>
+        <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+          چند روز قبل از سررسید، ربات خبر بدهد؟
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {[1, 2, 3, 5, 7, 10].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDueDays(d)}
+              className={cn(
+                "rounded-xl border px-3.5 py-2 text-xs font-bold transition-colors",
+                dueDays === d
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground"
+              )}
+            >
+              {toPersianDigits(d)} روز قبل
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-[0.62rem] text-muted-foreground">
+          چک سررسید‌شده هم (وصول‌نشده) هر ساعت یک‌بار پیگیری و خبر داده می‌شود.
         </p>
-      ) : null}
-    </motion.section>
+      </section>
+
+      {/* بکاپ */}
+      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+          <DatabaseBackup className="size-4 text-primary" />
+          بکاپ و بازیابی
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            onClick={downloadBackup}
+            variant="outline"
+            className="h-12 rounded-2xl border-primary/40 text-xs font-bold text-primary hover:bg-primary/10"
+          >
+            <Download className="size-4" />
+            دانلود بکاپ
+          </Button>
+          <Button
+            onClick={() => fileRef.current?.click()}
+            variant="outline"
+            className="h-12 rounded-2xl text-xs font-bold hover:bg-accent"
+          >
+            <Upload className="size-4" />
+            بازیابی از فایل
+          </Button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".db"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) restoreBackup(f)
+          }}
+        />
+        <p className="mt-2 text-[0.62rem] text-muted-foreground">
+          بکاپ خودکار روزانه هم انجام می‌شود (۷ نسخه نگهداری می‌شود).
+        </p>
+      </section>
+
+      {/* ناحیه خطر */}
+      <section className="rounded-3xl border border-destructive/25 bg-destructive/5 p-4 sm:p-5">
+        <div className="mb-2 flex items-center gap-2 text-sm font-bold text-destructive">
+          <ShieldAlert className="size-4" />
+          ناحیه خطر
+        </div>
+        <p className="mb-3 text-[0.68rem] text-muted-foreground">
+          پاک‌سازی کامل داده‌ها برای وقتی است که داده نمونه می‌خواهید دور بریزید و از صفر شروع کنید.
+          همه اشخاص، اجناس، فاکتورها، چک‌ها و حساب‌ها حذف می‌شوند (تنظیمات و توکن ربات می‌ماند).
+        </p>
+        <Button
+          onClick={() => setWipeSheet(true)}
+          variant="outline"
+          className="h-11 w-full rounded-2xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10"
+        >
+          <Trash2 className="size-4" />
+          پاک کردن همه داده‌ها
+        </Button>
+      </section>
+
+      <Button
+        onClick={save}
+        disabled={saving}
+        className="h-13 w-full rounded-2xl py-3.5 text-sm font-bold shadow-fab"
+      >
+        {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+        ذخیره تنظیمات
+      </Button>
+
+      {/* شیت تأیید پاک‌سازی */}
+      <BottomSheet
+        open={wipeSheet}
+        onClose={() => setWipeSheet(false)}
+        title="مطمئنید؟"
+        description="این کار برگشت‌پذیر نیست — قبلش بکاپ بگیرید"
+      >
+        <div className="space-y-3">
+          <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-xs leading-6 text-destructive">
+            همه داده‌ها (اشخاص، اجناس، فاکتورها، چک‌ها، تسویه‌ها و حساب‌ها) برای همیشه حذف می‌شوند.
+          </p>
+          <Button
+            onClick={wipe}
+            disabled={wiping}
+            className="h-12 w-full rounded-2xl bg-destructive font-bold hover:bg-destructive/90"
+          >
+            {wiping ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+            بله، همه را پاک کن
+          </Button>
+          <Button
+            onClick={() => setWipeSheet(false)}
+            variant="outline"
+            className="h-12 w-full rounded-2xl font-bold"
+          >
+            انصراف
+          </Button>
+        </div>
+      </BottomSheet>
+    </div>
   )
 }

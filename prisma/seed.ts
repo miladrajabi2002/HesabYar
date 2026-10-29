@@ -1,213 +1,437 @@
 /**
- * داده نمونه — prisma/seed.ts
- * فقط با دستور «npm run seed» و فقط روی دیتابیس خالی اجرا می‌شود.
- * همه داده‌های نمونه با برچسب «نمونه» مشخص هستند.
+ * داده‌های نمونه فروشگاه الکترود — prisma/seed.ts
+ * اجرا: bun run seed
+ * تاریخ‌ها نسبت به «امروز» محاسبه می‌شوند تا داشبورد همیشه زنده باشد.
  */
-import { db } from "@/lib/db"
-import { DEFAULT_CATEGORIES } from "@/lib/defaults"
-import { jalaliToInstant, jalaliOf, jalaliMonthLengthOf, currentMonthKey, addJalaliMonths, nowTehran } from "@/lib/jalali"
+import { PrismaClient } from "@prisma/client"
+import { jalaliToInstant, nowTehran, startOfJalaliDay } from "../src/lib/jalali"
 
-/** مولد شبه‌تصادفی قطعی برای تکرارپذیری داده نمونه */
-function lcg(seed: number) {
-  let s = seed
-  return () => {
-    s = (s * 1664525 + 1013904223) % 4294967296
-    return s / 4294967296
-  }
+const db = new PrismaClient()
+
+/** n روز قبل (ظهر تهران) */
+function d(n: number): Date {
+  const base = startOfJalaliDay(nowTehran())
+  return new Date(base.getTime() - n * 86_400_000 + 12 * 3_600_000)
+}
+
+/** n روز بعد */
+function future(n: number): Date {
+  return d(-n)
 }
 
 async function main() {
-  const [accountCount, txCount] = await Promise.all([db.account.count(), db.transaction.count()])
-  if (accountCount > 0 || txCount > 0) {
-    console.log("⚠️  دیتابیس خالی نیست. برای امنیت داده واقعی، seed فقط روی دیتابیس خالی اجرا می‌شود.")
-    process.exit(0)
-  }
+  console.log("🧹 پاک‌سازی داده‌های قبلی...")
+  await db.notificationLog.deleteMany()
+  await db.transaction.deleteMany()
+  await db.checkPaper.deleteMany()
+  await db.settlement.deleteMany()
+  await db.invoiceItem.deleteMany()
+  await db.invoice.deleteMany()
+  await db.product.deleteMany()
+  await db.person.deleteMany()
+  await db.account.deleteMany()
+  await db.setting.deleteMany()
 
-  console.log("🌱 در حال ساخت داده نمونه «حساب‌یار»...")
-
-  // دسته‌های پیش‌فرض (فقط اگر از قبل وجود نداشته باشند)
-  for (const c of DEFAULT_CATEGORIES) {
-    const exists = await db.category.findFirst({ where: { name: c.name, type: c.type } })
-    if (!exists) {
-      await db.category.create({ data: { ...c, id: `cat-${c.name}` } }).catch(() => null)
-    }
-  }
-  const categories = await db.category.findMany()
-  const catByName = new Map(categories.map((c) => [c.name, c]))
-  const expenseCats = categories.filter((c) => c.type === "EXPENSE")
-
-  // حساب‌های نمونه
-  const cash = await db.account.create({
+  // ───────── تنظیمات ─────────
+  await db.setting.create({
     data: {
-      id: "acc-cash-sample",
-      name: "کیف پول نقدی (نمونه)",
-      type: "CASH",
-      color: "#0E7C66",
-      icon: "Wallet",
-      initialBalance: 1_500_000,
-      sortOrder: 1,
-    },
-  })
-  const bank = await db.account.create({
-    data: {
-      id: "acc-bank-sample",
-      name: "حساب بانکی (نمونه)",
-      type: "BANK",
-      color: "#8B5CF6",
-      icon: "Landmark",
-      initialBalance: 18_000_000,
-      sortOrder: 2,
+      id: "default",
+      botToken: process.env.BOT_TOKEN?.trim() || null,
+      adminChatId: process.env.ADMIN_CHAT_ID?.trim() || null,
+      miniAppUrl: process.env.MINI_APP_URL?.trim() || null,
+      checkDueDaysBefore: 3,
     },
   })
 
-  const rand = lcg(1404)
+  // ───────── حساب‌های بانکی ─────────
+  const mellat = await db.account.create({
+    data: { name: "جاری ملت", bankKey: "mellat", accountNumber: "1234567890", initialBalance: 80_000_000 },
+  })
+  const melli = await db.account.create({
+    data: { name: "جاری ملی", bankKey: "bmi", accountNumber: "0123456789012", initialBalance: 200_000_000 },
+  })
+  const saderat = await db.account.create({
+    data: { name: "کوتاه‌مدت صادرات", bankKey: "bsi", accountNumber: "9876543210", initialBalance: 0 },
+  })
 
-  // تراکنش‌های سه ماه اخیر (شمسی)
-  const now = nowTehran()
-  let created = 0
-  for (let m = -2; m <= 0; m++) {
-    const monthDate = addJalaliMonths(now, m)
-    const j = jalaliOf(monthDate)
-    const monthLen = jalaliMonthLengthOf(j.jy, j.jm)
-    const maxDay = m === 0 ? Math.max(1, j.jd - 1) : monthLen
+  // ───────── اشخاص ─────────
+  const supEsfahan = await db.person.create({
+    data: {
+      name: "شرکت الکترودسازی اصفهان",
+      phone: "03133456789",
+      company: "الکترودسازی اصفهان",
+      shopAddress: "اصفهان، خیابان صنعتی، شهرک صنعتی محمودآباد",
+      role: "SUPPLIER",
+    },
+  })
+  const supAria = await db.person.create({
+    data: {
+      name: "پخش آریا جوش",
+      phone: "02155667788",
+      company: "آریا جوش",
+      shopAddress: "تهران، خیابان امیرکبیر، پاساژ ابزار، پلاک ۱۲",
+      role: "SUPPLIER",
+    },
+  })
+  const supTehranPakhsh = await db.person.create({
+    data: {
+      name: "تهران‌پخش مواد جوشکاری",
+      phone: "02188990011",
+      company: "تهران‌پخش",
+      role: "SUPPLIER",
+    },
+  })
+  const cRahimi = await db.person.create({
+    data: { name: "آهنگری رحیمی", phone: "09121112233", role: "CUSTOMER", shopAddress: "بازار آهن، پلاک ۴۵" },
+  })
+  const cGhalandari = await db.person.create({
+    data: { name: "کارگاه فنی قلندری", phone: "09124445566", company: "فنی قلندری", role: "CUSTOMER" },
+  })
+  const cKhorshid = await db.person.create({
+    data: { name: "تعمیرگاه کامیانت خورشید", phone: "09127778899", role: "CUSTOMER" },
+  })
+  const cMorteza = await db.person.create({
+    data: { name: "استادکار مرتضی", phone: "09123334455", role: "CUSTOMER" },
+  })
+  const cNemati = await db.person.create({
+    data: { name: "جوشکاری نعمتی", phone: "09126667788", role: "CUSTOMER" },
+  })
 
-    const txDate = (day: number) => jalaliToInstant(j.jy, j.jm, Math.min(day, maxDay), 12, 0, 0)
+  // ───────── اجناس ─────────
+  const mkProduct = (name: string, brand: string, code: string, unit: string, minStock: number) =>
+    db.product.create({ data: { name, brand, code, unit, minStock } })
+  const e6013_25 = await mkProduct("الکترود E6013 قطر ۲.۵", "اصفهان", "E60-25", "بسته", 30)
+  const e6013_32 = await mkProduct("الکترود E6013 قطر ۳.۲", "اصفهان", "E60-32", "بسته", 30)
+  const e6013_40 = await mkProduct("الکترود E6013 قطر ۴", "اصفهان", "E60-40", "بسته", 20)
+  const e7018_25 = await mkProduct("الکترود E7018 قطر ۲.۵", "آریا", "E70-25", "بسته", 25)
+  const e7018_32 = await mkProduct("الکترود E7018 قطر ۳.۲", "آریا", "E70-32", "بسته", 25)
+  const e7018_40 = await mkProduct("الکترود E7018 قطر ۴", "آریا", "E70-40", "بسته", 20)
+  const migWire = await mkProduct("سیم جوش MIG ER70S-6 (۱۵ کیلو)", "شهرک صنعتی", "MIG-15", "عدد", 5)
+  const co2Wire = await mkProduct("مفتول جوش CO2 (۱۵ کیلو)", "نیروسیم", "CO2-15", "عدد", 5)
 
-    // حقوق ماهانه — روز ۱
-    await db.transaction.create({
+  let invoiceNo = 1000
+  interface ItemSpec {
+    productId: string
+    quantity: number
+    unitPrice: number
+    costPrice: number
+  }
+  interface CheckSpec {
+    amount: number
+    bankKey: string
+    serial: string
+    dueInDays: number
+  }
+
+  /** ساخت فاکتور + اقلام + تراکنش نقدی + چک‌ها */
+  async function makeInvoice(opts: {
+    type: "PURCHASE" | "SALE"
+    personId: string
+    date: Date
+    items: ItemSpec[]
+    paidCash?: number
+    accountId?: string
+    checks?: CheckSpec[]
+    note?: string
+  }) {
+    invoiceNo++
+    const subtotal = opts.items.reduce((s, i) => s + Math.round(i.quantity * i.unitPrice), 0)
+    const paidCash = opts.paidCash ?? 0
+    const checkTotal = (opts.checks ?? []).reduce((s, c) => s + c.amount, 0)
+    const credit = subtotal - paidCash - checkTotal
+    const invoice = await db.invoice.create({
       data: {
-        type: "INCOME",
-        amount: 24_500_000,
-        accountId: bank.id,
-        categoryId: catByName.get("حقوق")?.id,
-        date: txDate(1),
-        note: "نمونه — حقوق ماهانه",
+        number: invoiceNo,
+        type: opts.type,
+        personId: opts.personId,
+        accountId: opts.accountId ?? null,
+        date: opts.date,
+        subtotal,
+        total: subtotal,
+        paidCash,
+        paidChecks: checkTotal,
+        credit,
+        status: credit <= 0 ? "SETTLED" : "OPEN",
+        note: opts.note ?? null,
       },
     })
-    created++
-
-    // یک پروژه فریلنس در ماه‌های مختلف
-    if (m !== -1) {
-      await db.transaction.create({
+    for (const it of opts.items) {
+      const product = await db.product.findUniqueOrThrow({ where: { id: it.productId } })
+      await db.invoiceItem.create({
         data: {
-          type: "INCOME",
-          amount: 6_800_000,
-          accountId: bank.id,
-          categoryId: catByName.get("فریلنس")?.id,
-          date: txDate(10 + Math.floor(rand() * 10)),
-          note: "نمونه — پروژه فریلنس",
+          invoiceId: invoice.id,
+          productId: it.productId,
+          productName: product.name,
+          brand: product.brand,
+          code: product.code,
+          unit: product.unit,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          costPrice: opts.type === "SALE" ? it.costPrice : 0,
+          total: Math.round(it.quantity * it.unitPrice),
         },
       })
-      created++
     }
-
-    // هزینه‌های پراکنده ماه
-    const expensePlan = [
-      { cat: "خوراک", min: 180_000, max: 950_000, count: 6 },
-      { cat: "رفت‌وآمد", min: 60_000, max: 320_000, count: 4 },
-      { cat: "خرید", min: 350_000, max: 2_400_000, count: 2 },
-      { cat: "قبوض", min: 220_000, max: 780_000, count: 2 },
-      { cat: "سرگرمی", min: 120_000, max: 600_000, count: 2 },
-    ]
-    for (const plan of expensePlan) {
-      for (let i = 0; i < plan.count; i++) {
-        const day = 1 + Math.floor(rand() * maxDay)
-        const amount = Math.round((plan.min + rand() * (plan.max - plan.min)) / 1000) * 1000
-        const useCash = rand() < 0.35
-        await db.transaction.create({
-          data: {
-            type: "EXPENSE",
-            amount,
-            accountId: useCash ? cash.id : bank.id,
-            categoryId: catByName.get(plan.cat)?.id ?? expenseCats[0].id,
-            date: txDate(day),
-            note: `نمونه — ${plan.cat}`,
-          },
-        })
-        created++
-      }
-    }
-
-    // یک انتقال بین حسابی در ماه
-    if (m === -1 || m === 0) {
+    if (paidCash > 0 && opts.accountId) {
       await db.transaction.create({
         data: {
-          type: "TRANSFER",
-          amount: 3_000_000,
-          accountId: bank.id,
-          toAccountId: cash.id,
-          date: txDate(5),
-          note: "نمونه — برداشت نقدی",
+          accountId: opts.accountId,
+          direction: opts.type === "SALE" ? "IN" : "OUT",
+          amount: paidCash,
+          type: "INVOICE_CASH",
+          refId: invoice.id,
+          description: `${opts.type === "SALE" ? "فروش" : "خرید"} نقدی — فاکتور ${invoiceNo}`,
+          date: opts.date,
         },
       })
-      created++
     }
+    for (const c of opts.checks ?? []) {
+      await db.checkPaper.create({
+        data: {
+          serial: c.serial,
+          amount: c.amount,
+          bankKey: c.bankKey,
+          direction: opts.type === "SALE" ? "RECEIVED" : "ISSUED",
+          dueDate: future(c.dueInDays),
+          personId: opts.personId,
+          invoiceId: invoice.id,
+          note: `بابت فاکتور ${invoiceNo}`,
+        },
+      })
+    }
+    return invoice
   }
 
-  // بودجه‌های ماه جاری
-  const thisMonth = currentMonthKey()
-  const budgetPlan = [
-    { cat: "خوراک", amount: 5_000_000 },
-    { cat: "خرید", amount: 2_500_000 },
-  ]
-  for (const b of budgetPlan) {
-    const cat = catByName.get(b.cat)
-    if (!cat) continue
-    await db.budget
-      .create({ data: { categoryId: cat.id, amount: b.amount, monthJalali: thisMonth, alertThreshold: 80 } })
-      .catch(() => null)
-  }
+  console.log("📦 ثبت فاکتورهای خرید...")
+  // خرید ۱ — الکترود اصفهان (۳۵ روز قبل)
+  await makeInvoice({
+    type: "PURCHASE",
+    personId: supEsfahan.id,
+    date: d(35),
+    items: [
+      { productId: e6013_25.id, quantity: 120, unitPrice: 480_000, costPrice: 0 },
+      { productId: e6013_32.id, quantity: 80, unitPrice: 470_000, costPrice: 0 },
+      { productId: e6013_40.id, quantity: 60, unitPrice: 455_000, costPrice: 0 },
+    ],
+    paidCash: 60_000_000,
+    accountId: mellat.id,
+    checks: [{ amount: 40_000_000, bankKey: "saman", serial: "884512", dueInDays: 25 }],
+    note: "خرید عمده الکترود E6013",
+  })
+  // خرید ۲ — آریا جوش (۳۰ روز قبل)
+  await makeInvoice({
+    type: "PURCHASE",
+    personId: supAria.id,
+    date: d(30),
+    items: [
+      { productId: e7018_25.id, quantity: 60, unitPrice: 620_000, costPrice: 0 },
+      { productId: e7018_32.id, quantity: 50, unitPrice: 600_000, costPrice: 0 },
+      { productId: e7018_40.id, quantity: 30, unitPrice: 585_000, costPrice: 0 },
+    ],
+    paidCash: 20_000_000,
+    accountId: melli.id,
+    checks: [{ amount: 50_000_000, bankKey: "mellat", serial: "772123", dueInDays: 12 }],
+  })
+  // خرید ۳ — تهران‌پخش (۱۲ روز قبل)
+  await makeInvoice({
+    type: "PURCHASE",
+    personId: supTehranPakhsh.id,
+    date: d(12),
+    items: [
+      { productId: migWire.id, quantity: 20, unitPrice: 3_200_000, costPrice: 0 },
+      { productId: co2Wire.id, quantity: 15, unitPrice: 2_850_000, costPrice: 0 },
+    ],
+    paidCash: 106_750_000,
+    accountId: melli.id,
+  })
 
-  // قاعده تکرارشونده: اینترنت ماهانه — روز ۵ هر ماه شمسی
-  const nj = jalaliOf(addJalaliMonths(now, 1))
-  await db.recurringRule.create({
+  console.log("💰 ثبت فاکتورهای فروش...")
+  // فروش ۱ — رحیمی (۲۸ روز قبل): نقدی + چک + نسیه
+  await makeInvoice({
+    type: "SALE",
+    personId: cRahimi.id,
+    date: d(28),
+    items: [
+      { productId: e6013_25.id, quantity: 40, unitPrice: 545_000, costPrice: 480_000 },
+      { productId: e6013_32.id, quantity: 30, unitPrice: 535_000, costPrice: 470_000 },
+    ],
+    paidCash: 20_000_000,
+    accountId: mellat.id,
+    checks: [{ amount: 10_000_000, bankKey: "mellat", serial: "553891", dueInDays: 18 }],
+  })
+  // فروش ۲ — قلندری (۲۵ روز قبل): نقدی کامل
+  await makeInvoice({
+    type: "SALE",
+    personId: cGhalandari.id,
+    date: d(25),
+    items: [
+      { productId: e7018_32.id, quantity: 25, unitPrice: 680_000, costPrice: 600_000 },
+      { productId: e7018_40.id, quantity: 20, unitPrice: 660_000, costPrice: 585_000 },
+    ],
+    paidCash: 30_200_000,
+    accountId: mellat.id,
+  })
+  // فروش ۳ — خورشید (۲۱ روز قبل): چک + نسیه
+  await makeInvoice({
+    type: "SALE",
+    personId: cKhorshid.id,
+    date: d(21),
+    items: [{ productId: migWire.id, quantity: 8, unitPrice: 3_650_000, costPrice: 3_200_000 }],
+    checks: [{ amount: 20_000_000, bankKey: "mellat", serial: "621204", dueInDays: 9 }],
+  })
+  // فروش ۴ — مرتضی (۱۴ روز قبل): نقدی کامل
+  await makeInvoice({
+    type: "SALE",
+    personId: cMorteza.id,
+    date: d(14),
+    items: [
+      { productId: e6013_25.id, quantity: 15, unitPrice: 545_000, costPrice: 480_000 },
+      { productId: e6013_40.id, quantity: 10, unitPrice: 520_000, costPrice: 455_000 },
+    ],
+    paidCash: 13_375_000,
+    accountId: mellat.id,
+  })
+  // فروش ۵ — نعمتی (۹ روز قبل): کامل نسیه
+  const nematiInvoice = await makeInvoice({
+    type: "SALE",
+    personId: cNemati.id,
+    date: d(9),
+    items: [
+      { productId: e7018_25.id, quantity: 12, unitPrice: 695_000, costPrice: 620_000 },
+      { productId: e7018_40.id, quantity: 8, unitPrice: 660_000, costPrice: 585_000 },
+    ],
+  })
+  // فروش ۶ — رحیمی (۳ روز قبل): همه با چک
+  await makeInvoice({
+    type: "SALE",
+    personId: cRahimi.id,
+    date: d(3),
+    items: [{ productId: co2Wire.id, quantity: 5, unitPrice: 3_150_000, costPrice: 2_850_000 }],
+    checks: [{ amount: 15_750_000, bankKey: "bsi", serial: "909233", dueInDays: 16 }],
+  })
+  // فروش ۷ — خورشید (دیروز): نقدی + نسیه
+  await makeInvoice({
+    type: "SALE",
+    personId: cKhorshid.id,
+    date: d(1),
+    items: [
+      { productId: e6013_32.id, quantity: 10, unitPrice: 535_000, costPrice: 470_000 },
+      { productId: e7018_32.id, quantity: 5, unitPrice: 680_000, costPrice: 600_000 },
+    ],
+    paidCash: 5_000_000,
+    accountId: mellat.id,
+  })
+
+  console.log("🤝 ثبت تسویه‌ها...")
+  // نعمتی بخشی از نسیه را نقدی داد (۵ روز قبل) — بابت همان فاکتور
+  const s1 = await db.settlement.create({
     data: {
-      title: "نمونه — اشتراک اینترنت ماهانه",
-      type: "EXPENSE",
-      amount: 890_000,
-      accountId: bank.id,
-      categoryId: catByName.get("قبوض")?.id,
-      frequency: "MONTHLY_JALALI",
-      interval: 1,
-      dayOfMonth: 5,
-      nextRunAt: jalaliToInstant(nj.jy, nj.jm, 5, 12, 0, 0),
-      isActive: true,
+      personId: cNemati.id,
+      invoiceId: nematiInvoice.id,
+      direction: "RECEIVE",
+      method: "CASH",
+      amount: 8_000_000,
+      accountId: mellat.id,
+      date: d(5),
+      note: "بخشی از مانده فاکتور نسیه",
+    },
+  })
+  await db.transaction.create({
+    data: {
+      accountId: mellat.id,
+      direction: "IN",
+      amount: 8_000_000,
+      type: "SETTLEMENT_CASH",
+      refId: s1.id,
+      description: "دریافت نقدی از جوشکاری نعمتی",
+      date: s1.date,
+    },
+  })
+  // کاهش مانده همان فاکتور پس از تسویه
+  await db.invoice.update({
+    where: { id: nematiInvoice.id },
+    data: { credit: { decrement: 8_000_000 } },
+  })
+  // پرداخت نقدی به آریا جوش (۸ روز قبل) — آزاد (نقدی بابت حساب)
+  const s2 = await db.settlement.create({
+    data: {
+      personId: supAria.id,
+      direction: "PAY",
+      method: "CASH",
+      amount: 20_000_000,
+      accountId: melli.id,
+      date: d(8),
+      note: "بخشی از بدهی خرید",
+    },
+  })
+  await db.transaction.create({
+    data: {
+      accountId: melli.id,
+      direction: "OUT",
+      amount: 20_000_000,
+      type: "SETTLEMENT_CASH",
+      refId: s2.id,
+      description: "پرداخت نقدی به پخش آریا جوش",
+      date: s2.date,
+    },
+  })
+  // چک دریافت‌شده بابت طلب قدیمی قلندری (۱۰ روز قبل) — تسویه چکی مستقل
+  const s3 = await db.settlement.create({
+    data: {
+      personId: cGhalandari.id,
+      direction: "RECEIVE",
+      method: "CHECK",
+      amount: 12_000_000,
+      date: d(10),
+      note: "تسویه طلب قدیمی با چک",
+    },
+  })
+  await db.checkPaper.create({
+    data: {
+      serial: "553892",
+      amount: 12_000_000,
+      bankKey: "mellat",
+      direction: "RECEIVED",
+      dueDate: future(22),
+      personId: cGhalandari.id,
+      settlementId: s3.id,
+      note: "تسویه طلب قدیمی",
     },
   })
 
-  // بدهی و طلب نمونه
-  const in10Days = new Date(now.getTime() + 10 * 86_400_000)
-  const in25Days = new Date(now.getTime() + 25 * 86_400_000)
-  await db.debt.create({
+  // یک چک وصول‌شده نمونه (وصول ۲ روز قبل)
+  const cashedCheck = await db.checkPaper.create({
     data: {
-      direction: "I_OWE",
-      person: "علی رضایی (نمونه)",
-      amount: 2_500_000,
-      dueDate: in10Days,
-      note: "نمونه — قسط وام",
+      serial: "621205",
+      amount: 20_000_000,
+      bankKey: "mellat",
+      direction: "RECEIVED",
+      dueDate: d(2),
+      personId: cKhorshid.id,
+      invoiceId: null,
+      status: "CASHED",
+      accountId: mellat.id,
+      note: "چک سابق خورشید — وصول شد",
     },
   })
-  await db.debt.create({
+  await db.transaction.create({
     data: {
-      direction: "OWED_TO_ME",
-      person: "سارا محمدی (نمونه)",
-      amount: 1_800_000,
-      dueDate: in25Days,
-      note: "نمونه — قرض داده‌شده",
+      accountId: mellat.id,
+      direction: "IN",
+      amount: 20_000_000,
+      type: "CHECK_CASHED",
+      refId: cashedCheck.id,
+      description: "وصول چک تعمیرگاه کامیانت خورشید",
+      date: d(2),
     },
   })
 
-  console.log(`✅ داده نمونه ساخته شد:
-  • ۲ حساب (نقدی و بانکی) با برچسب «نمونه»
-  • ${created} تراکنش در ۳ ماه اخیر
-  • ۲ بودجه برای ماه جاری (${thisMonth})
-  • ۱ قاعده تکرارشونده (اینترنت ماهانه)
-  • ۱ بدهی و ۱ طلب با سررسید نزدیک`)
+  console.log("✅ داده نمونه فروشگاه الکترود ثبت شد.")
 }
 
 main()
   .catch((e) => {
-    console.error("خطا در seed:", e)
+    console.error(e)
     process.exit(1)
   })
   .finally(() => db.$disconnect())

@@ -1,280 +1,343 @@
 "use client"
 
+/**
+ * گزارش‌ها — سود روزانه/هفتگی/ماهانه شمسی + نمودار + پرفروش‌ها + بهترین مشتری‌ها
+ */
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { motion } from "framer-motion"
-import { ArrowDownLeft, ArrowUpRight, TrendingUp, TrendingDown, Equal } from "lucide-react"
-import { apiGet } from "@/lib/api-client"
-import type { ReportDTO } from "@/types"
-import { PageHeader } from "@/components/shared/page-header"
-import { CountUp } from "@/components/shared/count-up"
-import { TrendChart, ComparisonBar, ChartLegend } from "@/components/charts/charts"
-import { EntityIcon } from "@/components/shared/money-display"
-import { JalaliDatePicker } from "@/components/shared/jalali-date-picker"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Button } from "@/components/ui/button"
-import { formatToman, formatChange, formatPercent } from "@/lib/money"
 import {
-  startOfJalaliMonth,
-  endOfJalaliMonth,
-  nowTehran,
-  addJalaliMonths,
-  startOfJalaliDay,
-  endOfJalaliDay,
+  ResponsiveContainer,
+  ComposedChart,
+  Bar,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+} from "recharts"
+import { BarChart3, Loader2, TrendingUp, Package, Users, Percent } from "lucide-react"
+import { apiGet } from "@/lib/api-client"
+import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
+import {
+  formatJalaliShort,
+  JALALI_MONTHS,
   jalaliOf,
-  jalaliToInstant,
-  formatJalali,
-  monthKeyLabel,
-  currentMonthKey,
+  nowTehran,
+  parseMonthKey,
 } from "@/lib/jalali"
 import { cn } from "@/lib/utils"
 
-type RangeId = "this_month" | "last_month" | "3m" | "6m" | "this_year" | "custom"
+interface ReportData {
+  start: string
+  end: string
+  summary: {
+    sales: number
+    purchases: number
+    profit: number
+    saleCount: number
+    purchaseCount: number
+    receivedChecks: number
+    issuedChecks: number
+  }
+  series: { day: string; sales: number; purchases: number; profit: number }[]
+  topSold: { name: string; brand: string | null; unit: string; qty: number; revenue: number; profit: number }[]
+  topCustomers: { name: string; total: number; count: number }[]
+}
+
+function monthKeyOf(date: Date): string {
+  const j = jalaliOf(date)
+  return `${j.jy}-${String(j.jm).padStart(2, "0")}`
+}
+
+function prevMonthKeys(current: string, n: number): string[] {
+  const keys: string[] = []
+  const { jy, jm } = parseMonthKey(current)
+  let y = jy
+  let m = jm
+  for (let i = 0; i < n; i++) {
+    m -= 1
+    if (m < 1) {
+      m = 12
+      y -= 1
+    }
+    keys.unshift(`${y}-${String(m).padStart(2, "0")}`)
+  }
+  return keys
+}
 
 export default function ReportsPage() {
-  const [rangeId, setRangeId] = useState<RangeId>("this_month")
-  const [customFrom, setCustomFrom] = useState<Date>(() => startOfJalaliMonth(nowTehran()))
-  const [customTo, setCustomTo] = useState<Date>(() => endOfJalaliDay(nowTehran()))
-
   const now = nowTehran()
-  const j = jalaliOf(now)
+  const thisMonth = monthKeyOf(now)
+  const [period, setPeriod] = useState<"day" | "week" | "month" | "custom">("month")
+  const [monthKey, setMonthKey] = useState(thisMonth)
+  const months = [...prevMonthKeys(thisMonth, 5), thisMonth]
 
-  const ranges: Record<Exclude<RangeId, "custom">, { from: Date; to: Date }> = {
-    this_month: { from: startOfJalaliMonth(now), to: endOfJalaliDay(now) },
-    last_month: {
-      from: startOfJalaliMonth(addJalaliMonths(now, -1)),
-      to: endOfJalaliMonth(addJalaliMonths(now, -1)),
-    },
-    "3m": { from: startOfJalaliMonth(addJalaliMonths(now, -2)), to: endOfJalaliDay(now) },
-    "6m": { from: startOfJalaliMonth(addJalaliMonths(now, -5)), to: endOfJalaliDay(now) },
-    this_year: { from: jalaliToInstant(j.jy, 1, 1, 0, 0, 0), to: endOfJalaliDay(now) },
-  }
-
-  const active = rangeId === "custom" ? { from: customFrom, to: customTo } : ranges[rangeId]
-
-  const rangeLabels: { id: RangeId; label: string }[] = [
-    { id: "this_month", label: "این ماه" },
-    { id: "last_month", label: "ماه قبل" },
-    { id: "3m", label: "۳ ماه" },
-    { id: "6m", label: "۶ ماه" },
-    { id: "this_year", label: "امسال" },
-    { id: "custom", label: "سفارشی" },
-  ]
+  const query =
+    period === "custom"
+      ? `period=month&month=${monthKey}`
+      : `period=${period}`
 
   const { data, isLoading } = useQuery({
-    queryKey: ["reports", active.from.toISOString(), active.to.toISOString()],
-    queryFn: () =>
-      apiGet<ReportDTO>(`/api/reports/summary?from=${active.from.toISOString()}&to=${active.to.toISOString()}`),
+    queryKey: ["report", period, monthKey],
+    queryFn: () => apiGet<ReportData>(`/api/reports/summary?${query}`),
   })
 
-  const incomeChange = data ? formatChange(data.totals.income, data.previous.income) : null
-  const expenseChange = data ? formatChange(data.totals.expense, data.previous.expense) : null
-  const profitChange = data ? formatChange(data.totals.profit, data.previous.profit) : null
+  const label =
+    period === "day"
+      ? "امروز"
+      : period === "week"
+        ? "این هفته"
+        : (() => {
+            const { jy, jm } = parseMonthKey(period === "custom" ? monthKey : thisMonth)
+            return `${JALALI_MONTHS[jm - 1]} ${toPersianDigits(jy)}`
+          })()
+
+  const chartData = data
+    ? [...data.series].reverse().map((s) => ({ ...s, label: formatJalaliShort(new Date(s.day)) }))
+    : []
+
+  const profitMargin =
+    data && data.summary.sales > 0 ? Math.round((data.summary.profit / data.summary.sales) * 100) : 0
 
   return (
     <div className="space-y-4">
-      <PageHeader title="گزارش‌های مالی" subtitle="تحلیل بازه‌ای با مقایسه دوره قبل" />
+      <h1 className="text-lg font-extrabold sm:text-xl">گزارش‌ها</h1>
 
-      {/* انتخابگر بازه */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-4 shadow-card">
-        {rangeLabels.map((r) => (
+      {/* انتخاب دوره */}
+      <div className="flex gap-2">
+        {(
+          [
+            { key: "day", label: "امروز" },
+            { key: "week", label: "این هفته" },
+            { key: "month", label: "این ماه" },
+            { key: "custom", label: "ماه دلخواه" },
+          ] as const
+        ).map((p) => (
           <button
-            key={r.id}
+            key={p.key}
             type="button"
-            onClick={() => setRangeId(r.id)}
+            onClick={() => setPeriod(p.key)}
             className={cn(
-              "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200",
-              rangeId === r.id
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              "flex-1 rounded-2xl border py-2.5 text-xs font-bold transition-all",
+              period === p.key
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-card text-muted-foreground"
             )}
           >
-            {r.label}
+            {p.label}
           </button>
         ))}
-        {rangeId === "custom" ? (
-          <div className="flex w-full flex-wrap items-center gap-2 pt-2 sm:w-auto">
-            <JalaliDatePicker value={customFrom} onChange={setCustomFrom}>
-              <Button variant="outline" size="sm" className="rounded-lg font-normal">
-                از: <span className="nums">{formatJalaliShortFa(customFrom)}</span>
-              </Button>
-            </JalaliDatePicker>
-            <JalaliDatePicker value={customTo} onChange={setCustomTo}>
-              <Button variant="outline" size="sm" className="rounded-lg font-normal">
-                تا: <span className="nums">{formatJalaliShortFa(customTo)}</span>
-              </Button>
-            </JalaliDatePicker>
-          </div>
-        ) : null}
       </div>
 
+      {/* انتخاب ماه شمسی */}
+      {period === "custom" && (
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {months.map((m) => {
+            const { jy, jm } = parseMonthKey(m)
+            const active = monthKey === m
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMonthKey(m)}
+                className={cn(
+                  "shrink-0 rounded-2xl border px-4 py-2 text-xs font-bold transition-all",
+                  active
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card text-muted-foreground"
+                )}
+              >
+                {JALALI_MONTHS[jm - 1]} {toPersianDigits(jy)}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {isLoading || !data ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-28 rounded-2xl" />
-            ))}
-          </div>
-          <Skeleton className="h-72 rounded-2xl" />
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-primary" />
         </div>
       ) : (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="space-y-4"
-        >
-          {/* خلاصه با مقایسه */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <SummaryCard
-              title="درآمد"
-              value={data.totals.income}
-              change={incomeChange}
-              good
-              icon={<ArrowDownLeft className="size-4.5" />}
-              tone="income"
-            />
-            <SummaryCard
-              title="هزینه"
-              value={data.totals.expense}
-              change={expenseChange}
-              good={false}
-              icon={<ArrowUpRight className="size-4.5" />}
-              tone="expense"
-            />
-            <SummaryCard
-              title={data.totals.profit >= 0 ? "سود" : "کسری"}
-              value={data.totals.profit}
-              change={profitChange}
-              good
-              icon={data.totals.profit >= 0 ? <TrendingUp className="size-4.5" /> : <TrendingDown className="size-4.5" />}
-              tone={data.totals.profit >= 0 ? "income" : "expense"}
-            />
-          </div>
-
-          {/* نمودارها */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-bold">روند درآمد و هزینه</h3>
-                <ChartLegend />
+        <>
+          {/* KPIها */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="rounded-2xl border border-income/25 bg-income/10 p-4">
+              <div className="flex items-center gap-1.5 text-[0.7rem] text-income">
+                <TrendingUp className="size-3.5" />
+                فروش {label}
               </div>
-              {data.series.length > 1 ? (
-                <TrendChart data={data.series} height={260} />
-              ) : (
-                <p className="py-16 text-center text-xs text-muted-foreground">
-                  برای نمایش روند، بازه بزرگ‌تری انتخاب کنید
-                </p>
-              )}
+              <p className="nums mt-1.5 text-lg font-extrabold text-income sm:text-xl">
+                {formatTomanCompact(data.summary.sales)}
+              </p>
+              <p className="nums mt-0.5 text-[0.62rem] text-muted-foreground">
+                {toPersianDigits(data.summary.saleCount)} فاکتور
+              </p>
             </div>
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
-              <h3 className="mb-4 text-sm font-bold">مقایسه ماهانه</h3>
-              {data.series.length > 1 ? (
-                <ComparisonBar data={data.series.slice(-6)} height={260} />
-              ) : (
-                <p className="py-16 text-center text-xs text-muted-foreground">
-                  برای نمایش مقایسه، بازه بزرگ‌تری انتخاب کنید
-                </p>
-              )}
+            <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4">
+              <div className="flex items-center gap-1.5 text-[0.7rem] text-destructive">
+                <Package className="size-3.5" />
+                خرید {label}
+              </div>
+              <p className="nums mt-1.5 text-lg font-extrabold text-destructive sm:text-xl">
+                {formatTomanCompact(data.summary.purchases)}
+              </p>
+              <p className="nums mt-0.5 text-[0.62rem] text-muted-foreground">
+                {toPersianDigits(data.summary.purchaseCount)} فاکتور
+              </p>
+            </div>
+            <div className="rounded-2xl border border-primary/25 bg-primary/10 p-4">
+              <div className="flex items-center gap-1.5 text-[0.7rem] text-primary">
+                <BarChart3 className="size-3.5" />
+                سود {label}
+              </div>
+              <p className="nums mt-1.5 text-lg font-extrabold text-primary sm:text-xl">
+                {formatTomanCompact(data.summary.profit)}
+              </p>
+              <p className="nums mt-0.5 flex items-center gap-1 text-[0.62rem] text-muted-foreground">
+                <Percent className="size-3" />
+                حاشیه سود {toPersianDigits(profitMargin)}٪
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-card">
+              <div className="flex items-center gap-1.5 text-[0.7rem] text-muted-foreground">
+                چک‌های سررسید در دوره
+              </div>
+              <p className="nums mt-1.5 text-sm font-extrabold text-primary">
+                دریافت: {formatTomanCompact(data.summary.receivedChecks)}
+              </p>
+              <p className="nums mt-0.5 text-sm font-extrabold text-destructive">
+                صادره: {formatTomanCompact(data.summary.issuedChecks)}
+              </p>
             </div>
           </div>
 
-          {/* جدول دسته‌ها */}
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
-            <h3 className="mb-4 text-sm font-bold">تفکیک هزینه‌ها بر اساس دسته</h3>
-            {data.byCategory.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">در این بازه هزینه‌ای ثبت نشده است</p>
+          {/* نمودار */}
+          <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+            <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+              <BarChart3 className="size-4 text-primary" />
+              فروش، خرید و سود روزانه
+            </div>
+            {chartData.length > 1 ? (
+              <div className="h-72 w-full" dir="ltr">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eceef2" vertical={false} />
+                    <XAxis
+                      reversed
+                      dataKey="label"
+                      tick={{ fontSize: 10, fill: "#6b7280" }}
+                      tickLine={false}
+                      axisLine={false}
+                      minTickGap={24}
+                    />
+                    <YAxis
+                      orientation="right"
+                      tick={{ fontSize: 10, fill: "#9aa4b2" }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={44}
+                      tickFormatter={(v: number) =>
+                        v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}م` : v >= 1000 ? `${Math.round(v / 1000)}ه` : String(v)
+                      }
+                    />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        formatToman(value),
+                        name === "sales" ? "فروش" : name === "purchases" ? "خرید" : "سود",
+                      ]}
+                      contentStyle={{
+                        borderRadius: 14,
+                        border: "1px solid #eceef2",
+                        fontSize: 12,
+                        direction: "rtl",
+                      }}
+                    />
+                    <Legend
+                      formatter={(v) => (v === "sales" ? "فروش" : v === "purchases" ? "خرید" : "سود")}
+                      wrapperStyle={{ fontSize: 12, direction: "rtl" }}
+                    />
+                    <Bar dataKey="sales" fill="#16a34a" radius={[4, 4, 0, 0]} maxBarSize={22} />
+                    <Bar dataKey="purchases" fill="#e5484d" radius={[4, 4, 0, 0]} maxBarSize={22} />
+                    <Line type="monotone" dataKey="profit" stroke="#0e7c66" strokeWidth={2.5} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
-              <div className="space-y-3">
-                {data.byCategory.map((c, i) => (
-                  <motion.div
-                    key={c.categoryId}
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04, duration: 0.25 }}
-                    className="flex items-center gap-3"
+              <p className="py-8 text-center text-xs text-muted-foreground">
+                برای «{label}» نموداری نیست؛ بازه بزرگ‌تری انتخاب کنید
+              </p>
+            )}
+          </section>
+
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            {/* پرفروش‌ها */}
+            <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+                <Package className="size-4 text-primary" />
+                پرفروش‌ترین اجناس {label}
+              </div>
+              <div className="space-y-1.5">
+                {data.topSold.map((p, i) => (
+                  <div
+                    key={p.name}
+                    className="flex items-center gap-2.5 rounded-2xl border border-border/60 px-3 py-2.5"
                   >
-                    <EntityIcon icon={c.icon} color={c.color} size="sm" />
+                    <span className="nums flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-[0.7rem] font-extrabold">
+                      {toPersianDigits(i + 1)}
+                    </span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2 text-xs">
-                        <span className="truncate font-semibold">{c.name}</span>
-                        <span className="nums shrink-0 text-muted-foreground">
-                          {formatToman(c.amount, false)} — {formatPercent(c.percent)}
-                        </span>
-                      </div>
-                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${c.percent}%` }}
-                          transition={{ duration: 0.6, delay: i * 0.04 }}
-                          className="h-full rounded-full"
-                          style={{ backgroundColor: c.color }}
-                        />
+                      <div className="truncate text-xs font-bold">{p.name}</div>
+                      <div className="nums text-[0.62rem] text-muted-foreground">
+                        {toPersianDigits(p.qty)} {p.unit} • سود {formatTomanCompact(p.profit)}
                       </div>
                     </div>
-                  </motion.div>
+                    <span className="nums shrink-0 text-xs font-extrabold text-income">
+                      {formatTomanCompact(p.revenue)}
+                    </span>
+                  </div>
                 ))}
+                {data.topSold.length === 0 && (
+                  <p className="py-6 text-center text-xs text-muted-foreground">فروشی در این دوره نبوده</p>
+                )}
               </div>
-            )}
+            </section>
+
+            {/* بهترین مشتری‌ها */}
+            <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+                <Users className="size-4 text-primary" />
+                بهترین مشتری‌ها {label}
+              </div>
+              <div className="space-y-1.5">
+                {data.topCustomers.map((c, i) => (
+                  <div
+                    key={c.name + i}
+                    className="flex items-center gap-2.5 rounded-2xl border border-border/60 px-3 py-2.5"
+                  >
+                    <span className="nums flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-[0.7rem] font-extrabold">
+                      {toPersianDigits(i + 1)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-bold">{c.name}</div>
+                      <div className="nums text-[0.62rem] text-muted-foreground">
+                        {toPersianDigits(c.count)} فاکتور
+                      </div>
+                    </div>
+                    <span className="nums shrink-0 text-xs font-extrabold text-income">
+                      {formatTomanCompact(c.total)}
+                    </span>
+                  </div>
+                ))}
+                {data.topCustomers.length === 0 && (
+                  <p className="py-6 text-center text-xs text-muted-foreground">مشتری‌ای نبوده</p>
+                )}
+              </div>
+            </section>
           </div>
-        </motion.div>
+        </>
       )}
     </div>
   )
-}
-
-function SummaryCard({
-  title,
-  value,
-  change,
-  good,
-  icon,
-  tone,
-}: {
-  title: string
-  value: number
-  change: { text: string; direction: "up" | "down" | "flat" } | null
-  good: boolean
-  icon: React.ReactNode
-  tone: "income" | "expense"
-}) {
-  const positive = value >= 0
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-card transition-shadow duration-200 hover:shadow-card-hover">
-      <div className="flex items-center justify-between">
-        <span
-          className={cn(
-            "flex size-9 items-center justify-center rounded-xl",
-            tone === "income" ? "bg-income/10 text-income" : "bg-expense/10 text-expense"
-          )}
-        >
-          {icon}
-        </span>
-        {change && change.direction !== "flat" ? (
-          <span
-            className={cn(
-              "nums flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold",
-              (change.direction === "up") === good ? "bg-income/10 text-income" : "bg-expense/10 text-expense"
-            )}
-          >
-            {change.direction === "up" ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-            {change.text}
-          </span>
-        ) : (
-          <span className="flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-[0.65rem] text-muted-foreground">
-            <Equal className="size-3" />
-            بدون تغییر
-          </span>
-        )}
-      </div>
-      <div className="mt-3 text-xs text-muted-foreground">{title}</div>
-      <div className={cn("nums mt-1 text-lg font-extrabold", tone === "income" ? "text-income" : "text-expense")} dir="rtl">
-        <CountUp value={Math.abs(value)} format={(n) => `${positive ? "" : "−"}${formatToman(n, false)}`} />
-      </div>
-    </div>
-  )
-}
-
-function formatJalaliShortFa(d: Date): string {
-  return formatJalali(d)
 }
