@@ -27,6 +27,8 @@ import {
 import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort } from "@/lib/jalali"
+import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
+import { AmountInput } from "@/components/ui/amount-input"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +42,7 @@ interface Product {
   unit: string
   stock: number
   initialStock: number
+  initialStockCostPrice: number
   lastPurchasePrice: number
   lastSalePrice: number
 }
@@ -73,8 +76,6 @@ interface ProductDetails {
   movements: Movement[]
 }
 
-const UNITS = ["عدد", "کیلوگرم", "پاکت", "کارتن", "متر", "بسته"] as const
-
 function ProductForm({
   open,
   onClose,
@@ -93,6 +94,9 @@ function ProductForm({
   const [initialStock, setInitialStock] = useState(
     editing?.initialStock ? String(editing.initialStock) : ""
   )
+  const [initialStockCost, setInitialStockCost] = useState<number>(
+    editing?.initialStockCostPrice ?? 0
+  )
   const [saving, setSaving] = useState(false)
 
   const submit = async () => {
@@ -106,6 +110,7 @@ function ProductForm({
           code: code || undefined,
           unit,
           initialStock: initialStock.trim() === "" ? 0 : initialStock.trim(),
+          initialStockCostPrice: initialStockCost,
         })
         toast.success("جنس ویرایش شد ✅")
       } else {
@@ -115,6 +120,7 @@ function ProductForm({
           code: code || undefined,
           unit,
           initialStock: initialStock.trim() === "" ? 0 : initialStock.trim(),
+          initialStockCostPrice: initialStockCost,
         })
         toast.success("جنس اضافه شد ✅")
       }
@@ -162,7 +168,7 @@ function ProductForm({
         <div>
           <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">واحد شمارش</label>
           <div className="flex flex-wrap gap-1.5">
-            {UNITS.map((u) => (
+            {PRODUCT_UNITS.map((u) => (
               <button
                 key={u}
                 type="button"
@@ -174,7 +180,7 @@ function ProductForm({
                     : "border-border text-muted-foreground hover:border-primary/40"
                 )}
               >
-                {u}
+                {formatUnit(u)}
               </button>
             ))}
           </div>
@@ -194,6 +200,22 @@ function ProductForm({
             موجودی با فاکتورهای خرید و فروش به‌روز می‌شود.
           </p>
         </div>
+        {Number(initialStock.replace(/[^\d.-]/g, "")) > 0 && (
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              قیمت خرید هر واحد (تومان)
+            </label>
+            <AmountInput
+              value={initialStockCost}
+              onChange={setInitialStockCost}
+              placeholder="مثلاً ۵۰۰٬۰۰۰"
+              showWords={false}
+            />
+            <p className="mt-1.5 text-[0.62rem] leading-relaxed text-muted-foreground">
+              قیمت خرید هر واحد از موجودی اولیه — برای محاسبه صحیح سود موقع فروش این اجناس
+            </p>
+          </div>
+        )}
       </div>
     </BottomSheet>
   )
@@ -222,7 +244,7 @@ function ProductDetailsSheet({
       open={!!product}
       onClose={onClose}
       title={product?.name ?? ""}
-      description={product ? [product.brand, product.code ? `کد ${product.code}` : null].filter(Boolean).join(" • ") || `واحد: ${product.unit}` : ""}
+      description={product ? [product.brand, product.code ? `کد ${product.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(product.unit)}` : ""}
       size="tall"
       footer={
         <Button
@@ -248,11 +270,13 @@ function ProductDetailsSheet({
                 موجودی فعلی
               </div>
               <p className="nums mt-1 text-sm font-extrabold text-primary">
-                {toPersianDigits(s.stock)} {data?.product.unit}
+                {toPersianDigits(s.stock)} {formatUnit(data?.product.unit)}
               </p>
               {(data?.product.initialStock ?? 0) > 0 && (
                 <p className="nums mt-0.5 text-[0.58rem] text-primary/70">
                   شامل موجودی اولیه: {toPersianDigits(data!.product.initialStock)}
+                  {(data!.product.initialStockCostPrice ?? 0) > 0 &&
+                    ` • خرید هر واحد: ${formatToman(data!.product.initialStockCostPrice, false)}`}
                 </p>
               )}
             </div>
@@ -275,7 +299,7 @@ function ProductDetailsSheet({
                 مجموع خرید
               </div>
               <p className="nums mt-1 text-[0.8rem] font-extrabold text-destructive">
-                {toPersianDigits(s.purchasedQty)} {data?.product.unit} • {formatTomanCompact(s.purchasedAmount)}
+                {toPersianDigits(s.purchasedQty)} {formatUnit(data?.product.unit)} • {formatTomanCompact(s.purchasedAmount)}
               </p>
               <div className="nums mt-1 text-[0.6rem] text-muted-foreground">
                 {s.avgPurchasePrice > 0 ? `میانگین: ${formatToman(s.avgPurchasePrice, false)}` : "خریدی ثبت نشده"}
@@ -287,7 +311,7 @@ function ProductDetailsSheet({
                 مجموع فروش
               </div>
               <p className="nums mt-1 text-[0.8rem] font-extrabold text-income">
-                {toPersianDigits(s.soldQty)} {data?.product.unit} • {formatTomanCompact(s.soldAmount)}
+                {toPersianDigits(s.soldQty)} {formatUnit(data?.product.unit)} • {formatTomanCompact(s.soldAmount)}
               </p>
               <div className="nums mt-1 text-[0.6rem] text-muted-foreground">
                 {s.avgSalePrice > 0 ? `میانگین: ${formatToman(s.avgSalePrice, false)}` : "فروشی ثبت نشده"}
@@ -345,7 +369,7 @@ function ProductDetailsSheet({
                         <div className="truncate text-[0.7rem] font-bold">{m.personName}</div>
                         <div className="nums text-[0.6rem] text-muted-foreground">
                           {formatJalaliShort(new Date(m.date))} • فاکتور {toPersianDigits(m.invoiceNumber)} •{" "}
-                          {toPersianDigits(m.quantity)} {m.unit} × {formatToman(m.unitPrice, false)}
+                          {toPersianDigits(m.quantity)} {formatUnit(m.unit)} × {formatToman(m.unitPrice, false)}
                         </div>
                       </div>
                       <span
@@ -469,12 +493,12 @@ export default function ProductsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-extrabold">{p.name}</div>
                   <div className="mt-0.5 truncate text-[0.65rem] text-muted-foreground">
-                    {[p.brand, p.code ? `کد ${p.code}` : null].filter(Boolean).join(" • ") || `واحد: ${p.unit}`}
+                    {[p.brand, p.code ? `کد ${p.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
                   </div>
                 </div>
                 <div className="shrink-0 text-end">
                   <div className="nums text-sm font-extrabold text-primary">
-                    {toPersianDigits(p.stock)} {p.unit}
+                    {toPersianDigits(p.stock)} {formatUnit(p.unit)}
                   </div>
                   <div className="text-[0.6rem] text-muted-foreground">موجودی</div>
                 </div>

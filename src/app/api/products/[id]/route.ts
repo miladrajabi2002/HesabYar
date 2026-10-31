@@ -50,6 +50,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       }
     }
 
+    // میانگین قیمت خرید با احتساب موجودی اولیه و قیمت خریدش (برای ارزش موجودی و سود)
+    const initialQty = product.initialStock ?? 0
+    const initialCost = initialQty * (product.initialStockCostPrice ?? 0)
+    const blendedQty = initialQty + purchasedQty
+    const blendedAvgPrice = blendedQty > 0 ? Math.round((initialCost + purchasedAmount) / blendedQty) : 0
+
     const stock = await getProductStock(id)
 
     const movements = items.slice(0, 15).map((it) => ({
@@ -71,7 +77,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         stock,
         purchasedQty,
         purchasedAmount,
-        avgPurchasePrice: purchasedQty > 0 ? Math.round(purchasedAmount / purchasedQty) : 0,
+        avgPurchasePrice: blendedAvgPrice,
         soldQty,
         soldAmount,
         avgSalePrice: soldQty > 0 ? Math.round(soldAmount / soldQty) : 0,

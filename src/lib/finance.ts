@@ -134,10 +134,16 @@ export async function nextInvoiceNumber(): Promise<number> {
 }
 
 /**
- * میانگین موزون قیمت خرید یک جنس تا لحظه مشخص (برای قیمت تمام‌شده فروش).
- * اگر سابقه خرید نباشد صفر برمی‌گردد (سود کامل ثبت می‌شود).
+ * میانگین موزون قیمت تمام‌شده یک جنس تا لحظه مشخص (برای قیمت تمام‌شده فروش).
+ * موجودی اولیه ثبت‌شده هنگام افزودن جنس هم با قیمت خریدش در میانگین لحاظ می‌شود،
+ * بنابراین فروش از روی موجودی اولیه سود درست محاسبه می‌کند (نه سود ۱۰۰٪).
+ * اگر نه موجودی اولیه‌ای باشد و نه سابقه خرید، صفر برمی‌گردد.
  */
 export async function getAveragePurchasePrice(productId: string, untilDate?: Date): Promise<number> {
+  const product = await db.product.findUnique({
+    where: { id: productId },
+    select: { initialStock: true, initialStockCostPrice: true },
+  })
   const items = await db.invoiceItem.findMany({
     where: {
       productId,
@@ -145,10 +151,14 @@ export async function getAveragePurchasePrice(productId: string, untilDate?: Dat
     },
     select: { quantity: true, unitPrice: true },
   })
-  const totalQty = items.reduce((s, i) => s + i.quantity, 0)
+  const purchasedQty = items.reduce((s, i) => s + i.quantity, 0)
+  const purchasedCost = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
+  // موجودی اولیه قبل از همه خریدهاست، پس همیشه در میانگین لحاظ می‌شود
+  const initialQty = product?.initialStock ?? 0
+  const initialCost = initialQty * (product?.initialStockCostPrice ?? 0)
+  const totalQty = initialQty + purchasedQty
   if (totalQty <= 0) return 0
-  const totalCost = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
-  return Math.round(totalCost / totalQty)
+  return Math.round((initialCost + purchasedCost) / totalQty)
 }
 
 // ───────────────────────── بازمحاسبه فاکتور ─────────────────────────

@@ -35,6 +35,7 @@ import { JalaliDateField, todayKey } from "@/components/ui/jalali-date-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { BANKS, getBank } from "@/lib/banks"
+import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
 import { cn } from "@/lib/utils"
 
 // ───────── تایپ‌ها ─────────
@@ -74,7 +75,6 @@ interface DraftCheck {
   dueDate: string
 }
 
-const UNITS = ["عدد", "کیلوگرم", "پاکت", "کارتن", "متر", "بسته"] as const
 
 function NewInvoicePageInner() {
   const router = useRouter()
@@ -249,7 +249,7 @@ function NewInvoicePageInner() {
                     {item.brand ? <span className="text-muted-foreground"> — {item.brand}</span> : null}
                   </div>
                   <div className="nums mt-1 text-[0.7rem] text-muted-foreground">
-                    {toPersianDigits(item.quantity)} {item.unit} ×{" "}
+                    {toPersianDigits(item.quantity)} {formatUnit(item.unit)} ×{" "}
                     {formatToman(item.unitPrice, false)} ={" "}
                     <span className="font-bold text-foreground">
                       {formatToman(Math.round(item.quantity * item.unitPrice), false)}
@@ -841,7 +841,7 @@ function ItemPickerSheet({
                 key={p.id}
                 icon={<Package className="size-4" />}
                 title={p.name}
-                subtitle={[p.brand, p.code].filter(Boolean).join(" • ") || `واحد: ${p.unit}`}
+                subtitle={[p.brand, p.code].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
                 selected={selected?.id === p.id}
                 onClick={() => setSelected(p)}
               />
@@ -882,7 +882,7 @@ function ItemPickerSheet({
           <div>
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">واحد</label>
             <div className="flex flex-wrap gap-1.5">
-              {UNITS.map((u) => (
+              {PRODUCT_UNITS.map((u) => (
                 <button
                   key={u}
                   type="button"
@@ -894,7 +894,7 @@ function ItemPickerSheet({
                       : "border-border text-muted-foreground hover:border-primary/40"
                   )}
                 >
-                  {u}
+                  {formatUnit(u)}
                 </button>
               ))}
             </div>

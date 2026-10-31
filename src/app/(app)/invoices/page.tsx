@@ -22,6 +22,7 @@ import {
 import { apiGet } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
 import { formatJalaliWithWeekday, jalaliOf, nowTehran, JALALI_MONTHS } from "@/lib/jalali"
+import { formatUnit } from "@/lib/units"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -225,7 +226,7 @@ function InvoicesPageInner() {
                       key={it.id}
                       className="nums max-w-full truncate rounded-lg bg-muted px-2 py-1 text-[0.62rem] text-muted-foreground"
                     >
-                      {toPersianDigits(it.quantity)} {it.unit} {it.productName}
+                      {toPersianDigits(it.quantity)} {formatUnit(it.unit)} {it.productName}
                     </span>
                   ))}
                   {inv.items.length > 3 && (

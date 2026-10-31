@@ -22,6 +22,7 @@ import {
 import { apiDelete, apiGet, apiPost } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
 import { formatJalaliWithWeekday } from "@/lib/jalali"
+import { formatUnit } from "@/lib/units"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
@@ -235,7 +236,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                       {it.brand ? <span className="text-muted-foreground"> — {it.brand}</span> : null}
                     </div>
                     <div className="nums mt-0.5 text-[0.65rem] text-muted-foreground">
-                      {toPersianDigits(it.quantity)} {it.unit} × {formatToman(it.unitPrice, false)}
+                      {toPersianDigits(it.quantity)} {formatUnit(it.unit)} × {formatToman(it.unitPrice, false)}
                       {it.code ? ` • کد ${it.code}` : ""}
                     </div>
                   </div>

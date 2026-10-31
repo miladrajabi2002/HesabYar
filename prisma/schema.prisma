@@ -57,6 +57,7 @@ model Product {
   unit         String        @default("عدد") // عدد | کیلوگرم | پاکت | کارتن
   minStock     Float         @default(0) // حد هشدار موجودی
   initialStock Float         @default(0) // موجودی اولیه انبار هنگام ثبت جنس (قبل از هر فاکتور)
+  initialStockCostPrice Int   @default(0) // قیمت خرید هر واحد از موجودی اولیه (تومان) — برای محاسبه سود
   isArchived   Boolean       @default(false)
   createdAt    DateTime      @default(now())
   invoiceItems InvoiceItem[]

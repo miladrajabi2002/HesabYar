@@ -19,6 +19,7 @@ import {
 import { BarChart3, Loader2, TrendingUp, Package, Users, Percent } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
+import { formatUnit } from "@/lib/units"
 import {
   formatJalaliShort,
   JALALI_MONTHS,
@@ -290,7 +291,7 @@ export default function ReportsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-bold">{p.name}</div>
                       <div className="nums text-[0.62rem] text-muted-foreground">
-                        {toPersianDigits(p.qty)} {p.unit} • سود {formatTomanCompact(p.profit)}
+                        {toPersianDigits(p.qty)} {formatUnit(p.unit)} • سود {formatTomanCompact(p.profit)}
                       </div>
                     </div>
                     <span className="nums shrink-0 text-xs font-extrabold text-income">

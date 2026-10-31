@@ -91,6 +91,15 @@ export const productCreateSchema = z.object({
       const n = Number(toLatinDigits(String(v)).replace(/[^\d.-]/g, ""))
       return Number.isFinite(n) && n > 0 ? n : 0
     }),
+  // قیمت خرید هر واحد از موجودی اولیه (تومان) — اگر ارسال نشود (ویرایش) دست‌نخورده می‌ماند
+  initialStockCostPrice: z
+    .union([z.number(), z.string()])
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined
+      const n = Number(toLatinDigits(String(v)).replace(/[^\d]/g, ""))
+      return Number.isFinite(n) && n > 0 ? Math.round(n) : 0
+    }),
 })
 
 export const productUpdateSchema = productCreateSchema.partial()
