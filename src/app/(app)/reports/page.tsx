@@ -21,6 +21,7 @@ import { apiGet } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatUnit } from "@/lib/units"
 import {
+  dayKeyToDate,
   formatJalaliShort,
   JALALI_MONTHS,
   jalaliOf,
@@ -95,7 +96,7 @@ export default function ReportsPage() {
           })()
 
   const chartData = data
-    ? [...data.series].reverse().map((s) => ({ ...s, label: formatJalaliShort(new Date(s.day)) }))
+    ? [...data.series].reverse().map((s) => ({ ...s, label: formatJalaliShort(dayKeyToDate(s.day)) }))
     : []
 
   const profitMargin =

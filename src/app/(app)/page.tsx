@@ -30,7 +30,7 @@ import {
 } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
-import { formatJalaliShort, JALALI_MONTHS, jalaliOf, nowTehran } from "@/lib/jalali"
+import { formatJalaliShort, dayKeyToDate, JALALI_MONTHS, jalaliOf, nowTehran } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo, BankDot } from "@/components/ui/bank-logo"
 import { cn } from "@/lib/utils"
@@ -136,7 +136,7 @@ export default function DashboardPage() {
   // سری نمودار — راست به چپ
   const chartData = [...data.series].reverse().map((s) => ({
     ...s,
-    label: formatJalaliShort(new Date(s.day)),
+    label: formatJalaliShort(dayKeyToDate(s.day)),
   }))
 
   return (
