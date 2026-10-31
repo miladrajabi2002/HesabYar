@@ -4,7 +4,7 @@
  * فاکتور جدید — خرید/فروش چندقلمی با انتخاب شخص (افزودن سریع)،
  * پرداخت نقدی/چک/نسیه. موبایل‌محور با باتم‌شیت.
  */
-import { Suspense, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -24,8 +24,9 @@ import {
   Building2,
   Pencil,
 } from "lucide-react"
-import { apiGet, apiPost } from "@/lib/api-client"
+import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
+import { jalaliDayKey } from "@/lib/jalali"
 import { normalizeDigits } from "@/lib/digits"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
@@ -75,6 +76,29 @@ interface DraftCheck {
   dueDate: string
 }
 
+/** فاکتور دریافتی برای حالت ویرایش (?edit=<id>) */
+interface EditInvoice {
+  id: string
+  number: number
+  type: string
+  date: string
+  discount: number
+  paidCash: number
+  note: string | null
+  person: { id: string; name: string; phone: string | null; company: string | null; role: string }
+  account: { id: string; name: string; bankKey: string } | null
+  items: {
+    productId: string
+    productName: string
+    brand: string | null
+    code: string | null
+    unit: string
+    quantity: number
+    unitPrice: number
+  }[]
+  checks: { serial: string; amount: number; bankKey: string; dueDate: string; status: string }[]
+}
+
 
 function NewInvoicePageInner() {
   const router = useRouter()
@@ -93,6 +117,50 @@ function NewInvoicePageInner() {
   const [checks, setChecks] = useState<DraftCheck[]>([])
   const [note, setNote] = useState("")
   const [saving, setSaving] = useState(false)
+
+  // حالت ویرایش: /invoices/new?edit=<id>
+  const editId = searchParams.get("edit")
+  const editAccountIdRef = useRef<string | null>(null)
+  const hydratedRef = useRef(false)
+
+  const { data: editData } = useQuery({
+    queryKey: ["invoice", editId],
+    queryFn: () => apiGet<{ invoice: EditInvoice }>(`/api/invoices/${editId}`),
+    enabled: !!editId,
+  })
+
+  // پیش‌فرض‌های ویرایش — فقط یک‌بار پس از دریافت فاکتور
+  useEffect(() => {
+    if (!editData?.invoice || hydratedRef.current) return
+    hydratedRef.current = true
+    const inv = editData.invoice
+    setType(inv.type as "SALE" | "PURCHASE")
+    setDate(jalaliDayKey(new Date(inv.date)))
+    setPerson({ ...inv.person })
+    setItems(
+      inv.items.map((it) => ({
+        productId: it.productId,
+        name: it.productName,
+        brand: it.brand,
+        code: it.code,
+        unit: it.unit,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+      }))
+    )
+    setDiscount(inv.discount)
+    setPaidCash(inv.paidCash)
+    setChecks(
+      inv.checks.map((c) => ({
+        amount: c.amount,
+        bankKey: c.bankKey,
+        serial: c.serial,
+        dueDate: jalaliDayKey(new Date(c.dueDate)),
+      }))
+    )
+    setNote(inv.note ?? "")
+    editAccountIdRef.current = inv.account?.id ?? null
+  }, [editData])
 
   // شیت‌ها
   const [personSheet, setPersonSheet] = useState(false)
@@ -116,6 +184,17 @@ function NewInvoicePageInner() {
 
   const accounts = accountsData?.accounts ?? []
 
+  // حساب نقدی فاکتور ویرایشی — پس از لود شدن لیست حساب‌ها انتخاب می‌شود
+  useEffect(() => {
+    const wanted = editAccountIdRef.current
+    if (!wanted || account) return
+    const found = accounts.find((a) => a.id === wanted)
+    if (found) {
+      setAccount(found)
+      editAccountIdRef.current = null
+    }
+  }, [accounts, account])
+
   const subtotal = useMemo(
     () => items.reduce((s, i) => s + Math.round(i.quantity * i.unitPrice), 0),
     [items]
@@ -128,12 +207,20 @@ function NewInvoicePageInner() {
 
   const personTypeLabel = type === "SALE" ? "مشتری" : "تأمین‌کننده"
 
+  // اگر فاکتور ویرایشی چک نقدشده/برگشتی دارد، فقط قابل مشاهده است
+  const lockedChecks =
+    !!editId && (editData?.invoice.checks.some((c) => c.status && c.status !== "PENDING") ?? false)
+
   const submit = async () => {
     if (!person) return toast.error("ابتدا شخص را انتخاب کنید")
     if (items.length === 0) return toast.error("حداقل یک قلم اضافه کنید")
+    if (paidCash > 0 && !account) {
+      setAccountSheet(true)
+      return toast.error("برای پرداخت نقدی، حساب بانکی را انتخاب کنید")
+    }
     setSaving(true)
     try {
-      const r = await apiPost<{ invoice: { id: string; number: number }; excess: number }>("/api/invoices", {
+      const payload = {
         type,
         personId: person.id,
         date,
@@ -148,8 +235,18 @@ function NewInvoicePageInner() {
           dueDate: c.dueDate,
         })),
         note: note || undefined,
-      })
-      toast.success(`فاکتور شماره ${toPersianDigits(r.invoice.number)} ثبت شد ✅`)
+      }
+      const r = editId
+        ? await apiPut<{ invoice: { id: string; number: number }; excess: number }>(
+            `/api/invoices/${editId}`,
+            payload
+          )
+        : await apiPost<{ invoice: { id: string; number: number }; excess: number }>("/api/invoices", payload)
+      toast.success(
+        editId
+          ? `فاکتور شماره ${toPersianDigits(r.invoice.number)} ویرایش شد ✅`
+          : `فاکتور شماره ${toPersianDigits(r.invoice.number)} ثبت شد ✅`
+      )
       if (r.excess > 0) {
         toast.info(`مازاد ${formatToman(r.excess)} به علی‌الحساب «${person.name}» اضافه شد`)
       }
@@ -164,31 +261,47 @@ function NewInvoicePageInner() {
 
   return (
     <div className="pb-2">
+      {lockedChecks && (
+        <p className="mb-3 rounded-2xl bg-warning/10 px-3 py-2.5 text-[0.7rem] font-medium text-warning">
+          این فاکتور چک نقدشده/برگشتی دارد و قابل ویرایش نیست — فقط مشاهده.
+        </p>
+      )}
       {/* نوع فاکتور */}
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-lg font-extrabold sm:text-xl">فاکتور جدید</h1>
-        <div className="flex rounded-2xl bg-muted p-1">
-          {(["SALE", "PURCHASE"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => {
-                setType(t)
-                setPerson(null)
-              }}
-              className={cn(
-                "rounded-xl px-4 py-2 text-xs font-bold transition-all",
-                type === t
-                  ? t === "SALE"
-                    ? "bg-income text-white shadow-sm"
-                    : "bg-destructive text-white shadow-sm"
-                  : "text-muted-foreground"
-              )}
-            >
-              {t === "SALE" ? "فروش" : "خرید"}
-            </button>
-          ))}
-        </div>
+        <h1 className="text-lg font-extrabold sm:text-xl">{editId ? "ویرایش فاکتور" : "فاکتور جدید"}</h1>
+        {editId ? (
+          <span
+            className={cn(
+              "rounded-2xl px-4 py-2 text-xs font-bold text-white",
+              type === "SALE" ? "bg-income" : "bg-destructive"
+            )}
+          >
+            {type === "SALE" ? "فروش" : "خرید"}
+          </span>
+        ) : (
+          <div className="flex rounded-2xl bg-muted p-1">
+            {(["SALE", "PURCHASE"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  setType(t)
+                  setPerson(null)
+                }}
+                className={cn(
+                  "rounded-xl px-4 py-2 text-xs font-bold transition-all",
+                  type === t
+                    ? t === "SALE"
+                      ? "bg-income text-white shadow-sm"
+                      : "bg-destructive text-white shadow-sm"
+                    : "text-muted-foreground"
+                )}
+              >
+                {t === "SALE" ? "فروش" : "خرید"}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -292,6 +405,12 @@ function NewInvoicePageInner() {
             پرداخت
           </div>
 
+          {editId && (editData?.invoice.items.length ?? 0) > 0 && (
+            <p className="mb-3 rounded-xl bg-primary/5 px-3 py-2 text-[0.68rem] leading-5 text-muted-foreground">
+              در حال ویرایش فاکتور شماره {toPersianDigits(editData!.invoice.number)} — تسویه‌های ثبت‌شدهٔ بعدی بابت این فاکتور حفظ می‌شوند.
+            </p>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
@@ -311,18 +430,22 @@ function NewInvoicePageInner() {
           <div className="mt-4 rounded-2xl bg-muted/50 p-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-                  نقدی پرداخت شد
-                </label>
-                <AmountInput
-                  value={paidCash}
-                  onChange={(n) => {
-                    setPaidCash(n)
-                    if (n > 0 && !account) setAccountSheet(true)
-                  }}
-                  placeholder="۰"
-                  showWords={false}
-                />
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <label className="block text-[0.7rem] font-medium text-muted-foreground">
+                    نقدی پرداخت شد
+                  </label>
+                  {total - checkTotal - paidCash > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPaidCash(Math.max(0, total - checkTotal))}
+                      className="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-0.5 text-[0.7rem] font-bold text-primary transition-colors hover:bg-primary/20"
+                    >
+                      <Banknote className="size-3.5" />
+                      کل مبلغ نقدی
+                    </button>
+                  )}
+                </div>
+                <AmountInput value={paidCash} onChange={setPaidCash} placeholder="۰" showWords={false} />
               </div>
               <div>
                 <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
@@ -332,7 +455,10 @@ function NewInvoicePageInner() {
                   <button
                     type="button"
                     onClick={() => setAccountSheet(true)}
-                    className="flex h-12 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3 transition-[color,border-color,box-shadow] hover:border-input/80"
+                    className={cn(
+                      "flex h-12 w-full items-center gap-2.5 rounded-2xl border px-3 transition-[color,border-color,box-shadow] hover:border-input/80",
+                      account ? "border-input bg-card" : "border-warning/60 bg-warning/5"
+                    )}
                   >
                     {account ? (
                       <>
@@ -343,7 +469,7 @@ function NewInvoicePageInner() {
                         </span>
                       </>
                     ) : (
-                      <span className="w-full text-center text-sm text-muted-foreground">
+                      <span className="w-full text-center text-sm font-medium text-warning">
                         انتخاب حساب…
                       </span>
                     )}
@@ -448,14 +574,20 @@ function NewInvoicePageInner() {
           </div>
           <Button
             onClick={submit}
-            disabled={saving || !person || items.length === 0}
+            disabled={saving || !person || items.length === 0 || lockedChecks}
             className={cn(
               "h-12 rounded-2xl px-8 text-sm font-bold shadow-fab",
               type === "SALE" ? "bg-income hover:bg-income/90" : "bg-destructive hover:bg-destructive/90"
             )}
           >
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
-            ثبت فاکتور
+            {saving ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : editId ? (
+              <Pencil className="size-4" />
+            ) : (
+              <FileText className="size-4" />
+            )}
+            {editId ? "ذخیره تغییرات" : "ثبت فاکتور"}
           </Button>
         </div>
       </div>
@@ -709,6 +841,8 @@ function ItemPickerSheet({
   const [quantity, setQuantity] = useState(0)
   const [unitPrice, setUnitPrice] = useState(0)
   const [unit, setUnit] = useState<string>("عدد")
+  // واحد مؤثر برای برچسب تعداد: در حالت جنس جدید واحد انتخابی، در حالت انتخاب واحد خود جنس
+  const activeUnit = mode === "new" ? unit : (selected?.unit ?? "عدد")
   // جنس جدید
   const [name, setName] = useState("")
   const [brand, setBrand] = useState("")
@@ -902,11 +1036,13 @@ function ItemPickerSheet({
         </div>
       )}
 
-      {/* تعداد و قیمت */}
+      {/* تعداد و قیمت — برچسب تعداد بر اساس واحد جنس (مثلاً kg) */}
       {(mode === "new" || selected) && (
         <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-muted/50 p-3">
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">تعداد *</label>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              {activeUnit === "عدد" ? "تعداد *" : `تعداد (${formatUnit(activeUnit)}) *`}
+            </label>
             <NumberInput value={quantity} onChange={setQuantity} placeholder="۱" />
           </div>
           <div>
@@ -916,7 +1052,7 @@ function ItemPickerSheet({
             <AmountInput value={unitPrice} onChange={setUnitPrice} showWords={false} />
           </div>
           <div className="col-span-2 text-center text-[0.7rem] text-muted-foreground">
-            جمع این قلم:{" "}
+            {toPersianDigits(String(quantity))} {formatUnit(activeUnit)} × {formatToman(unitPrice, false)} ={" "}
             <span className="nums font-bold text-foreground">
               {formatToman(Math.round(quantity * unitPrice), false)}
             </span>{" "}

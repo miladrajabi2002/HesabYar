@@ -18,6 +18,7 @@ import {
   Banknote,
   FileText,
   Loader2,
+  Pencil,
 } from "lucide-react"
 import { apiDelete, apiGet, apiPost } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
@@ -168,6 +169,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           <ArrowRight className="size-4" />
         </Link>
         <div className="flex gap-2">
+          <Link
+            href={`/invoices/new?edit=${inv.id}`}
+            className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
+            aria-label="ویرایش فاکتور"
+          >
+            <Pencil className="size-4" />
+          </Link>
           <button
             onClick={() => window.print()}
             className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
