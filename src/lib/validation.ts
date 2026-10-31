@@ -73,10 +73,24 @@ export const productCreateSchema = z.object({
   unit: z.enum(["عدد", "کیلوگرم", "پاکت", "کارتن", "متر", "بسته"], {
     message: "واحد شمارش نامعتبر است",
   }).default("عدد"),
+  // حد هشدار موجودی — اگر ارسال نشود (ویرایش) دست‌نخورده می‌ماند
   minStock: z
     .union([z.number(), z.string()])
     .optional()
-    .transform((v) => (v === undefined || v === "" ? 0 : Number(toLatinDigits(String(v)).replace(/[^\d.-]/g, "")) || 0)),
+    .transform((v) => {
+      if (v === undefined) return undefined
+      const n = Number(toLatinDigits(String(v)).replace(/[^\d.-]/g, ""))
+      return Number.isFinite(n) && n > 0 ? n : 0
+    }),
+  // موجودی اولیه انبار هنگام ثبت جنس — اگر ارسال نشود (ویرایش) دست‌نخورده می‌ماند
+  initialStock: z
+    .union([z.number(), z.string()])
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined
+      const n = Number(toLatinDigits(String(v)).replace(/[^\d.-]/g, ""))
+      return Number.isFinite(n) && n > 0 ? n : 0
+    }),
 })
 
 export const productUpdateSchema = productCreateSchema.partial()

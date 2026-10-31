@@ -90,8 +90,12 @@ export async function getPersonBalances(): Promise<Map<string, number>> {
 
 // ───────────────────────── موجودی جنس ─────────────────────────
 
-/** موجودی یک جنس = مجموع خریدها − مجموع فروش‌ها */
+/** موجودی یک جنس = موجودی اولیه + مجموع خریدها − مجموع فروش‌ها */
 export async function getProductStock(productId: string): Promise<number> {
+  const product = await db.product.findUnique({
+    where: { id: productId },
+    select: { initialStock: true },
+  })
   const purchases = await db.invoiceItem.aggregate({
     where: { productId, invoice: { type: "PURCHASE" } },
     _sum: { quantity: true },
@@ -100,12 +104,17 @@ export async function getProductStock(productId: string): Promise<number> {
     where: { productId, invoice: { type: "SALE" } },
     _sum: { quantity: true },
   })
-  return (purchases._sum.quantity ?? 0) - (sales._sum.quantity ?? 0)
+  return (product?.initialStock ?? 0) + (purchases._sum.quantity ?? 0) - (sales._sum.quantity ?? 0)
 }
 
-/** موجودی همه اجناس به صورت یکجا (کارآمدتر: یک کوئری روی اقلام) */
+/** موجودی همه اجناس به صورت یکجا (شامل موجودی اولیه؛ کارآمدتر: یک کوئری روی اجناس و یک کوئری روی اقلام) */
 export async function getProductStocks(): Promise<Map<string, number>> {
   const map = new Map<string, number>()
+  // موجودی اولیه هر جنس (ثبت‌شده هنگام افزودن جنس)
+  const products = await db.product.findMany({ select: { id: true, initialStock: true } })
+  for (const p of products) {
+    if (p.initialStock) map.set(p.id, p.initialStock)
+  }
   const items = await db.invoiceItem.findMany({
     select: { productId: true, quantity: true, invoice: { select: { type: true } } },
   })

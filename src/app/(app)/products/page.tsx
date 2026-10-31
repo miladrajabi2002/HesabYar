@@ -39,6 +39,7 @@ interface Product {
   code: string | null
   unit: string
   stock: number
+  initialStock: number
   lastPurchasePrice: number
   lastSalePrice: number
 }
@@ -89,6 +90,9 @@ function ProductForm({
   const [brand, setBrand] = useState(editing?.brand ?? "")
   const [code, setCode] = useState(editing?.code ?? "")
   const [unit, setUnit] = useState<string>(editing?.unit ?? "عدد")
+  const [initialStock, setInitialStock] = useState(
+    editing?.initialStock ? String(editing.initialStock) : ""
+  )
   const [saving, setSaving] = useState(false)
 
   const submit = async () => {
@@ -101,6 +105,7 @@ function ProductForm({
           brand: brand || undefined,
           code: code || undefined,
           unit,
+          initialStock: initialStock.trim() === "" ? 0 : initialStock.trim(),
         })
         toast.success("جنس ویرایش شد ✅")
       } else {
@@ -109,6 +114,7 @@ function ProductForm({
           brand: brand || undefined,
           code: code || undefined,
           unit,
+          initialStock: initialStock.trim() === "" ? 0 : initialStock.trim(),
         })
         toast.success("جنس اضافه شد ✅")
       }
@@ -173,6 +179,21 @@ function ProductForm({
             ))}
           </div>
         </div>
+        <div>
+          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            موجودی اولیه انبار
+          </label>
+          <Input
+            value={initialStock}
+            onChange={(e) => setInitialStock(e.target.value)}
+            inputMode="decimal"
+            placeholder="مثلاً ۵۰ — اختیاری"
+          />
+          <p className="mt-1.5 text-[0.62rem] leading-relaxed text-muted-foreground">
+            اگر از این جنس الان در انبار دارید، تعدادش را وارد کنید تا به موجودی انبار اضافه شود؛ بعد از این،
+            موجودی با فاکتورهای خرید و فروش به‌روز می‌شود.
+          </p>
+        </div>
       </div>
     </BottomSheet>
   )
@@ -229,6 +250,11 @@ function ProductDetailsSheet({
               <p className="nums mt-1 text-sm font-extrabold text-primary">
                 {toPersianDigits(s.stock)} {data?.product.unit}
               </p>
+              {(data?.product.initialStock ?? 0) > 0 && (
+                <p className="nums mt-0.5 text-[0.58rem] text-primary/70">
+                  شامل موجودی اولیه: {toPersianDigits(data!.product.initialStock)}
+                </p>
+              )}
             </div>
             <div className="rounded-2xl border border-border/70 bg-card p-3">
               <div className="flex items-center gap-1 text-[0.65rem] text-muted-foreground">

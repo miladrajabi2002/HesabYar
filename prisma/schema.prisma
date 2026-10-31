@@ -56,6 +56,7 @@ model Product {
   code         String? // اختیاری: کد جنس
   unit         String        @default("عدد") // عدد | کیلوگرم | پاکت | کارتن
   minStock     Float         @default(0) // حد هشدار موجودی
+  initialStock Float         @default(0) // موجودی اولیه انبار هنگام ثبت جنس (قبل از هر فاکتور)
   isArchived   Boolean       @default(false)
   createdAt    DateTime      @default(now())
   invoiceItems InvoiceItem[]
