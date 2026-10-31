@@ -232,9 +232,13 @@ export function BottomSheet({
             <div
               style={{ WebkitOverflowScrolling: "touch" }}
               className={cn(
-                "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4",
-                !footer &&
-                  "[padding-bottom:max(1.25rem,calc(env(safe-area-inset-bottom) + var(--tg-safe-bottom,0px)))]",
+                "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4",
+                // نکته: py-4 استفاده نشده چون در کسکید CSS روی [padding-bottom:] غلبه می‌کند
+                // و فضای امن پایین (مینی‌اپ تلگرام) عملاً بی‌اثر می‌شد.
+                // نکته ۲: داخل کلاس arbitrary نباید فاصله باشد وگرنه به چند کلاس جدا تجزیه می‌شود.
+                footer
+                  ? "pb-4"
+                  : "[padding-bottom:max(1.25rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))]",
                 contentClassName
               )}
             >
@@ -243,7 +247,7 @@ export function BottomSheet({
 
             {/* فوتر */}
             {footer && (
-              <div className="shrink-0 border-t border-border/60 bg-card/95 px-4 pt-3 backdrop-blur-xl [padding-bottom:max(1.5rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+0.75rem))]">
+              <div className="shrink-0 border-t border-border/60 bg-card/95 px-4 pt-3 backdrop-blur-xl [padding-bottom:max(1.5rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+1rem))]">
                 {footer}
               </div>
             )}

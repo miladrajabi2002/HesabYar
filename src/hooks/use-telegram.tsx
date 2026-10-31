@@ -97,7 +97,9 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         /* ignore */
       }
       // داخل مینی‌اپ تلگرام: فاصله امن پایین (نوار پایین تلگرام روی محتوا می‌افتد)
-      if (tg.initData) {
+      // مقدار واقعی از CSS varهای رسمی تلگرام خوانده می‌شود (globals.css → --tg-safe-bottom)
+      const isMiniApp = !!tg.initData || (tg.platform != null && tg.platform !== "unknown")
+      if (isMiniApp) {
         document.documentElement.classList.add("tg-mini")
       }
     }, 0)

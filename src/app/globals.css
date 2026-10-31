@@ -217,11 +217,24 @@
   }
 
   /* داخل مینی‌اپ تلگرام env(safe-area-inset-bottom) صفر است؛
-     فاصله امن پایین را خودمان تأمین می‌کنیم تا دکمه‌های شیت زیر نوار تلگرام نروند */
+     فاصله امن پایین را خودمان تأمین می‌کنیم تا دکمه‌های شیت زیر نوار تلگرام نروند.
+     اسکریپت رسمی تلگرام مقادیر واقعی ناحیه امن را روی <html> می‌گذارد:
+       --tg-safe-area-inset-bottom         → هوم‌بار آیفون
+       --tg-content-safe-area-inset-bottom → نوار بومی پایین تلگرام (اندروید)
+     بزرگ‌ترینشان + ۰٫۵rem فضای تنفس با حداقل تضمینی ۱٫۲۵rem اعمال می‌شود و
+     با رویدادهای safeAreaChanged / contentSafeAreaChanged خودکار به‌روز می‌شود. */
   :root {
     --tg-safe-bottom: 0px;
   }
   .tg-mini {
-    --tg-safe-bottom: 1.25rem;
+    --tg-safe-bottom: max(
+      1.25rem,
+      calc(
+        max(
+          var(--tg-safe-area-inset-bottom, 0px),
+          var(--tg-content-safe-area-inset-bottom, 0px)
+        ) + 0.5rem
+      )
+    );
   }
 }

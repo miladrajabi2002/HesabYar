@@ -186,7 +186,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* منوی پایین شناور موبایل — ایده vignet */}
       <nav
         aria-label="منوی اصلی"
-        className="fixed inset-x-3 z-40 mx-auto grid h-[4.9rem] max-w-md grid-cols-5 items-end gap-0.5 rounded-[1.65rem] border border-black/[0.08] bg-background/95 p-1.5 shadow-[0_16px_40px_-8px_rgba(16,24,40,0.22)] backdrop-blur-2xl [bottom:max(0.9rem,env(safe-area-inset-bottom))] lg:hidden"
+        className="fixed inset-x-3 z-40 mx-auto grid h-[4.9rem] max-w-md grid-cols-5 items-end gap-0.5 rounded-[1.65rem] border border-black/[0.08] bg-background/95 p-1.5 shadow-[0_16px_40px_-8px_rgba(16,24,40,0.22)] backdrop-blur-2xl [bottom:max(0.9rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden"
       >
         {bottomNav.slice(0, 2).map((item) => (
           <BottomNavItem key={item.href} {...item} />
