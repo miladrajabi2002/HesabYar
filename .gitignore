@@ -67,3 +67,4 @@ backups/
 dev.log
 server.log
 agent-ctx/
+.bak-r3
