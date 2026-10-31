@@ -43,6 +43,7 @@ interface Product {
   stock: number
   initialStock: number
   initialStockCostPrice: number
+  avgCostPrice: number
   lastPurchasePrice: number
   lastSalePrice: number
 }
@@ -243,8 +244,8 @@ function ProductDetailsSheet({
     <BottomSheet
       open={!!product}
       onClose={onClose}
-      title={product?.name ?? ""}
-      description={product ? [product.brand, product.code ? `کد ${product.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(product.unit)}` : ""}
+      title={product ? [product.name, product.brand].filter(Boolean).join(" — ") : ""}
+      description={product ? [product.code ? `کد ${product.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(product.unit)}` : ""}
       size="tall"
       footer={
         <Button
@@ -324,9 +325,11 @@ function ProductDetailsSheet({
             <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-card px-3 py-2.5 text-[0.68rem]">
               <span className="flex items-center gap-1 text-muted-foreground">
                 <TrendingDown className="size-3.5" />
-                آخرین خرید
+                {s.lastPurchasePrice > 0 ? "آخرین خرید" : "قیمت خرید اولیه"}
               </span>
-              <span className="nums font-extrabold">{formatToman(s.lastPurchasePrice, false)}</span>
+              <span className="nums font-extrabold">
+                {formatToman(s.lastPurchasePrice || data!.product.initialStockCostPrice, false)}
+              </span>
             </div>
             <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-card px-3 py-2.5 text-[0.68rem]">
               <span className="flex items-center gap-1 text-muted-foreground">
@@ -409,7 +412,7 @@ export default function ProductsPage() {
 
   const products = data?.products ?? []
   const totalValue = products.reduce(
-    (s, p) => s + p.stock * (p.lastPurchasePrice || 0),
+    (s, p) => s + p.stock * (p.avgCostPrice || p.lastPurchasePrice || 0),
     0
   )
 
@@ -491,9 +494,12 @@ export default function ProductsPage() {
                   <Package className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-extrabold">{p.name}</div>
+                  <div className="truncate text-sm font-extrabold">
+                    {p.name}
+                    {p.brand ? <span className="font-medium text-muted-foreground"> — {p.brand}</span> : null}
+                  </div>
                   <div className="mt-0.5 truncate text-[0.65rem] text-muted-foreground">
-                    {[p.brand, p.code ? `کد ${p.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
+                    {[p.code ? `کد ${p.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
                   </div>
                 </div>
                 <div className="shrink-0 text-end">
@@ -517,11 +523,15 @@ export default function ProductsPage() {
               </div>
               {(p.lastPurchasePrice > 0 || p.lastSalePrice > 0) && (
                 <div className="mt-2.5 flex gap-2 border-t border-dashed pt-2.5 text-[0.62rem]">
-                  {p.lastPurchasePrice > 0 && (
+                  {p.lastPurchasePrice > 0 ? (
                     <span className="nums rounded-lg bg-destructive/5 px-2 py-1 text-destructive">
                       آخرین خرید: {formatToman(p.lastPurchasePrice, false)}
                     </span>
-                  )}
+                  ) : p.avgCostPrice > 0 ? (
+                    <span className="nums rounded-lg bg-destructive/5 px-2 py-1 text-destructive">
+                      قیمت خرید: {formatToman(p.avgCostPrice, false)}
+                    </span>
+                  ) : null}
                   {p.lastSalePrice > 0 && (
                     <span className="nums rounded-lg bg-income/5 px-2 py-1 text-income">
                       آخرین فروش: {formatToman(p.lastSalePrice, false)}

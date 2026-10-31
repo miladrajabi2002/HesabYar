@@ -289,7 +289,10 @@ export default function ReportsPage() {
                       {toPersianDigits(i + 1)}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-bold">{p.name}</div>
+                      <div className="truncate text-xs font-bold">
+                        {p.name}
+                        {p.brand ? <span className="font-medium text-muted-foreground"> — {p.brand}</span> : null}
+                      </div>
                       <div className="nums text-[0.62rem] text-muted-foreground">
                         {toPersianDigits(p.qty)} {formatUnit(p.unit)} • سود {formatTomanCompact(p.profit)}
                       </div>

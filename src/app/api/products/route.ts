@@ -55,12 +55,32 @@ export async function GET(req: NextRequest) {
       lastPrices.set(it.productId, cur)
     }
 
-    const result = products.map((p) => ({
-      ...p,
-      stock: stocks.get(p.id) ?? 0,
-      lastPurchasePrice: lastPrices.get(p.id)?.purchase ?? 0,
-      lastSalePrice: lastPrices.get(p.id)?.sale ?? 0,
-    }))
+    // میانگین قیمت تمام‌شده هر جنس = (موجودی اولیه × قیمت خریدش + جمع خریدها) ÷ (اولیه + تعداد خرید)
+    const purAgg = await db.invoiceItem.groupBy({
+      by: ["productId"],
+      where: { invoice: { type: "PURCHASE" } },
+      _sum: { quantity: true, total: true },
+    })
+    const purMap = new Map(
+      purAgg.map((r) => [r.productId, { qty: r._sum.quantity ?? 0, total: r._sum.total ?? 0 }])
+    )
+
+    const result = products.map((p) => {
+      const pur = purMap.get(p.id)
+      const initialQty = p.initialStock ?? 0
+      const totalQty = initialQty + (pur?.qty ?? 0)
+      const avgCostPrice =
+        totalQty > 0
+          ? Math.round((initialQty * (p.initialStockCostPrice ?? 0) + (pur?.total ?? 0)) / totalQty)
+          : 0
+      return {
+        ...p,
+        stock: stocks.get(p.id) ?? 0,
+        avgCostPrice,
+        lastPurchasePrice: lastPrices.get(p.id)?.purchase ?? 0,
+        lastSalePrice: lastPrices.get(p.id)?.sale ?? 0,
+      }
+    })
 
     return ok({ products: result })
   } catch (e) {

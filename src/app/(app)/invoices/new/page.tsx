@@ -840,8 +840,8 @@ function ItemPickerSheet({
               <SheetOption
                 key={p.id}
                 icon={<Package className="size-4" />}
-                title={p.name}
-                subtitle={[p.brand, p.code].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
+                title={[p.name, p.brand].filter(Boolean).join(" — ")}
+                subtitle={[p.code ? `کد ${p.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
                 selected={selected?.id === p.id}
                 onClick={() => setSelected(p)}
               />
