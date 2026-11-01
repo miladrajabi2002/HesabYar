@@ -755,12 +755,11 @@ export default function ChecksPage() {
                 </div>
               )}
 
-              {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+              {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 multiple
                 className="hidden"
                 onChange={(e) => onPickImages(e.target.files)}
@@ -885,7 +884,6 @@ export default function ChecksPage() {
               ref={regFileInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               multiple
               className="hidden"
               onChange={(e) => onPickRegisterImages(e.target.files)}

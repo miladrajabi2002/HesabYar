@@ -397,12 +397,11 @@ function ProductForm({
             </div>
           )}
 
-          {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+          {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
           <input
             ref={photoInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             multiple
             className="hidden"
             onChange={(e) => onPickPhotos(e.target.files)}

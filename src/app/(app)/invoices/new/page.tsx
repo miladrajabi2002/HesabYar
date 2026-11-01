@@ -1521,12 +1521,11 @@ function ItemPickerSheet({
                 ))}
               </div>
             )}
-            {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+            {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
             <input
               ref={photoInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -1845,7 +1844,6 @@ function QuickCheckSheet({
               ref={photoInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0] ?? null

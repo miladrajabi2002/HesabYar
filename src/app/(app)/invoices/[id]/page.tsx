@@ -699,12 +699,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+          {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             multiple
             className="hidden"
             onChange={(e) => onPickImages(e.target.files)}

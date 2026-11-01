@@ -837,12 +837,11 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           </div>
         )}
 
-        {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+        {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           multiple
           className="hidden"
           onChange={(e) => onPickImages(e.target.files)}

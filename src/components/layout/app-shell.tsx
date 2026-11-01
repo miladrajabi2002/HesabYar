@@ -44,12 +44,12 @@ export const NAV_ITEMS = [
 
 /** آیتم‌های منوی «بیشتر» موبایل — تقویم مالی در نوار اصلی است، اشخاص اینجاست */
 const MORE_ITEMS = [
-  { href: "/people", label: "اشخاص", icon: Users, desc: "مشتری‌ها و فروشنده‌ها" },
-  { href: "/checks", label: "چک‌ها", icon: CheckSquare, desc: "سررسید و پاس چک‌ها" },
-  { href: "/products", label: "اجناس", icon: Package, desc: "موجودی انبار" },
-  { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark, desc: "گردش حساب‌ها" },
-  { href: "/reports", label: "گزارش‌ها", icon: BarChart3, desc: "سود و فروش" },
-  { href: "/settings", label: "تنظیمات", icon: Settings, desc: "ربات، بکاپ و…" },
+  { href: "/people", label: "اشخاص", icon: Users },
+  { href: "/checks", label: "چک‌ها", icon: CheckSquare },
+  { href: "/products", label: "اجناس", icon: Package },
+  { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark },
+  { href: "/reports", label: "گزارش‌ها", icon: BarChart3 },
+  { href: "/settings", label: "تنظیمات", icon: Settings },
 ] as const
 
 function SidebarItem({
@@ -330,9 +330,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <item.icon className="size-[1.35rem]" strokeWidth={2.1} />
                 </span>
                 <span className="text-[0.72rem] font-bold leading-tight">{item.label}</span>
-                <span className="text-[0.58rem] leading-tight text-muted-foreground">
-                  {item.desc}
-                </span>
               </button>
             )
           })}
