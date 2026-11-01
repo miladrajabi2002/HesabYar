@@ -2,7 +2,8 @@
 
 /**
  * چک‌ها — دریافتی/صادره با وضعیت پاس، برگشت و سررسید
- * + پیوست‌های تصویری چک در شیت عملیات (ADV-04)
+ * + پیوست‌های تصویری چک در شیت عملیات، زیر وضعیت ثبت و بالای گزینه‌های پاس/برگشت/لغو (ADV-04)
+ *   عکس چک مستقل از وضعیت ثبت است — چک ثبت‌نشده هم می‌تواند عکس داشته باشد
  * + ثبت چک به نام (نسخهٔ ۳): چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود
  *   دریافتی → به نام ما • صادره → به نام مشتری (نام + کد ملی)
  */
@@ -670,37 +671,7 @@ export default function ChecksPage() {
               </div>
             )}
 
-            <SheetOption
-              icon={<CheckCircle2 className="size-5" />}
-              title="پاس شد"
-              subtitle={
-                actionSheet.isRegistered
-                  ? "مبلغ به حساب بانکی واریز/برداشت شد"
-                  : "اول باید چک ثبت شود"
-              }
-              tone="primary"
-              onClick={() => (actionSheet.isRegistered ? setAccountSheet(true) : toast.error("چک ثبت‌نشده قابل پاس شدن نیست"))}
-            />
-            <SheetOption
-              icon={<Undo2 className="size-5" />}
-              title="برگشت خورد"
-              subtitle={
-                actionSheet.isRegistered
-                  ? "چک پاس نشد؛ مانده به حساب شخص برمی‌گردد"
-                  : "اول باید چک ثبت شود"
-              }
-              tone="danger"
-              onClick={() => (actionSheet.isRegistered ? bounceCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل برگشت نیست"))}
-            />
-            <SheetOption
-              icon={<XCircle className="size-5" />}
-              title="لغو"
-              subtitle={actionSheet.isRegistered ? "چک باطل شد" : "اول باید چک ثبت شود"}
-              tone="danger"
-              onClick={() => (actionSheet.isRegistered ? cancelCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل لغو نیست"))}
-            />
-
-            {/* پیوست‌های تصویری چک (ADV-04) — نوار بندانگشتی‌ها داخل همان شیت */}
+            {/* پیوست‌های تصویری چک (ADV-04) — زیر وضعیت ثبت و بالای گزینه‌های پاس/برگشت/لغو؛ مستقل از isRegistered */}
             <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-1.5 text-xs font-bold">
@@ -723,6 +694,12 @@ export default function ChecksPage() {
                   {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
                 </Button>
               </div>
+
+              {!actionSheet.isRegistered && (
+                <p className="mb-2 rounded-xl bg-warning/10 px-2.5 py-2 text-[0.68rem] font-medium leading-relaxed text-warning">
+                  عکس چک مستقل از «ثبت» است — حتی اگر چک هنوز ثبت نشده هم می‌توانید همین‌جا عکسش را بگیرید.
+                </p>
+              )}
 
               {checkAttachments.length === 0 && !attLoading ? (
                 <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-[0.68rem] leading-relaxed text-muted-foreground">
@@ -791,6 +768,36 @@ export default function ChecksPage() {
                 tabIndex={-1}
               />
             </div>
+
+            <SheetOption
+              icon={<CheckCircle2 className="size-5" />}
+              title="پاس شد"
+              subtitle={
+                actionSheet.isRegistered
+                  ? "مبلغ به حساب بانکی واریز/برداشت شد"
+                  : "اول باید چک ثبت شود"
+              }
+              tone="primary"
+              onClick={() => (actionSheet.isRegistered ? setAccountSheet(true) : toast.error("چک ثبت‌نشده قابل پاس شدن نیست"))}
+            />
+            <SheetOption
+              icon={<Undo2 className="size-5" />}
+              title="برگشت خورد"
+              subtitle={
+                actionSheet.isRegistered
+                  ? "چک پاس نشد؛ مانده به حساب شخص برمی‌گردد"
+                  : "اول باید چک ثبت شود"
+              }
+              tone="danger"
+              onClick={() => (actionSheet.isRegistered ? bounceCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل برگشت نیست"))}
+            />
+            <SheetOption
+              icon={<XCircle className="size-5" />}
+              title="لغو"
+              subtitle={actionSheet.isRegistered ? "چک باطل شد" : "اول باید چک ثبت شود"}
+              tone="danger"
+              onClick={() => (actionSheet.isRegistered ? cancelCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل لغو نیست"))}
+            />
           </div>
         )}
       </BottomSheet>
@@ -861,7 +868,7 @@ export default function ChecksPage() {
           <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5 text-center">
             <p className="mb-2 flex items-center justify-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
               <ImagePlus className="size-3.5" />
-              تصویر چک ثبت‌شده (اختیاری)
+              تصویر چک (اختیاری)
             </p>
             <Button
               type="button"
