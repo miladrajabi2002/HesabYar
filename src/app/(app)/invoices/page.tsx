@@ -25,6 +25,7 @@ import {
   Loader2,
   ShoppingCart,
   ReceiptText,
+  TrendingUp,
 } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
@@ -51,8 +52,24 @@ interface Invoice {
   status: string
   note: string | null
   person: { id: string; name: string }
-  items: { id: string; productName: string; quantity: number; unit: string; total: number }[]
+  items: {
+    id: string
+    productName: string
+    quantity: number
+    unit: string
+    unitPrice: number
+    costPrice: number
+    total: number
+  }[]
   checks: { id: string; amount: number; status: string }[]
+}
+
+/** سود ناخالص یک فاکتور فروش از روی اسنپ‌شات قیمت تمام‌شده اقلام */
+function invoiceProfit(inv: Invoice): number {
+  if (inv.type !== "SALE") return 0
+  return Math.round(
+    inv.items.reduce((s, it) => s + (it.unitPrice - (it.costPrice || 0)) * it.quantity, 0)
+  )
 }
 
 const PAGE_SIZE = 25
@@ -89,7 +106,8 @@ function InvoicesPageInner() {
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["invoices", type, personId, debouncedQ, page],
-    queryFn: () => apiGet<{ invoices: Invoice[]; total: number }>(`/api/invoices?${params}`),
+    queryFn: () =>
+      apiGet<{ invoices: Invoice[]; total: number; totalProfit: number }>(`/api/invoices?${params}`),
     placeholderData: (prev) => prev,
   })
 
@@ -101,6 +119,7 @@ function InvoicesPageInner() {
 
   const invoices = data?.invoices ?? []
   const total = data?.total ?? 0
+  const totalProfit = data?.totalProfit ?? 0
   const hasMore = page * PAGE_SIZE < total
   const isEmpty = !isLoading && invoices.length === 0
 
@@ -234,6 +253,19 @@ function InvoicesPageInner() {
         </div>
       </div>
 
+      {/* جمع سود ناخالص فروشِ همین فیلتر — فقط نمایش داخلی (حساب کتاب) */}
+      {totalProfit > 0 && (
+        <div className="mb-3 flex items-center justify-between rounded-2xl border border-income/25 bg-income/5 px-4 py-2.5">
+          <span className="flex items-center gap-1.5 text-[0.7rem] font-bold text-income">
+            <TrendingUp className="size-3.5" />
+            سود ناخالص فروش{type === "SALE" ? "" : " (فقط فروش‌ها)"}
+          </span>
+          <span className="nums text-xs font-extrabold text-income">
+            {formatToman(totalProfit, false)} تومان
+          </span>
+        </div>
+      )}
+
       {/* لیست — موبایل کارت / دسکتاپ جدول (UI-09) */}
       {isLoading ? (
         <ListSkeleton rows={5} />
@@ -264,6 +296,7 @@ function InvoicesPageInner() {
                   <th className="px-4 py-3 text-start font-medium">تاریخ</th>
                   <th className="px-4 py-3 text-start font-medium">اجناس</th>
                   <th className="px-4 py-3 text-end font-medium">مبلغ</th>
+                  <th className="px-4 py-3 text-end font-medium">سود</th>
                   <th className="px-4 py-3 text-end font-medium">مانده</th>
                 </tr>
               </thead>
@@ -313,6 +346,22 @@ function InvoicesPageInner() {
                       {inv.items.length > 2 && ` +${toPersianDigits(inv.items.length - 2)}`}
                     </td>
                     <td className="nums px-4 py-3 text-end font-extrabold">{formatToman(inv.total, false)}</td>
+                    <td className="px-4 py-3 text-end">
+                      {inv.type === "SALE" ? (
+                        <span
+                          className={cn(
+                            "nums rounded-md px-1.5 py-px text-[0.65rem] font-bold",
+                            invoiceProfit(inv) >= 0
+                              ? "bg-income/10 text-income"
+                              : "bg-destructive/10 text-destructive"
+                          )}
+                        >
+                          {formatToman(invoiceProfit(inv), false)}
+                        </span>
+                      ) : (
+                        <span className="text-[0.65rem] text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-end">
                       {inv.credit > 0 ? (
                         <span className="rounded-md bg-warning/10 px-1.5 py-px text-[0.65rem] font-bold text-warning">
@@ -377,6 +426,16 @@ function InvoicesPageInner() {
                     </div>
                     <div className="shrink-0 text-end">
                       <div className="nums text-sm font-extrabold">{formatToman(inv.total, false)}</div>
+                      {inv.type === "SALE" && (
+                        <div
+                          className={cn(
+                            "nums mt-0.5 text-[0.62rem] font-bold",
+                            invoiceProfit(inv) >= 0 ? "text-income" : "text-destructive"
+                          )}
+                        >
+                          سود {formatToman(invoiceProfit(inv), false)}
+                        </div>
+                      )}
                       <div className="mt-0.5">
                         {inv.credit > 0 ? (
                           <span className="rounded-md bg-warning/10 px-1.5 py-px text-[0.6rem] font-bold text-warning">

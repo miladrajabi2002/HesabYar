@@ -38,6 +38,9 @@ model Person {
   shopAddress String?
   role        String       @default("BOTH") // CUSTOMER | SUPPLIER | BOTH
   note        String?
+  // مانده اولیه (حساب قدیمی) هنگام افزودن شخص:
+  // مثبت = شخص از قبل به ما بدهکار بود (طلب ما) | منفی = ما به شخص بدهکار بودیم
+  openingBalance Int       @default(0)
   isArchived  Boolean      @default(false)
   createdAt   DateTime     @default(now())
   invoices    Invoice[]

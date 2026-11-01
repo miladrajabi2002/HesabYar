@@ -87,6 +87,8 @@ interface Product {
   brand: string | null
   code: string | null
   unit: string
+  /** موجودی زندهٔ انبار (خرید − فروش + اولیه) — از GET /api/products */
+  stock: number
   /** عکس جنس (اختیاری) — شناسهٔ اولین پیوست تصویری (ADV-05) */
   photoId: string | null
 }
@@ -945,6 +947,7 @@ function NewInvoicePageInner() {
         open={itemSheet}
         onClose={() => setItemSheet(false)}
         products={productsData?.products ?? []}
+        invoiceType={type}
         onAdd={(item) => {
           setItems((prev) => [...prev, { ...item, rowId: genRowId() }])
           setItemSheet(false)
@@ -1145,10 +1148,15 @@ function QuickPersonSheet({
   const [phone, setPhone] = useState("")
   const [company, setCompany] = useState("")
   const [shopAddress, setShopAddress] = useState("")
+  // ── مانده اولیه (حساب قدیمی) — مثل فرم اشخاص ──
+  const [openingKind, setOpeningKind] = useState<"none" | "receivable" | "payable">("none")
+  const [openingAmount, setOpeningAmount] = useState(0)
   const [saving, setSaving] = useState(false)
 
   const submit = async () => {
     if (name.trim().length < 2) return toast.error("نام را وارد کنید")
+    if (openingKind !== "none" && openingAmount <= 0)
+      return toast.error("مبلغ مانده اولیه را وارد کنید")
     setSaving(true)
     try {
       const r = await apiPost<{ person: Person }>("/api/people", {
@@ -1157,12 +1165,17 @@ function QuickPersonSheet({
         company: company || undefined,
         shopAddress: shopAddress || undefined,
         role: type === "SALE" ? "CUSTOMER" : "SUPPLIER",
+        // مثبت = طلب اولیه ما از شخص | منفی = بدهی اولیه ما به شخص
+        openingBalance:
+          openingKind === "none" ? 0 : openingKind === "receivable" ? openingAmount : -openingAmount,
       })
       toast.success("شخص اضافه شد ✅")
       setName("")
       setPhone("")
       setCompany("")
       setShopAddress("")
+      setOpeningKind("none")
+      setOpeningAmount(0)
       onCreated(r.person)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "خطا در ثبت شخص")
@@ -1218,6 +1231,49 @@ function QuickPersonSheet({
             placeholder="مثلاً بازار آهن، پلاک ۴۵"
           />
         </div>
+        {/* ── مانده اولیه (حساب قدیمی) ── */}
+        <div>
+          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            مانده اولیه (حساب قبلی)
+          </label>
+          <div className="flex gap-1.5">
+            {(
+              [
+                { key: "none", label: "بدون مانده" },
+                { key: "receivable", label: "طلب اولیه" },
+                { key: "payable", label: "بدهی اولیه" },
+              ] as const
+            ).map((k) => (
+              <button
+                key={k.key}
+                type="button"
+                onClick={() => setOpeningKind(k.key)}
+                className={cn(
+                  "flex-1 rounded-xl border py-2 text-[0.7rem] font-bold transition-colors",
+                  openingKind === k.key
+                    ? k.key === "receivable"
+                      ? "border-warning bg-warning/10 text-warning"
+                      : k.key === "payable"
+                        ? "border-destructive bg-destructive/10 text-destructive"
+                        : "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground"
+                )}
+              >
+                {k.label}
+              </button>
+            ))}
+          </div>
+          {openingKind !== "none" && (
+            <div className="mt-2">
+              <AmountInput value={openingAmount} onChange={setOpeningAmount} showWords={false} />
+              <p className="mt-1 text-[0.62rem] text-muted-foreground">
+                {openingKind === "receivable"
+                  ? "این شخص از قبل به شما بدهکار است (طلب شما)"
+                  : "شما از قبل به این شخص بدهکار هستید"} — در تراز شخص لحاظ می‌شود
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </BottomSheet>
   )
@@ -1228,11 +1284,14 @@ function ItemPickerSheet({
   open,
   onClose,
   products,
+  invoiceType,
   onAdd,
 }: {
   open: boolean
   onClose: () => void
   products: Product[]
+  /** نوع فاکتور — در فروش، موجودی مهم است و هشدار کمبود داده می‌شود */
+  invoiceType: "SALE" | "PURCHASE"
   onAdd: (item: DraftItem) => void
 }) {
   const [mode, setMode] = useState<"pick" | "new">("pick")
@@ -1405,27 +1464,43 @@ function ItemPickerSheet({
             />
           </div>
           <div className="mb-3 max-h-56 space-y-2 overflow-y-auto pe-1">
-            {filtered.map((p) => (
-              <SheetOption
-                key={p.id}
-                icon={
-                  p.photoId && pickPhotoUrls[p.photoId] ? (
-                    <img
-                      src={pickPhotoUrls[p.photoId]}
-                      alt={p.name}
-                      loading="lazy"
-                      className="size-full rounded-xl object-cover"
-                    />
-                  ) : (
-                    <Package className="size-4" />
-                  )
-                }
-                title={[p.name, p.brand].filter(Boolean).join(" — ")}
-                subtitle={[p.code ? `کد ${p.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
-                selected={selected?.id === p.id}
-                onClick={() => setSelected(p)}
-              />
-            ))}
+            {filtered.map((p) => {
+              // نمایش موجودی زندهٔ انبار کنار هر جنس — در فروش مهم‌تر است
+              const stockNum = p.stock ?? 0
+              const stockText =
+                Number.isInteger(stockNum)
+                  ? toPersianDigits(String(stockNum))
+                  : toPersianDigits(stockNum.toFixed(1))
+              const lowStock = invoiceType === "SALE" && stockNum <= 0
+              return (
+                <SheetOption
+                  key={p.id}
+                  icon={
+                    p.photoId && pickPhotoUrls[p.photoId] ? (
+                      <img
+                        src={pickPhotoUrls[p.photoId]}
+                        alt={p.name}
+                        loading="lazy"
+                        className="size-full rounded-xl object-cover"
+                      />
+                    ) : (
+                      <Package className="size-4" />
+                    )
+                  }
+                  title={[p.name, p.brand].filter(Boolean).join(" — ")}
+                  subtitle={
+                    [
+                      p.code ? `کد ${p.code}` : null,
+                      lowStock ? `موجودی: ندارد!` : `موجودی: ${stockText} ${formatUnit(p.unit)}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" • ") || `واحد: ${formatUnit(p.unit)}`
+                  }
+                  selected={selected?.id === p.id}
+                  onClick={() => setSelected(p)}
+                />
+              )
+            })}
             {filtered.length === 0 && (
               <p className="py-4 text-center text-sm text-muted-foreground">
                 جنس موجود نیست — از تب «جنس جدید» بسازید
@@ -1566,6 +1641,32 @@ function ItemPickerSheet({
             </label>
             <AmountInput value={unitPrice} onChange={setUnitPrice} showWords={false} />
           </div>
+          {/* موجودی انبار جنس انتخابی + هشدار کمبود در فاکتور فروش */}
+          {mode === "pick" && selected && (
+            <div className="col-span-2">
+              <div className="flex items-center justify-between rounded-xl bg-card px-3 py-2 text-[0.7rem]">
+                <span className="text-muted-foreground">موجودی فعلی انبار:</span>
+                <span
+                  className={cn(
+                    "nums font-bold",
+                    invoiceType === "SALE" && (selected.stock ?? 0) <= 0
+                      ? "text-destructive"
+                      : "text-foreground"
+                  )}
+                >
+                  {Number.isInteger(selected.stock ?? 0)
+                    ? toPersianDigits(String(selected.stock ?? 0))
+                    : toPersianDigits((selected.stock ?? 0).toFixed(1))}{" "}
+                  {formatUnit(selected.unit)}
+                </span>
+              </div>
+              {invoiceType === "SALE" && quantity > (selected.stock ?? 0) && (
+                <p className="mt-1.5 rounded-xl bg-warning/10 px-3 py-1.5 text-[0.65rem] font-bold text-warning">
+                  ⚠ تعداد واردشده بیشتر از موجودی انبار است — با ثبت این فاکتور موجودی منفی می‌شود
+                </p>
+              )}
+            </div>
+          )}
           <div className="col-span-2 text-center text-[0.7rem] text-muted-foreground">
             {toPersianDigits(String(quantity))} {formatUnit(activeUnit)} × {formatToman(unitPrice, false)} ={" "}
             <span className="nums font-bold text-foreground">

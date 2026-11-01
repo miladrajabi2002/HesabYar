@@ -22,6 +22,7 @@ import {
   Loader2,
   Paperclip,
   Pencil,
+  TrendingUp,
   X,
 } from "lucide-react"
 import { apiDelete, apiGet, apiPost } from "@/lib/api-client"
@@ -63,6 +64,8 @@ interface Invoice {
     unit: string
     quantity: number
     unitPrice: number
+    /** قیمت تمام‌شدهٔ لحظهٔ فروش (اسنپ‌شات میانگین خرید) — مبنای سود */
+    costPrice: number
     total: number
   }[]
   checks: {
@@ -234,6 +237,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const inv = data.invoice
   const isSale = inv.type === "SALE"
+
+  // ── سود این فاکتور (فقط داخلی — در چاپ/فاکتور مشتری نمایش داده نمی‌شود) ──
+  // فرمول هماهنگ با گزارش‌ها: Σ (فی فروش − قیمت تمام‌شده) × تعداد
+  const grossProfit = isSale
+    ? Math.round(inv.items.reduce((s, it) => s + (it.unitPrice - (it.costPrice || 0)) * it.quantity, 0))
+    : 0
+  const netProfit = grossProfit - inv.discount
+  const marginPct = inv.subtotal > 0 ? Math.round((grossProfit / inv.subtotal) * 100) : 0
 
   const settle = async () => {
     if (settleMethod === "CASH") {
@@ -472,6 +483,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                         {toPersianDigits(it.quantity)} {formatUnit(it.unit)} × {formatToman(it.unitPrice, false)}
                         {it.code ? ` • کد ${it.code}` : ""}
                       </div>
+                      {/* سود این قلم — فقط در فاکتور فروش و برای خودمان */}
+                      {isSale && (it.costPrice || 0) > 0 && (
+                        <div className="nums mt-0.5 text-[0.65rem] font-bold text-income">
+                          سود قلم: {formatToman(Math.round((it.unitPrice - it.costPrice) * it.quantity), false)}
+                        </div>
+                      )}
                     </div>
                     <div className="nums shrink-0 text-xs font-extrabold">{formatToman(it.total, false)}</div>
                   </div>
@@ -498,6 +515,51 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
         </div>
+
+        {/* سود فاکتور — فقط برای خودمان؛ در فاکتور چاپی نمی‌آید */}
+        {isSale && (
+          <div className="rounded-3xl border border-income/25 bg-income/5 p-4 shadow-card sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-bold text-income">
+                <TrendingUp className="size-4" />
+                سود این فاکتور
+              </div>
+              <span className="rounded-md bg-income/10 px-1.5 py-px text-[0.6rem] font-bold text-income">
+                فقط نمایش داخلی
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-2xl bg-card p-3">
+                <p className="text-[0.62rem] text-muted-foreground">سود ناخالص</p>
+                <p className="nums mt-0.5 text-sm font-extrabold text-income">
+                  {formatToman(grossProfit, false)}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-card p-3">
+                <p className="text-[0.62rem] text-muted-foreground">حاشیه سود</p>
+                <p className="nums mt-0.5 text-sm font-extrabold text-income">
+                  {toPersianDigits(String(marginPct))}٪
+                </p>
+              </div>
+              <div className="rounded-2xl bg-card p-3">
+                <p className="text-[0.62rem] text-muted-foreground">
+                  {inv.discount > 0 ? "سود پس از تخفیف" : "پس از تخفیف"}
+                </p>
+                <p
+                  className={cn(
+                    "nums mt-0.5 text-sm font-extrabold",
+                    netProfit >= 0 ? "text-income" : "text-destructive"
+                  )}
+                >
+                  {formatToman(netProfit, false)}
+                </p>
+              </div>
+            </div>
+            <p className="mt-2 text-center text-[0.62rem] text-muted-foreground">
+              سود = (فی فروش − قیمت تمام‌شده) × تعداد اقلام — در فاکتور چاپی نمایش داده نمی‌شود
+            </p>
+          </div>
+        )}
 
         {/* پرداخت‌ها */}
         <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 ">

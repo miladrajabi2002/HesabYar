@@ -87,8 +87,9 @@ function AccountForm({
         await apiPatch(`/api/accounts/${editing.id}`, {
           name: name.trim(),
           bankKey,
+          // همیشه مقدار می‌فرستیم تا پاک‌کردن شبا/کارت در ویرایش هم ذخیره شود
           accountNumber,
-          cardNumber: cardNumber || undefined,
+          cardNumber: cardNumber || null,
           initialBalance,
         })
         toast.success("حساب ویرایش شد ✅")

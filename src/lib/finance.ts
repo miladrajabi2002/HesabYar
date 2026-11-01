@@ -29,12 +29,28 @@ export async function getAccountBalance(accountId: string): Promise<number> {
 
 /** تراز همه حساب‌های فعال — IMP-06: با دو groupBy به‌جای N+1 */
 export async function getAccountBalances(): Promise<
-  { id: string; name: string; bankKey: string; initialBalance: number; balance: number }[]
+  {
+    id: string
+    name: string
+    bankKey: string
+    accountNumber: string | null
+    cardNumber: string | null
+    initialBalance: number
+    balance: number
+  }[]
 > {
   const accounts = await db.account.findMany({
     where: { isArchived: false },
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, bankKey: true, initialBalance: true },
+    // FIX: شبا (accountNumber) و شماره کارت هم برگردند تا فرم ویرایش خالی نباشد
+    select: {
+      id: true,
+      name: true,
+      bankKey: true,
+      accountNumber: true,
+      cardNumber: true,
+      initialBalance: true,
+    },
   })
   const [ins, outs] = await Promise.all([
     db.transaction.groupBy({
@@ -61,29 +77,39 @@ export async function getAccountBalances(): Promise<
 /**
  * تراز شخص: مثبت = شخص به ما بدهکار است (طلب ما)
  *          منفی = ما به شخص بدهکاریم (بدهی ما)
- * فرمول: +مانده فاکتورهای فروش − مانده فاکتورهای خرید
+ * فرمول: مانده اولیه شخص
+ *        + مانده فاکتورهای فروش − مانده فاکتورهای خرید
  *        − تسویه‌های دریافتِ آزاد + تسویه‌های پرداختِ آزاد
  * توجه: تسویه‌ی متصل به فاکتور، خودش در مانده فاکتور لحاظ شده است
  *       و نباید دوباره شمرده شود (جلوگیری از دوبرابرشماری).
+ * مانده اولیه: حساب قدیمی شخص قبل از شروع کار با برنامه
+ * (مثبت = شخص از قبل به ما بدهکار بود؛ منفی = ما بدهکار بودیم)
  */
 export async function getPersonBalance(personId: string): Promise<number> {
-  const saleCredits = await db.invoice.aggregate({
-    where: { personId, type: "SALE" },
-    _sum: { credit: true },
+  const person = await db.person.findUnique({
+    where: { id: personId },
+    select: { openingBalance: true },
   })
-  const purchaseCredits = await db.invoice.aggregate({
-    where: { personId, type: "PURCHASE" },
-    _sum: { credit: true },
-  })
-  const receives = await db.settlement.aggregate({
-    where: { personId, direction: "RECEIVE", invoiceId: null },
-    _sum: { amount: true },
-  })
-  const pays = await db.settlement.aggregate({
-    where: { personId, direction: "PAY", invoiceId: null },
-    _sum: { amount: true },
-  })
+  const [saleCredits, purchaseCredits, receives, pays] = await Promise.all([
+    db.invoice.aggregate({
+      where: { personId, type: "SALE" },
+      _sum: { credit: true },
+    }),
+    db.invoice.aggregate({
+      where: { personId, type: "PURCHASE" },
+      _sum: { credit: true },
+    }),
+    db.settlement.aggregate({
+      where: { personId, direction: "RECEIVE", invoiceId: null },
+      _sum: { amount: true },
+    }),
+    db.settlement.aggregate({
+      where: { personId, direction: "PAY", invoiceId: null },
+      _sum: { amount: true },
+    }),
+  ])
   return (
+    (person?.openingBalance ?? 0) +
     (saleCredits._sum.credit ?? 0) -
     (purchaseCredits._sum.credit ?? 0) -
     (receives._sum.amount ?? 0) +
@@ -91,9 +117,10 @@ export async function getPersonBalance(personId: string): Promise<number> {
   )
 }
 
-/** تراز همه اشخاص فعال — IMP-06: با groupBy به‌جای ۴×N کوئری */
+/** تراز همه اشخاص فعال — IMP-06: با groupBy به‌جای ۴×N کوئری (+ مانده اولیه) */
 export async function getPersonBalances(): Promise<Map<string, number>> {
-  const [saleCredits, purchaseCredits, receives, pays] = await Promise.all([
+  const [people, saleCredits, purchaseCredits, receives, pays] = await Promise.all([
+    db.person.findMany({ select: { id: true, openingBalance: true } }),
     db.invoice.groupBy({
       by: ["personId"],
       where: { type: "SALE" },
@@ -117,6 +144,10 @@ export async function getPersonBalances(): Promise<Map<string, number>> {
   ])
   const map = new Map<string, number>()
   const add = (id: string, delta: number) => map.set(id, (map.get(id) ?? 0) + delta)
+  // مانده اولیه (حساب قدیمی) هر شخص
+  people.forEach((p) => {
+    if (p.openingBalance) add(p.id, p.openingBalance)
+  })
   saleCredits.forEach((g) => add(g.personId, g._sum.credit ?? 0))
   purchaseCredits.forEach((g) => add(g.personId, -(g._sum.credit ?? 0)))
   receives.forEach((g) => add(g.personId, -(g._sum.amount ?? 0)))

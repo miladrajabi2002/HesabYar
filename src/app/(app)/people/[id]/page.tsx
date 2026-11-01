@@ -56,6 +56,7 @@ interface PersonDetail {
     shopAddress: string | null
     role: string
     note: string | null
+    openingBalance: number
   }
   balance: number
   invoices: {
@@ -186,6 +187,9 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
   const [company, setCompany] = useState("")
   const [shopAddress, setShopAddress] = useState("")
   const [role, setRole] = useState<"CUSTOMER" | "SUPPLIER" | "BOTH">("BOTH")
+  // مانده اولیه در ویرایش: none = دست‌نخورده/بدون مانده؛ جهت و مبلغ جدا ذخیره می‌شوند
+  const [openingKind, setOpeningKind] = useState<"none" | "receivable" | "payable">("none")
+  const [openingAmount, setOpeningAmount] = useState(0)
   const [savingEdit, setSavingEdit] = useState(false)
 
   // شیت تسویه
@@ -285,11 +289,17 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     setCompany(p.company ?? "")
     setShopAddress(p.shopAddress ?? "")
     setRole((p.role as "CUSTOMER") ?? "BOTH")
+    // مانده اولیه فعلی → جهت + مبلغ برای فرم
+    const ob = p.openingBalance ?? 0
+    setOpeningKind(ob > 0 ? "receivable" : ob < 0 ? "payable" : "none")
+    setOpeningAmount(Math.abs(ob))
     setEditSheet(true)
   }
 
   const saveEdit = async () => {
     if (name.trim().length < 2) return toast.error("نام را وارد کنید")
+    if (openingKind !== "none" && openingAmount <= 0)
+      return toast.error("مبلغ مانده اولیه را وارد کنید")
     setSavingEdit(true)
     try {
       await apiPatch(`/api/people/${id}`, {
@@ -298,6 +308,9 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         company: company || undefined,
         shopAddress: shopAddress || undefined,
         role,
+        // مثبت = طلب اولیه ما از شخص | منفی = بدهی اولیه ما به شخص | صفر = بدون مانده
+        openingBalance:
+          openingKind === "none" ? 0 : openingKind === "receivable" ? openingAmount : -openingAmount,
       })
       toast.success("ذخیره شد ✅")
       setEditSheet(false)
@@ -380,6 +393,15 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     lines.push(`🧾 صورتحساب «${p.name}»`)
     lines.push(`تاریخ: ${formatJalaliWithWeekday(new Date())}`)
     lines.push(SHARE_SEPARATOR)
+    // مانده اولیه (حساب قدیمی) — اگر ثبت شده باشد جداگانه ذکر می‌شود
+    if ((p.openingBalance ?? 0) !== 0) {
+      const ob = p.openingBalance
+      lines.push(
+        ob > 0
+          ? `مانده اولیه: ${formatToman(ob, false)} تومان (طلب اولیه)`
+          : `مانده اولیه: ${formatToman(Math.abs(ob), false)} تومان (بدهی اولیه)`
+      )
+    }
     if (balance > 0) {
       lines.push(`مانده حساب: ${formatToman(balance, false)} تومان (طلب کاربر)`)
     } else if (balance < 0) {
@@ -613,6 +635,18 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
             {balance !== 0 ? formatToman(Math.abs(balance), false) : "—"}
           </span>
         </div>
+        {/* مانده اولیه (حساب قدیمی) — جزء تراز بالا لحاظ شده */}
+        {(p.openingBalance ?? 0) !== 0 && (
+          <div className="mt-2 flex items-center justify-between rounded-2xl bg-muted/60 px-4 py-2.5">
+            <span className="text-[0.7rem] text-muted-foreground">
+              شامل مانده اولیه ({p.openingBalance > 0 ? "طلب اولیه" : "بدهی اولیه"})
+            </span>
+            <span className="nums text-xs font-bold text-muted-foreground">
+              {p.openingBalance > 0 ? "+" : "−"}
+              {formatToman(Math.abs(p.openingBalance), false)}
+            </span>
+          </div>
+        )}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Button
@@ -911,6 +945,49 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                 </button>
               ))}
             </div>
+          </div>
+          {/* ── ویرایش مانده اولیه (حساب قدیمی) ── */}
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              مانده اولیه (حساب قبلی)
+            </label>
+            <div className="flex gap-1.5">
+              {(
+                [
+                  { key: "none", label: "بدون مانده" },
+                  { key: "receivable", label: "طلب اولیه" },
+                  { key: "payable", label: "بدهی اولیه" },
+                ] as const
+              ).map((k) => (
+                <button
+                  key={k.key}
+                  type="button"
+                  onClick={() => setOpeningKind(k.key)}
+                  className={cn(
+                    "flex-1 rounded-xl border py-2 text-[0.7rem] font-bold transition-colors",
+                    openingKind === k.key
+                      ? k.key === "receivable"
+                        ? "border-warning bg-warning/10 text-warning"
+                        : k.key === "payable"
+                          ? "border-destructive bg-destructive/10 text-destructive"
+                          : "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground"
+                  )}
+                >
+                  {k.label}
+                </button>
+              ))}
+            </div>
+            {openingKind !== "none" && (
+              <div className="mt-2">
+                <AmountInput value={openingAmount} onChange={setOpeningAmount} showWords={false} />
+                <p className="mt-1 text-[0.62rem] text-muted-foreground">
+                  {openingKind === "receivable"
+                    ? "این شخص از قبل به شما بدهکار است (طلب شما)"
+                    : "شما از قبل به این شخص بدهکار هستید"} — در تراز شخص لحاظ می‌شود
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </BottomSheet>

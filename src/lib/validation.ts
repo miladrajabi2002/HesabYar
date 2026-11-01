@@ -51,6 +51,20 @@ export const personRoleSchema = z.enum(["CUSTOMER", "SUPPLIER", "BOTH"], {
   message: "نقش شخص نامعتبر است",
 })
 
+/**
+ * مانده اولیه شخص (حساب قدیمی) — می‌تواند مثبت (طلب ما) یا منفی (بدهی ما) باشد.
+ * اگر ارسال نشود undefined برمی‌گردد تا در ویرایش، مقدار قبلی دست‌نخورده بماند
+ * (در ایجاد، Prisma از @default(0) استفاده می‌کند).
+ */
+export const personOpeningBalanceSchema = z
+  .union([z.number(), z.string()])
+  .optional()
+  .transform((v) => {
+    if (v === undefined || v === "") return undefined
+    const n = Math.round(Number(toLatinDigits(String(v)).replace(/[^\d.-]/g, "")) || 0)
+    return Number.isFinite(n) ? n : 0
+  })
+
 export const personCreateSchema = z.object({
   name: requiredText(2, 100, "نام"),
   phone: optionalText(20),
@@ -58,6 +72,7 @@ export const personCreateSchema = z.object({
   shopAddress: optionalText(300),
   role: personRoleSchema.default("BOTH"),
   note: optionalText(500),
+  openingBalance: personOpeningBalanceSchema,
 })
 
 export const personUpdateSchema = personCreateSchema.partial().extend({

@@ -24,6 +24,7 @@ import { formatTomanCompact } from "@/lib/money"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { AmountInput } from "@/components/ui/amount-input"
 import { RoleAvatar } from "@/components/ui/role-avatar"
 import { cn } from "@/lib/utils"
 
@@ -298,10 +299,17 @@ export function AddPersonSheet({
   const [company, setCompany] = useState("")
   const [shopAddress, setShopAddress] = useState("")
   const [role, setRole] = useState<"CUSTOMER" | "SUPPLIER" | "BOTH">(initialRole as "CUSTOMER")
+  // ── مانده اولیه (حساب قدیمی) ──
+  // none = بدون مانده | receivable = شخص به ما بدهکار است (طلب ما)
+  // payable = ما به شخص بدهکاریم (بدهی ما)
+  const [openingKind, setOpeningKind] = useState<"none" | "receivable" | "payable">("none")
+  const [openingAmount, setOpeningAmount] = useState(0)
   const [saving, setSaving] = useState(false)
 
   const submit = async () => {
     if (name.trim().length < 2) return toast.error("نام را وارد کنید")
+    if (openingKind !== "none" && openingAmount <= 0)
+      return toast.error("مبلغ مانده اولیه را وارد کنید")
     setSaving(true)
     try {
       const r = await apiPost<{ person: Person }>("/api/people", {
@@ -310,12 +318,17 @@ export function AddPersonSheet({
         company: company || undefined,
         shopAddress: shopAddress || undefined,
         role,
+        // مثبت = طلب اولیه ما از شخص | منفی = بدهی اولیه ما به شخص
+        openingBalance:
+          openingKind === "none" ? 0 : openingKind === "receivable" ? openingAmount : -openingAmount,
       })
       toast.success("شخص ثبت شد ✅")
       setName("")
       setPhone("")
       setCompany("")
       setShopAddress("")
+      setOpeningKind("none")
+      setOpeningAmount(0)
       await onCreated(r.person)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "خطا در ثبت")
@@ -403,6 +416,49 @@ export function AddPersonSheet({
               </button>
             ))}
           </div>
+        </div>
+        {/* ── مانده اولیه (حساب قدیمی) ── */}
+        <div>
+          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            مانده اولیه (حساب قبلی)
+          </label>
+          <div className="flex gap-1.5">
+            {(
+              [
+                { key: "none", label: "بدون مانده" },
+                { key: "receivable", label: "طلب اولیه" },
+                { key: "payable", label: "بدهی اولیه" },
+              ] as const
+            ).map((k) => (
+              <button
+                key={k.key}
+                type="button"
+                onClick={() => setOpeningKind(k.key)}
+                className={cn(
+                  "flex-1 rounded-xl border py-2 text-[0.7rem] font-bold transition-colors",
+                  openingKind === k.key
+                    ? k.key === "receivable"
+                      ? "border-warning bg-warning/10 text-warning"
+                      : k.key === "payable"
+                        ? "border-destructive bg-destructive/10 text-destructive"
+                        : "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground"
+                )}
+              >
+                {k.label}
+              </button>
+            ))}
+          </div>
+          {openingKind !== "none" && (
+            <div className="mt-2">
+              <AmountInput value={openingAmount} onChange={setOpeningAmount} showWords={false} />
+              <p className="mt-1 text-[0.62rem] text-muted-foreground">
+                {openingKind === "receivable"
+                  ? "این شخص از قبل به شما بدهکار است (طلب شما)"
+                  : "شما از قبل به این شخص بدهکار هستید"} — در تراز شخص لحاظ می‌شود
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </BottomSheet>

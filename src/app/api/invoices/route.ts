@@ -45,11 +45,31 @@ export async function GET(req: NextRequest) {
       include: {
         person: { select: { id: true, name: true, company: true, phone: true } },
         account: { select: { id: true, name: true, bankKey: true } },
-        items: { select: { id: true, productName: true, quantity: true, unit: true, total: true } },
+        items: {
+          select: {
+            id: true,
+            productName: true,
+            quantity: true,
+            unit: true,
+            unitPrice: true,
+            costPrice: true, // برای سود هر فاکتور فروش (فقط نمایش داخلی)
+            total: true,
+          },
+        },
         checks: { select: { id: true, amount: true, bankKey: true, dueDate: true, status: true } },
       },
     })
-    return ok({ invoices, total, page: f.page, pageSize: f.pageSize })
+
+    // جمع سود ناخالص فاکتورهای فروشِ همین فیلتر (چیپ سود بالای لیست)
+    const profitRows = await db.invoiceItem.findMany({
+      where: { invoice: { ...where, type: "SALE" } },
+      select: { quantity: true, unitPrice: true, costPrice: true },
+    })
+    const totalProfit = Math.round(
+      profitRows.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0)
+    )
+
+    return ok({ invoices, total, totalProfit, page: f.page, pageSize: f.pageSize })
   } catch (e) {
     return serverError(e)
   }
