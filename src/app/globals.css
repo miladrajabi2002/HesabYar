@@ -238,3 +238,57 @@
     );
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   چاپ فاکتور رسمی (UI-04)
+   فقط ناحیهٔ .print-area چاپ می‌شود؛ بقیهٔ رابط (سایدبار، منوی شناور،
+   هدر و دکمه‌ها) با تکنیک کلاسیک visibility پنهان می‌شود و خروجی
+   A4 با حاشیهٔ ۱۲ میلی‌متری صادر می‌گردد.
+   ═══════════════════════════════════════════════════════════ */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  /* پنهان‌سازی کل رابط، نمایش فقط ناحیه چاپ */
+  body * {
+    visibility: hidden !important;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible !important;
+  }
+  .print-area {
+    position: absolute !important;
+    inset: 0;
+    width: 100%;
+    /* خنثی‌کردن ظاهر اپ: بدون سایه و قاب، روی کاغذ سفید */
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+    color: #000 !important;
+    /* چاپ دقیق رنگ‌ها (لوگوی فیروزه‌ای، ردیف‌های سایه‌دار و…) */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* کاغذ سفید — پس‌زمینهٔ تیرهٔ اپ چاپ نشود */
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* کمربند و بندکولی برای عناصر تعاملی داخل ناحیه چاپ
+     (Tailwind خودش print:hidden را می‌سازد؛ این برای اطمینان بیشتر است) */
+  .print-area .print\:hidden {
+    display: none !important;
+  }
+
+  /* شکستن تمیز صفحه‌ها در فاکتورهای بلند */
+  .print-area tr,
+  .print-area img,
+  .print-area .avoid-break {
+    break-inside: avoid;
+  }
+}

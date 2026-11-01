@@ -1,10 +1,53 @@
 /**
  * بکاپ و بازیابی دیتابیس SQLite — lib/backup.ts
+ * SEC-08: رمزگذاری AES-256-GCM اختیاری برای فایل بکاپ هنگام دانلود.
  */
+import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { db } from "./db"
 import { jalaliOf } from "./jalali"
+
+const ENC_MAGIC = "HESABYAR-ENC1" // ۱۴ بایت
+
+/** مشتق‌سازی کلید از رمز با scrypt */
+function deriveKey(password: string, salt: Buffer): Buffer {
+  return crypto.scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 })
+}
+
+/** رمزگذاری فایل بکاپ — قالب: magic + salt(16) + iv(12) + ciphertext + authTag */
+export function encryptBackup(data: Buffer, password: string): Buffer {
+  const salt = crypto.randomBytes(16)
+  const iv = crypto.randomBytes(12)
+  const key = deriveKey(password, salt)
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv)
+  const enc = Buffer.concat([cipher.update(data), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return Buffer.concat([Buffer.from(ENC_MAGIC, "utf8"), salt, iv, enc, tag])
+}
+
+/** آیا فایل رمزگذاری‌شده حساب‌یار است؟ */
+export function isEncryptedBackup(data: Buffer): boolean {
+  return data.subarray(0, ENC_MAGIC.length).toString("utf8") === ENC_MAGIC
+}
+
+/** رمزگشایی فایل بکاپ رمزدار */
+export function decryptBackup(data: Buffer, password: string): Buffer {
+  if (!isEncryptedBackup(data)) return data
+  const body = data.subarray(ENC_MAGIC.length)
+  const salt = body.subarray(0, 16)
+  const iv = body.subarray(16, 28)
+  const tag = body.subarray(body.length - 16)
+  const enc = body.subarray(28, body.length - 16)
+  const key = deriveKey(password, salt)
+  try {
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(enc), decipher.final()])
+  } catch {
+    throw new Error("رمز عبور فایل بکاپ اشتباه است یا فایل خراب است")
+  }
+}
 
 /** مسیر فیزیکی فایل دیتابیس (پشتیبانی از مسیر نسبی و مطلق) */
 export function getDbPath(): string {
@@ -73,13 +116,19 @@ export function listBackups(): { name: string; size: number; mtime: string }[] {
 /**
  * بازیابی از فایل آپلودی — با اعتبارسنجی هدر SQLite و
  * بکاپ خودکار از وضعیت فعلی پیش از جایگزینی.
+ * فایل رمزگذاری‌شده (SEC-08) با رمز همراه فایل باز می‌شود.
  */
-export async function restoreBackup(data: Buffer): Promise<void> {
-  const header = data.subarray(0, 16).toString("utf8")
+export async function restoreBackup(data: Buffer, password?: string): Promise<void> {
+  let buf = data
+  if (isEncryptedBackup(data)) {
+    if (!password) throw new Error("این فایل بکاپ رمزدار است — رمز عبورش را وارد کنید")
+    buf = decryptBackup(data, password)
+  }
+  const header = buf.subarray(0, 16).toString("utf8")
   if (header !== "SQLite format 3\u0000") {
     throw new Error("فایل ارسالی یک دیتابیس SQLite معتبر نیست")
   }
-  if (data.length < 512) {
+  if (buf.length < 512) {
     throw new Error("فایل دیتابیس ناقص است")
   }
   // بکاپ از وضعیت فعلی پیش از جایگزینی
@@ -87,7 +136,7 @@ export async function restoreBackup(data: Buffer): Promise<void> {
   // قطع اتصال‌های باز
   await db.$disconnect().catch(() => null)
   const dbPath = getDbPath()
-  fs.writeFileSync(dbPath, data)
+  fs.writeFileSync(dbPath, buf)
   for (const ext of ["-wal", "-shm"]) {
     try {
       fs.unlinkSync(dbPath + ext)

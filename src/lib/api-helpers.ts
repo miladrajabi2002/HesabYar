@@ -56,7 +56,7 @@ export async function requireApiAuth(req: Request): Promise<NextResponse | null>
   const token = extractCookie(req, SESSION_COOKIE)
   if (token && verifySessionToken(token)) return null
 
-  // ۲) مینی‌اپ تلگرام (سخت‌گیرانه)
+  // ۲) مینی‌اپ تلگرام (سخت‌گیرانه) — SEC-04: fail-closed
   const initData = req.headers.get("x-telegram-init-data")
   if (initData) {
     const setting = await db.setting.findUnique({ where: { id: "default" } }).catch(() => null)
@@ -65,7 +65,11 @@ export async function requireApiAuth(req: Request): Promise<NextResponse | null>
     if (botToken) {
       const result = validateInitData(initData, botToken)
       if (result.valid) {
-        if (!adminChatId || String(result.user?.id ?? "") === adminChatId) return null
+        // SEC-04: اگر شناسه ادمین تنظیم نشده باشد، هیچ کاربر تلگرامی‌ای مجاز نیست
+        if (!adminChatId) {
+          return fail("شناسه ادمین تلگرام تنظیم نشده — دسترسی مینی‌اپ مسدود است", 401)
+        }
+        if (String(result.user?.id ?? "") === adminChatId) return null
         return fail("دسترسی به این حساب‌یار فقط برای ادمین مجاز است", 401)
       }
       return fail(result.error || "اعتبارسنجی تلگرام ناموفق بود", 401)

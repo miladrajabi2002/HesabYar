@@ -18,9 +18,22 @@ export async function GET(req: NextRequest) {
     const { data: f, error } = parseQuery(req, invoiceFilterSchema)
     if (error) return error
 
+    // IMP-01: جستجوی سروری — روی شماره فاکتور، نام شخص و نام جنس اقلام
+    const numberQuery = Number((f.q || "").replace(/[^\d]/g, ""))
     const where = {
       ...(f.type ? { type: f.type } : {}),
       ...(f.personId ? { personId: f.personId } : {}),
+      ...(f.q
+        ? {
+            OR: [
+              ...(Number.isFinite(numberQuery) && numberQuery > 0
+                ? [{ number: numberQuery }]
+                : []),
+              { person: { name: { contains: f.q } } },
+              { items: { some: { productName: { contains: f.q } } } },
+            ],
+          }
+        : {}),
     }
     const total = await db.invoice.count({ where })
 

@@ -23,6 +23,7 @@ import {
   TrendingUp,
   TrendingDown,
   Wallet,
+  Download,
 } from "lucide-react"
 import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
@@ -401,6 +402,36 @@ export default function ProductsPage() {
   const [sheet, setSheet] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
   const [detail, setDetail] = useState<Product | null>(null)
+  const [exporting, setExporting] = useState(false)
+
+  // ADV-02: دانلود مطمئن CSV — window.location.href داخل مینی‌اپ تلگرام کوکی نشست ندارد
+  // (احراز هویت فقط با هدر x-telegram-init-data)؛ پس با fetch + blob دانلود می‌کنیم.
+  const downloadCsv = async (type: "invoices" | "people" | "products") => {
+    try {
+      setExporting(true)
+      const headers: Record<string, string> = {}
+      const initData = window.Telegram?.WebApp?.initData
+      if (initData) headers["x-telegram-init-data"] = initData
+      const res = await fetch(`/api/export?type=${type}`, { headers })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "خروجی ناموفق بود")
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      const cd = res.headers.get("content-disposition") || ""
+      const m = /filename="?([^";]+)"?/.exec(cd)
+      a.href = url
+      a.download = m?.[1] || `hesabyar-${type}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      toast.success("فایل اکسل دانلود شد")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا در خروجی")
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const params = new URLSearchParams()
   if (q) params.set("q", q)
@@ -420,16 +451,28 @@ export default function ProductsPage() {
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-lg font-extrabold sm:text-xl">اجناس</h1>
-        <Button
-          onClick={() => {
-            setEditing(null)
-            setSheet(true)
-          }}
-          className="h-10 rounded-2xl px-4 text-xs font-bold shadow-fab"
-        >
-          <Plus className="size-4" />
-          جنس جدید
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => downloadCsv("products")}
+            variant="outline"
+            disabled={exporting}
+            className="h-10 rounded-2xl px-4 text-xs font-bold hover:bg-accent"
+            aria-label="خروجی اکسل اجناس"
+          >
+            {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            <span className="hidden sm:inline">اکسل</span>
+          </Button>
+          <Button
+            onClick={() => {
+              setEditing(null)
+              setSheet(true)
+            }}
+            className="h-10 rounded-2xl px-4 text-xs font-bold shadow-fab"
+          >
+            <Plus className="size-4" />
+            جنس جدید
+          </Button>
+        </div>
       </div>
 
       {/* خلاصه */}

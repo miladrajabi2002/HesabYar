@@ -2,12 +2,12 @@
 
 /**
  * باتم‌شیت موبایل — ایده از پروژه vignet
- * موبایل: از پایین با انیمیشن فنری بالا می‌آید + دستگیره درگ
+ * موبایل: از پایین با انیمیشن فنری بالا می‌آید + درگ واقعی دستگیره برای بستن (MO-04)
  * دسکتاپ: به دیالگ وسط صفحه تبدیل می‌شود
  */
-import { Fragment, ReactNode, useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
+import { Fragment, ReactNode, useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { AnimatePresence, motion, useDragControls, useReducedMotion, type PanInfo } from "framer-motion"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { acquireBodyScrollLock } from "@/lib/body-scroll-lock"
@@ -70,6 +70,16 @@ export function BottomSheet({
   const onCloseRef = useRef(onClose)
   const [isDesktop, setIsDesktop] = useState(false)
   const reduceMotion = useReducedMotion()
+  // MO-04: درگ واقعی برای بستن — فقط از دستگیره شروع می‌شود تا اسکرول محتوا سالم بماند
+  const dragControls = useDragControls()
+
+  const onDragEnd = useCallback((_: unknown, info: PanInfo) => {
+    const { offset, velocity } = info
+    // اگر زیاد کشید یا سریع پرتاب کرد → بسته شود؛ وگرنه فنر برمی‌گرداند
+    if (offset.y > 120 || velocity.y > 600) {
+      onCloseRef.current()
+    }
+  }, [])
 
   // تشخیص سمت کلاینت بدون setState داخل افکت
   const mounted = useSyncExternalStore(
@@ -173,7 +183,7 @@ export function BottomSheet({
             className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-[2px]"
           />
 
-          {/* پنل */}
+          {/* پنل — MO-04: در موبایل با کشیدن دستگیره به پایین بسته می‌شود */}
           <motion.div
             ref={panelRef}
             role="dialog"
@@ -181,6 +191,13 @@ export function BottomSheet({
             aria-labelledby={title ? titleId : undefined}
             tabIndex={-1}
             style={{ maxHeight }}
+            drag={asDialog || reduceMotion ? false : "y"}
+            dragListener={false}
+            dragControls={dragControls}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 0.6 }}
+            dragMomentum={false}
+            onDragEnd={onDragEnd}
             variants={asDialog ? dialogVariants : reduceMotion ? undefined : sheetVariants}
             initial={asDialog ? "hidden" : reduceMotion ? { opacity: 0 } : "hidden"}
             animate={asDialog ? "visible" : reduceMotion ? { opacity: 1 } : "visible"}
@@ -193,12 +210,15 @@ export function BottomSheet({
               className
             )}
           >
-            {/* دستگیره + هدر */}
+            {/* دستگیره + هدر — دستگیره واقعاً قابل کشیدن است (MO-04) */}
             {!hideHeader && (
               <div className="relative shrink-0 border-b border-border/60 bg-card/95 px-4 pb-3 pt-2 backdrop-blur-xl">
                 <span
                   aria-hidden
-                  className="mx-auto mb-2 block h-1.5 w-11 rounded-full bg-foreground/15"
+                  onPointerDown={(e) => {
+                    if (!asDialog && !reduceMotion) dragControls.start(e)
+                  }}
+                  className="mx-auto mb-2 block h-[1.4rem] w-16 cursor-grab touch-none rounded-full transition-colors hover:bg-foreground/10 active:cursor-grabbing active:bg-foreground/15"
                 />
                 <div className="flex min-h-9 items-center gap-3">
                   <div className="min-w-0 flex-1">
@@ -224,7 +244,10 @@ export function BottomSheet({
             {hideHeader && open && (
               <span
                 aria-hidden
-                className="absolute left-1/2 top-1.5 z-10 h-1.5 w-11 -translate-x-1/2 rounded-full bg-foreground/15"
+                onPointerDown={(e) => {
+                  if (!asDialog && !reduceMotion) dragControls.start(e)
+                }}
+                className="absolute left-1/2 top-1.5 z-10 h-[1.4rem] w-16 -translate-x-1/2 cursor-grab touch-none rounded-full hover:bg-foreground/10"
               />
             )}
 

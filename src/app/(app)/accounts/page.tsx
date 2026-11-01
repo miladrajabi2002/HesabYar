@@ -19,6 +19,7 @@ import { formatToman, toLatinDigits, toPersianDigits } from "@/lib/money"
 import { BANKS, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
+import { showUndoToast } from "@/components/ui/undo-toast"
 import { AmountInput } from "@/components/ui/amount-input"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -281,11 +282,23 @@ export default function AccountsPage() {
   }
 
   const archive = async (a: Account) => {
-    if (!confirm(`حساب «${a.name}» بایگانی شود؟ از لیست حذف می‌شود ولی تاریخچه می‌ماند.`)) return
+    // IMP-09: بایگانی نرم و برگشت‌پذیر است (PATCH isArchived) — بدون پنجره تأیید،
+    // عملیات فوری + توست «بازگردانی» با ۵ ثانیه فرصت.
     try {
       await apiPatch(`/api/accounts/${a.id}`, { isArchived: true })
-      toast.success("بایگانی شد")
       await queryClient.invalidateQueries({ queryKey: ["accounts"] })
+      showUndoToast({
+        message: "حساب بایگانی شد",
+        onUndo: async () => {
+          try {
+            await apiPatch(`/api/accounts/${a.id}`, { isArchived: false })
+            await queryClient.invalidateQueries({ queryKey: ["accounts"] })
+            toast.success("بازگردانی شد")
+          } catch {
+            toast.error("بازگردانی حساب ناموفق بود")
+          }
+        },
+      })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "خطا")
     }

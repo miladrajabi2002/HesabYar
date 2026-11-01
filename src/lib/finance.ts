@@ -27,7 +27,7 @@ export async function getAccountBalance(accountId: string): Promise<number> {
   return account.initialBalance + (ins._sum.amount ?? 0) - (outs._sum.amount ?? 0)
 }
 
-/** تراز همه حساب‌های فعال */
+/** تراز همه حساب‌های فعال — IMP-06: با دو groupBy به‌جای N+1 */
 export async function getAccountBalances(): Promise<
   { id: string; name: string; bankKey: string; initialBalance: number; balance: number }[]
 > {
@@ -36,11 +36,24 @@ export async function getAccountBalances(): Promise<
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, bankKey: true, initialBalance: true },
   })
-  const result: { id: string; name: string; bankKey: string; initialBalance: number; balance: number }[] = []
-  for (const a of accounts) {
-    result.push({ ...a, balance: await getAccountBalance(a.id) })
-  }
-  return result
+  const [ins, outs] = await Promise.all([
+    db.transaction.groupBy({
+      by: ["accountId"],
+      where: { direction: "IN" },
+      _sum: { amount: true },
+    }),
+    db.transaction.groupBy({
+      by: ["accountId"],
+      where: { direction: "OUT" },
+      _sum: { amount: true },
+    }),
+  ])
+  const inMap = new Map(ins.map((g) => [g.accountId, g._sum.amount ?? 0]))
+  const outMap = new Map(outs.map((g) => [g.accountId, g._sum.amount ?? 0]))
+  return accounts.map((a) => ({
+    ...a,
+    balance: a.initialBalance + (inMap.get(a.id) ?? 0) - (outMap.get(a.id) ?? 0),
+  }))
 }
 
 // ───────────────────────── تراز اشخاص ─────────────────────────
@@ -78,13 +91,36 @@ export async function getPersonBalance(personId: string): Promise<number> {
   )
 }
 
-/** تراز همه اشخاص فعال، مرتب بر اساس بدهی/طلب مطلق */
+/** تراز همه اشخاص فعال — IMP-06: با groupBy به‌جای ۴×N کوئری */
 export async function getPersonBalances(): Promise<Map<string, number>> {
+  const [saleCredits, purchaseCredits, receives, pays] = await Promise.all([
+    db.invoice.groupBy({
+      by: ["personId"],
+      where: { type: "SALE" },
+      _sum: { credit: true },
+    }),
+    db.invoice.groupBy({
+      by: ["personId"],
+      where: { type: "PURCHASE" },
+      _sum: { credit: true },
+    }),
+    db.settlement.groupBy({
+      by: ["personId"],
+      where: { direction: "RECEIVE", invoiceId: null },
+      _sum: { amount: true },
+    }),
+    db.settlement.groupBy({
+      by: ["personId"],
+      where: { direction: "PAY", invoiceId: null },
+      _sum: { amount: true },
+    }),
+  ])
   const map = new Map<string, number>()
-  const people = await db.person.findMany({ where: { isArchived: false }, select: { id: true } })
-  for (const p of people) {
-    map.set(p.id, await getPersonBalance(p.id))
-  }
+  const add = (id: string, delta: number) => map.set(id, (map.get(id) ?? 0) + delta)
+  saleCredits.forEach((g) => add(g.personId, g._sum.credit ?? 0))
+  purchaseCredits.forEach((g) => add(g.personId, -(g._sum.credit ?? 0)))
+  receives.forEach((g) => add(g.personId, -(g._sum.amount ?? 0)))
+  pays.forEach((g) => add(g.personId, g._sum.amount ?? 0))
   return map
 }
 

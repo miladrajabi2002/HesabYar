@@ -2,8 +2,10 @@
 
 /**
  * چک‌ها — دریافتی/صادره با وضعیت پاس، برگشت و سررسید
+ * + پیوست‌های تصویری چک در شیت عملیات (ADV-04)
+ * + تأیید لغو چک با ConfirmSheet یکدست (UI-05)
  */
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -18,14 +20,19 @@ import {
   CheckCircle2,
   Clock3,
   Ban,
+  FileText,
+  ImagePlus,
+  Paperclip,
+  X,
 } from "lucide-react"
-import { apiGet, apiPatch } from "@/lib/api-client"
+import { apiDelete, apiGet, apiPatch } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliWithWeekday, nowTehran, diffJalaliDays, startOfJalaliDay } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
+import { useConfirm } from "@/components/ui/confirm"
 import { cn } from "@/lib/utils"
 
 interface Check {
@@ -49,6 +56,63 @@ interface Account {
   balance: number
 }
 
+/** پیوست چک — مطابق select در GET /api/attachments */
+interface Attachment {
+  id: string
+  filename: string
+  mime: string
+  size: number
+  createdAt: string
+}
+
+/** حد مجاز حجم پیوست — همان MAX_SIZE مسیر /api/attachments */
+const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024 // ۸ مگابایت
+
+/** initData مینی‌اپ تلگرام — همان منطق lib/api-client (در وب، کوکی نشست خودکار ارسال می‌شود) */
+function telegramInitData(): string | null {
+  if (typeof window === "undefined") return null
+  return window.Telegram?.WebApp?.initData ?? null
+}
+
+/**
+ * آپلود پیوست با fetch خام — چون apiUpload روی بدنهٔ FormData هدر
+ * content-type: application/json می‌گذارد و req.formData() سمت سرور با آن
+ * قابل خواندن نیست، آپلود multipart مستقیم با هدر احراز هویت فرستاده می‌شود
+ * تا مرورگر boundary را خودش تعیین کند.
+ */
+async function postAttachmentForm(path: string, fd: FormData): Promise<void> {
+  const initData = telegramInitData()
+  const headers: Record<string, string> = {}
+  if (initData) headers["x-telegram-init-data"] = initData
+  const res = await fetch(path, { method: "POST", headers, body: fd })
+  if (!res.ok) {
+    let msg = "آپلود پیوست ناموفق بود"
+    try {
+      const j = (await res.json()) as { error?: string }
+      if (j?.error) msg = j.error
+    } catch {
+      /* پاسخ غیر JSON */
+    }
+    if (res.status === 401 && !initData && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login"
+    }
+    throw new Error(msg)
+  }
+}
+
+/**
+ * دانلود خود پیوست به‌صورت Blob و ساخت objectURL — مسیر GET ?id= احراز هویت
+ * می‌خواهد و <img src> ساده (بدون کوکی نشست وب یا هدر مینی‌اپ) ۴۰۱ می‌گیرد.
+ */
+async function fetchAttachmentObjectUrl(id: string): Promise<string> {
+  const initData = telegramInitData()
+  const headers: Record<string, string> = {}
+  if (initData) headers["x-telegram-init-data"] = initData
+  const res = await fetch(`/api/attachments?id=${id}`, { headers })
+  if (!res.ok) throw new Error("دریافت پیوست ناموفق بود")
+  return URL.createObjectURL(await res.blob())
+}
+
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "در جریان",
   CASHED: "پاس‌شده",
@@ -58,6 +122,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function ChecksPage() {
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
   const [direction, setDirection] = useState<"ALL" | "RECEIVED" | "ISSUED">("ALL")
   const [status, setStatus] = useState<"PENDING" | "CASHED" | "BOUNCED" | "ALL">("PENDING")
   const [actionSheet, setActionSheet] = useState<Check | null>(null)
@@ -84,6 +149,61 @@ export default function ChecksPage() {
     queryFn: () => apiGet<{ accounts: Account[] }>("/api/accounts"),
     enabled: accountSheet,
   })
+
+  /* ── پیوست‌های تصویری چک (ADV-04) — فقط برای چکی که شیت عملیاتش باز است ── */
+  const activeCheckId = actionSheet?.id
+  const { data: attData, isLoading: attLoading } = useQuery({
+    queryKey: ["attachments", "CHECK", activeCheckId],
+    queryFn: () =>
+      apiGet<{ attachments: Attachment[] }>(`/api/attachments?refType=CHECK&refId=${activeCheckId}`),
+    enabled: !!activeCheckId,
+  })
+  const checkAttachments = attData?.attachments ?? []
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [preview, setPreview] = useState<Attachment | null>(null)
+  const [imgUrls, setImgUrls] = useState<Record<string, string>>({})
+  const objectUrlsRef = useRef<Map<string, string>>(new Map())
+
+  /** کلید پایدار لیست تصویرها تا objectURL ها فقط یک‌بار و به‌ترتیب دانلود شوند */
+  const imageIdsKey = checkAttachments
+    .filter((a) => a.mime.startsWith("image/"))
+    .map((a) => a.id)
+    .join("|")
+
+  useEffect(() => {
+    const ids = imageIdsKey ? imageIdsKey.split("|") : []
+    let cancelled = false
+    ;(async () => {
+      for (const attId of ids) {
+        if (objectUrlsRef.current.has(attId)) continue
+        try {
+          const url = await fetchAttachmentObjectUrl(attId)
+          if (cancelled) {
+            URL.revokeObjectURL(url)
+          } else {
+            objectUrlsRef.current.set(attId, url)
+            setImgUrls((prev) => (prev[attId] === url ? prev : { ...prev, [attId]: url }))
+          }
+        } catch {
+          /* دانلود این پیوست ناموفق — جای اسکلت لودینگ می‌ماند */
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [imageIdsKey])
+
+  /** آزادسازی همهٔ objectURL ها هنگام ترک صفحه */
+  useEffect(() => {
+    const urls = objectUrlsRef.current
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u))
+      urls.clear()
+    }
+  }, [])
 
   const checks = data?.checks ?? []
   const summary = data?.summary
@@ -119,7 +239,17 @@ export default function ChecksPage() {
   }
 
   const cancelCheck = async (check: Check) => {
-    if (!confirm("چک لغو شود؟ مبلغش به حساب شخص برمی‌گردد.")) return
+    if (
+      !(
+        await confirm({
+          title: "لغو چک",
+          description: "چک لغو شود؟ مبلغش به حساب شخص برمی‌گردد.",
+          confirmText: "بله، لغو کن",
+          tone: "danger",
+        })
+      )
+    )
+      return
     setSaving(true)
     try {
       await apiPatch(`/api/checks/${check.id}`, { status: "CANCELED" })
@@ -130,6 +260,81 @@ export default function ChecksPage() {
       toast.error(e instanceof Error ? e.message : "خطا در لغو")
     } finally {
       setSaving(false)
+    }
+  }
+
+  /* ── افزودن پیوست تصویری به چک (ADV-04) ── */
+  const onPickImages = async (files: FileList | null) => {
+    // FileList نمایندهٔ زندهٔ انتخاب input است؛ باید پیش از ریست‌کردن value اسنپ‌شات شود
+    const check = actionSheet
+    if (!check) return
+    const picked = files ? Array.from(files) : []
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (picked.length === 0) return
+    const valid: File[] = []
+    for (const f of picked) {
+      if (!f.type.startsWith("image/")) {
+        toast.error(`«${f.name}» تصویر نیست — فقط تصویر مجاز است`)
+        continue
+      }
+      if (f.size > MAX_ATTACHMENT_SIZE) {
+        toast.error(`حجم «${f.name}» بیش از ۸ مگابایت است`)
+        continue
+      }
+      valid.push(f)
+    }
+    if (valid.length === 0) return
+
+    setUploading(true)
+    let okCount = 0
+    try {
+      for (const f of valid) {
+        const fd = new FormData()
+        fd.append("file", f)
+        fd.append("refType", "CHECK")
+        fd.append("refId", check.id)
+        await postAttachmentForm("/api/attachments", fd)
+        okCount++
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "آپلود پیوست ناموفق بود")
+    } finally {
+      setUploading(false)
+    }
+    if (okCount > 0) {
+      toast.success(okCount > 1 ? `${toPersianDigits(okCount)} تصویر پیوست شد ✅` : "تصویر پیوست شد ✅")
+      await queryClient.invalidateQueries({ queryKey: ["attachments", "CHECK", check.id] })
+    }
+  }
+
+  /* ── حذف پیوست تصویری چک ── */
+  const removeAttachment = async (att: Attachment) => {
+    const check = actionSheet
+    if (!check) return
+    const okRemove = await confirm({
+      title: "حذف تصویر",
+      description: `تصویر «${att.filename}» برای همیشه حذف شود؟`,
+      confirmText: "بله، حذف کن",
+      tone: "danger",
+    })
+    if (!okRemove) return
+    try {
+      await apiDelete(`/api/attachments?id=${att.id}`)
+      if (preview?.id === att.id) setPreview(null)
+      const url = objectUrlsRef.current.get(att.id)
+      if (url) {
+        URL.revokeObjectURL(url)
+        objectUrlsRef.current.delete(att.id)
+        setImgUrls((prev) => {
+          const next = { ...prev }
+          delete next[att.id]
+          return next
+        })
+      }
+      toast.success("پیوست حذف شد")
+      await queryClient.invalidateQueries({ queryKey: ["attachments", "CHECK", check.id] })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "حذف پیوست ناموفق بود")
     }
   }
 
@@ -377,6 +582,98 @@ export default function ChecksPage() {
               tone="danger"
               onClick={() => cancelCheck(actionSheet)}
             />
+
+            {/* پیوست‌های تصویری چک (ADV-04) — نوار بندانگشتی‌ها داخل همان شیت */}
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5 text-xs font-bold">
+                  <Paperclip className="size-3.5 shrink-0 text-primary" />
+                  <span className="truncate">پیوست‌های چک</span>
+                  <span className="nums shrink-0 rounded-full bg-muted px-1.5 py-px text-[0.6rem] font-bold text-muted-foreground">
+                    {toPersianDigits(checkAttachments.length)}
+                  </span>
+                  {attLoading && <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="h-8 shrink-0 rounded-xl px-2.5 text-[0.7rem] font-bold"
+                >
+                  {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
+                  {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
+                </Button>
+              </div>
+
+              {checkAttachments.length === 0 && !attLoading ? (
+                <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-[0.68rem] leading-relaxed text-muted-foreground">
+                  تصویری پیوست نشده — عکس چک را اضافه کنید تا همین‌جا آرشیو شود.
+                </p>
+              ) : (
+                <div className="grid grid-cols-4 gap-2">
+                  {checkAttachments.map((att) => {
+                    const isImage = att.mime.startsWith("image/")
+                    const url = imgUrls[att.id]
+                    return (
+                      <div
+                        key={att.id}
+                        className="relative aspect-square overflow-hidden rounded-xl border border-border/60 bg-muted/40"
+                      >
+                        {isImage ? (
+                          url ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreview(att)}
+                              aria-label={`پیش‌نمایش ${att.filename}`}
+                              className="size-full cursor-zoom-in transition-transform duration-150 active:scale-95"
+                            >
+                              <img src={url} alt={att.filename} className="size-full object-cover" loading="lazy" />
+                            </button>
+                          ) : (
+                            <div
+                              className="flex size-full items-center justify-center"
+                              aria-label="در حال بارگذاری پیوست"
+                            >
+                              <Loader2 className="size-4 animate-spin text-muted-foreground/60" />
+                            </div>
+                          )
+                        ) : (
+                          <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
+                            <FileText className="size-5 text-muted-foreground" />
+                            <span className="w-full truncate text-[0.55rem] text-muted-foreground">
+                              {att.filename}
+                            </span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(att)}
+                          aria-label={`حذف تصویر ${att.filename}`}
+                          className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
+                        >
+                          <X className="size-3" strokeWidth={2.4} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                className="hidden"
+                onChange={(e) => onPickImages(e.target.files)}
+                aria-hidden="true"
+                tabIndex={-1}
+              />
+            </div>
           </div>
         )}
       </BottomSheet>
@@ -400,6 +697,34 @@ export default function ChecksPage() {
           ))}
           {(accountsData?.accounts ?? []).length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">حساب بانکی ثبت نشده</p>
+          )}
+        </div>
+      </BottomSheet>
+
+      {/* پیش‌نمایش تمام‌صفحه پیوست چک (ADV-04) — روی شیت عملیات باز می‌شود */}
+      <BottomSheet
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        title="پیش‌نمایش پیوست"
+        description={preview?.filename}
+      >
+        <div className="space-y-3">
+          {preview && imgUrls[preview.id] ? (
+            <img
+              src={imgUrls[preview.id]}
+              alt={preview.filename}
+              className="mx-auto max-h-[64dvh] max-w-full rounded-xl object-contain"
+            />
+          ) : (
+            <div className="flex h-56 items-center justify-center">
+              <Loader2 className="size-8 animate-spin text-primary" />
+            </div>
+          )}
+          {preview && (
+            <p className="text-center text-xs text-muted-foreground">
+              {preview.filename} •{" "}
+              <span className="nums">{toPersianDigits(Math.max(1, Math.round(preview.size / 1024)))} کیلوبایت</span>
+            </p>
           )}
         </div>
       </BottomSheet>

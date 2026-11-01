@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { TelegramProvider } from "@/hooks/use-telegram"
+import { ConfirmProvider } from "@/components/ui/confirm"
+import { PWAProvider } from "@/components/pwa/pwa-provider"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -55,8 +57,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <TelegramProvider>
-          {children}
-          <Toaster position="top-center" dir="rtl" richColors closeButton expand={false} />
+          <PWAProvider>
+            <ConfirmProvider>
+              {children}
+              <Toaster position="top-center" dir="rtl" richColors closeButton expand={false} />
+            </ConfirmProvider>
+          </PWAProvider>
         </TelegramProvider>
       </TooltipProvider>
     </QueryClientProvider>

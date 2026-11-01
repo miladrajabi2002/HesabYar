@@ -1,8 +1,8 @@
 "use client"
 
-import { ReactNode } from "react"
+import { ReactNode, useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   LayoutDashboard,
@@ -19,6 +19,7 @@ import {
   Send,
   ArrowDownLeft,
   ArrowUpRight,
+  CalendarDays,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTelegram } from "@/hooks/use-telegram"
@@ -26,6 +27,7 @@ import { useUIStore } from "@/lib/ui-store"
 import { formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { SheetOption } from "@/components/ui/bottom-sheet"
+import { GlobalSearch, SearchTrigger } from "@/components/search/global-search"
 
 export const NAV_ITEMS = [
   { href: "/", label: "داشبورد", icon: LayoutDashboard },
@@ -34,6 +36,7 @@ export const NAV_ITEMS = [
   { href: "/checks", label: "چک‌ها", icon: CheckSquare },
   { href: "/products", label: "اجناس", icon: Package },
   { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark },
+  { href: "/calendar", label: "تقویم مالی", icon: CalendarDays },
   { href: "/reports", label: "گزارش‌ها", icon: BarChart3 },
   { href: "/settings", label: "تنظیمات", icon: Settings },
 ] as const
@@ -43,6 +46,7 @@ const MORE_ITEMS = [
   { href: "/checks", label: "چک‌ها", icon: CheckSquare, desc: "سررسید و پاس چک‌ها" },
   { href: "/products", label: "اجناس", icon: Package, desc: "موجودی انبار" },
   { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark, desc: "گردش حساب‌ها" },
+  { href: "/calendar", label: "تقویم مالی", icon: CalendarDays, desc: "سررسیدهای ماه" },
   { href: "/reports", label: "گزارش‌ها", icon: BarChart3, desc: "سود و فروش" },
   { href: "/settings", label: "تنظیمات", icon: Settings, desc: "ربات، بکاپ و…" },
 ] as const
@@ -86,9 +90,11 @@ function SidebarItem({
 /** پوسته اصلی: سایدبار دسکتاپ + منوی شناور موبایل (ایده vignet) + شیت فاکتور جدید */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const { isTelegram } = useTelegram()
   const { moreSheetOpen, setMoreSheetOpen, addSheetOpen, openAddSheet, closeAddSheet } =
     useUIStore()
+  const [searchOpen, setSearchOpen] = useState(false)
 
   const showSidebar = !isTelegram
   const today = formatJalaliWithWeekday(nowTehran())
@@ -158,14 +164,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="nums text-[0.68rem] leading-tight text-muted-foreground">{today}</div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setMoreSheetOpen(true)}
-            aria-label="بیشتر"
-            className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent"
-          >
-            <Ellipsis className="size-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <SearchTrigger onOpen={() => setSearchOpen(true)} />
+            <button
+              type="button"
+              onClick={() => setMoreSheetOpen(true)}
+              aria-label="بیشتر"
+              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent"
+            >
+              <Ellipsis className="size-5" />
+            </button>
+          </div>
         </header>
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-44 pt-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-8">
@@ -230,6 +239,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </button>
       </nav>
 
+      {/* جستجوی سراسری (ADV-01) */}
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+
       {/* شیت «فاکتور جدید» — انتخاب نوع */}
       <BottomSheet
         open={addSheetOpen}
@@ -246,7 +258,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             tone="primary"
             onClick={() => {
               closeAddSheet()
-              window.location.href = "/invoices/new?type=SALE"
+              router.push("/invoices/new?type=SALE")
             }}
           />
           <SheetOption
@@ -255,13 +267,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             subtitle="جنس خریدم — از تأمین‌کننده"
             onClick={() => {
               closeAddSheet()
-              window.location.href = "/invoices/new?type=PURCHASE"
+              router.push("/invoices/new?type=PURCHASE")
             }}
           />
         </div>
       </BottomSheet>
 
-      {/* شیت «بیشتر» */}
+      {/* شیت «بیشتر» — IMP-03: ناوبری نرم بدون ریلود کامل */}
       <BottomSheet
         open={moreSheetOpen}
         onClose={() => setMoreSheetOpen(false)}
@@ -278,7 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               selected={isMainNav(item.href)}
               onClick={() => {
                 setMoreSheetOpen(false)
-                window.location.href = item.href
+                router.push(item.href)
               }}
             />
           ))}

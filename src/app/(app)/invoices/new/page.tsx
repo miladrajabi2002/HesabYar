@@ -3,11 +3,32 @@
 /**
  * فاکتور جدید — خرید/فروش چندقلمی با انتخاب شخص (افزودن سریع)،
  * پرداخت نقدی/چک/نسیه. موبایل‌محور با باتم‌شیت.
+ * IMP-05: دکمه ثبت بومی تلگرام • IMP-08: ذخیره خودکار پیش‌نویس
+ * MO-02: جشن موفقیت + هپتیک • UI-08: جمع زنده با انیمیشن،
+ * جابجایی اقلام با dnd-kit + اعتبارسنجی زندهٔ اقلام و تخفیف
  */
 import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { AnimatePresence, motion } from "framer-motion"
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import {
   UserPlus,
   Users,
@@ -23,6 +44,7 @@ import {
   Package,
   Building2,
   Pencil,
+  GripVertical,
 } from "lucide-react"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
@@ -38,6 +60,9 @@ import { Input } from "@/components/ui/input"
 import { BANKS, getBank } from "@/lib/banks"
 import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
 import { cn } from "@/lib/utils"
+import { useTelegram, useTelegramBackButton, useTelegramMainButton } from "@/hooks/use-telegram"
+import { SuccessCelebration } from "@/components/ui/success-celebration"
+import { AnimatedNumber } from "@/components/ui/animated-number"
 
 // ───────── تایپ‌ها ─────────
 interface Person {
@@ -69,6 +94,11 @@ interface DraftItem {
   quantity: number
   unitPrice: number
 }
+
+/** ردیف قلم با شناسهٔ پایدار برای جابجایی dnd-kit (UI-08) */
+type InvoiceItemRow = DraftItem & { rowId: string }
+let itemRowSeq = 0
+const genRowId = () => `item-${++itemRowSeq}`
 interface DraftCheck {
   amount: number
   bankKey: string
@@ -104,19 +134,24 @@ function NewInvoicePageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
+  const { haptic } = useTelegram()
+  const [celebrate, setCelebrate] = useState(false)
 
   const [type, setType] = useState<"SALE" | "PURCHASE">(
     searchParams.get("type") === "PURCHASE" ? "PURCHASE" : "SALE"
   )
   const [date, setDate] = useState(todayKey())
   const [person, setPerson] = useState<Person | null>(null)
-  const [items, setItems] = useState<DraftItem[]>([])
+  const [items, setItems] = useState<InvoiceItemRow[]>([])
   const [discount, setDiscount] = useState(0)
   const [paidCash, setPaidCash] = useState(0)
   const [account, setAccount] = useState<Account | null>(null)
   const [checks, setChecks] = useState<DraftCheck[]>([])
   const [note, setNote] = useState("")
   const [saving, setSaving] = useState(false)
+  // UI-08: اعتبارسنجی زنده — خطاها فقط بعد از تعامل کاربر نمایش داده می‌شوند (نه روی باز شدن فرم)
+  const [submitAttempted, setSubmitAttempted] = useState(false)
+  const [discountTouched, setDiscountTouched] = useState(false)
 
   // حالت ویرایش: /invoices/new?edit=<id>
   const editId = searchParams.get("edit")
@@ -139,6 +174,7 @@ function NewInvoicePageInner() {
     setPerson({ ...inv.person })
     setItems(
       inv.items.map((it) => ({
+        rowId: genRowId(),
         productId: it.productId,
         name: it.productName,
         brand: it.brand,
@@ -161,6 +197,80 @@ function NewInvoicePageInner() {
     setNote(inv.note ?? "")
     editAccountIdRef.current = inv.account?.id ?? null
   }, [editData])
+
+  // IMP-08: ذخیره خودکار پیش‌نویس — اگر مینی‌اپ وسط کار بسته شود اقلام نیمه‌کاره از بین نمی‌روند
+  const DRAFT_KEY = "hesabyar-invoice-draft-v1"
+  const draftHydratedRef = useRef(false)
+  useEffect(() => {
+    if (editId || draftHydratedRef.current) return
+    draftHydratedRef.current = true
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (!raw) return
+      const d = JSON.parse(raw) as {
+        type: "SALE" | "PURCHASE"
+        date: string
+        person: Person | null
+        items: DraftItem[]
+        discount: number
+        paidCash: number
+        accountId: string | null
+        checks: DraftCheck[]
+        note: string
+        savedAt: number
+      }
+      // فقط پیش‌نویس‌های تازه (۴۸ ساعت) و غیرخالی
+      const isMeaningful = (d.items?.length ?? 0) > 0 || !!d.person
+      if (!isMeaningful || Date.now() - (d.savedAt ?? 0) > 48 * 3600_000) {
+        localStorage.removeItem(DRAFT_KEY)
+        return
+      }
+      setType(d.type)
+      setDate(d.date || todayKey())
+      setPerson(d.person ?? null)
+      setItems((d.items ?? []).map((it) => ({ ...it, rowId: genRowId() })))
+      setDiscount(d.discount ?? 0)
+      setPaidCash(d.paidCash ?? 0)
+      setChecks(d.checks ?? [])
+      setNote(d.note ?? "")
+      editAccountIdRef.current = d.accountId
+      toast.info("پیش‌نویس ذخیره‌شده بازیابی شد 📝")
+    } catch {
+      /* ignore */
+    }
+  }, [editId])
+
+  // ذخیره‌ی خودکار با debounce
+  useEffect(() => {
+    if (editId) return
+    const t = setTimeout(() => {
+      try {
+        const meaningful = items.length > 0 || !!person
+        if (meaningful) {
+          localStorage.setItem(
+            DRAFT_KEY,
+            JSON.stringify({
+              type,
+              date,
+              person,
+              items,
+              discount,
+              paidCash,
+              accountId: account?.id ?? null,
+              checks,
+              note,
+              savedAt: Date.now(),
+            })
+          )
+        } else {
+          localStorage.removeItem(DRAFT_KEY)
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 600)
+    return () => clearTimeout(t)
+  }, [editId, type, date, person, items, discount, paidCash, account, checks, note])
 
   // شیت‌ها
   const [personSheet, setPersonSheet] = useState(false)
@@ -205,15 +315,85 @@ function NewInvoicePageInner() {
   // مازاد پرداخت: نقدی + چک بیشتر از مبلغ فاکتور → علی‌الحساب شخص می‌رود
   const excess = Math.max(0, paidCash + checkTotal - total)
 
+  // ───────── UI-08: اعتبارسنجی زنده ─────────
+  const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map())
+  const personSectionRef = useRef<HTMLElement | null>(null)
+  const dateFieldRef = useRef<HTMLDivElement | null>(null)
+  const discountFieldRef = useRef<HTMLDivElement | null>(null)
+
+  const itemRowErrors = useMemo(
+    () =>
+      items.map((it) => {
+        if (!it.name?.trim()) return "نام جنس ناقص است"
+        if (!(it.quantity > 0)) return "تعداد باید بیش از صفر باشد"
+        if (it.unitPrice < 0) return "قیمت واحد نمی‌تواند منفی باشد"
+        return null
+      }),
+    [items]
+  )
+  const hasItemErrors = itemRowErrors.some((e) => e !== null)
+  // تخفیف بیشتر از جمع اقلام خطا محسوب می‌شود
+  const discountExceeds = items.length > 0 && discount > subtotal
+  const hasErrors = hasItemErrors || discountExceeds || !date
+
+  // نمایش خطا فقط بعد از «لمس» — تا فرم روی باز شدن فریاد نزند
+  const showPersonError = submitAttempted && !person
+  const showDateError = submitAttempted && !date
+  const showDiscountError = (discountTouched || submitAttempted) && discountExceeds
+
+  // ───────── UI-08: جابجایی اقلام (dnd-kit) ─────────
+  const itemIds = useMemo(() => items.map((i) => i.rowId), [items])
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+  // جابجایی از همان setItems فعلی می‌گذرد تا جمع کل، پیش‌نویس و اعتبارسنجی خودکار آپدیت شوند
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return
+    setItems((prev) => {
+      const from = prev.findIndex((r) => r.rowId === String(active.id))
+      const to = prev.findIndex((r) => r.rowId === String(over.id))
+      if (from < 0 || to < 0 || from === to) return prev
+      return arrayMove(prev, from, to)
+    })
+    haptic.tap()
+  }
+
   const personTypeLabel = type === "SALE" ? "مشتری" : "تأمین‌کننده"
 
   // اگر فاکتور ویرایشی چک نقدشده/برگشتی دارد، فقط قابل مشاهده است
   const lockedChecks =
     !!editId && (editData?.invoice.checks.some((c) => c.status && c.status !== "PENDING") ?? false)
 
+  // دکمه برگشت بومی تلگرام (IMP-02)
+  useTelegramBackButton()
+
+  const submitRef = useRef<() => void>(() => {})
+
   const submit = async () => {
-    if (!person) return toast.error("ابتدا شخص را انتخاب کنید")
+    setSubmitAttempted(true)
+    if (!person) {
+      haptic.error()
+      personSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      return toast.error("ابتدا شخص را انتخاب کنید")
+    }
     if (items.length === 0) return toast.error("حداقل یک قلم اضافه کنید")
+    // UI-08: خطاهای اعتبارسنجی زنده — اسکرول به اولین ردیف نامعتبر + هپتیک خطا
+    if (hasErrors) {
+      haptic.error()
+      toast.error("چند مورد ناقص است")
+      const firstBad = itemRowErrors.findIndex((e) => e !== null)
+      if (firstBad >= 0) {
+        rowRefs.current
+          .get(items[firstBad].rowId)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" })
+      } else if (discountExceeds) {
+        discountFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      } else if (!date) {
+        dateFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      }
+      return
+    }
     if (paidCash > 0 && !account) {
       setAccountSheet(true)
       return toast.error("برای پرداخت نقدی، حساب بانکی را انتخاب کنید")
@@ -237,11 +417,23 @@ function NewInvoicePageInner() {
         note: note || undefined,
       }
       const r = editId
-        ? await apiPut<{ invoice: { id: string; number: number }; excess: number }>(
+        ? await apiPut<{ invoice: { id: string; number: number }; excess: number; queuedOffline?: boolean }>(
             `/api/invoices/${editId}`,
             payload
           )
-        : await apiPost<{ invoice: { id: string; number: number }; excess: number }>("/api/invoices", payload)
+        : await apiPost<{ invoice: { id: string; number: number }; excess: number; queuedOffline?: boolean }>("/api/invoices", payload)
+      // ADV-10: اگر آفلاین صف شده باشد پاسخ متفاوت است
+      if (r && (r as { queuedOffline?: boolean }).queuedOffline) {
+        toast.info("آفلاین هستید — فاکتور ذخیره شد و بعد از اتصال خودکار ثبت می‌شود 📥")
+        haptic.warning()
+        localStorage.removeItem(DRAFT_KEY)
+        await queryClient.invalidateQueries()
+        router.push("/invoices")
+        return
+      }
+      // MO-02: جشن موفقیت + هپتیک تلگرام
+      setCelebrate(true)
+      haptic.success()
       toast.success(
         editId
           ? `فاکتور شماره ${toPersianDigits(r.invoice.number)} ویرایش شد ✅`
@@ -250,14 +442,28 @@ function NewInvoicePageInner() {
       if (r.excess > 0) {
         toast.info(`مازاد ${formatToman(r.excess)} به علی‌الحساب «${person.name}» اضافه شد`)
       }
+      // پاک‌سازی پیش‌نویس بعد از ثبت موفق
+      if (!editId) localStorage.removeItem(DRAFT_KEY)
       await queryClient.invalidateQueries()
-      router.push(`/invoices/${r.invoice.id}`)
+      setTimeout(() => router.push(`/invoices/${r.invoice.id}`), 1150)
     } catch (e) {
+      haptic.error()
       toast.error(e instanceof Error ? e.message : "ثبت فاکتور ناموفق بود")
     } finally {
       setSaving(false)
     }
   }
+  submitRef.current = submit
+
+  // IMP-05: دکمه ثبت بومی تلگرام — فرم با دکمه پایین خود تلگرام ثبت می‌شود
+  useTelegramMainButton({
+    visible: !lockedChecks,
+    text: editId ? "ذخیره تغییرات" : "ثبت فاکتور",
+    enabled: !!person && items.length > 0 && !saving && !hasErrors,
+    loading: saving,
+    color: type === "SALE" ? "#16a34a" : "#e5484d",
+    onClick: () => submitRef.current(),
+  })
 
   return (
     <div className="pb-2">
@@ -306,7 +512,10 @@ function NewInvoicePageInner() {
 
       <div className="space-y-4">
         {/* ───────── شخص ───────── */}
-        <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
+        <section
+          ref={personSectionRef}
+          className="rounded-3xl border border-border/70 bg-card p-4 shadow-card"
+        >
           <div className="mb-3 flex items-center gap-2 text-sm font-bold">
             <Users className="size-4 text-primary" />
             {type === "SALE" ? "فروختم به" : "خریدم از"}
@@ -335,11 +544,21 @@ function NewInvoicePageInner() {
             <button
               type="button"
               onClick={() => setPersonSheet(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-input py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed py-3.5 text-sm font-medium transition-colors",
+                showPersonError
+                  ? "border-destructive/60 text-destructive"
+                  : "border-input text-muted-foreground hover:border-primary/40 hover:text-primary"
+              )}
             >
               <UserPlus className="size-4" />
               انتخاب {personTypeLabel}
             </button>
+          )}
+          {showPersonError && (
+            <p className="mt-1.5 text-[0.65rem] font-medium text-destructive">
+              برای ثبت فاکتور، انتخاب {personTypeLabel} الزامی است
+            </p>
           )}
         </section>
 
@@ -348,52 +567,54 @@ function NewInvoicePageInner() {
           <div className="mb-3 flex items-center gap-2 text-sm font-bold">
             <Package className="size-4 text-primary" />
             اقلام فاکتور
+            {items.length > 0 && (
+              <span className="nums rounded-full bg-primary/10 px-2 py-0.5 text-[0.65rem] font-bold text-primary">
+                {toPersianDigits(items.length)}
+              </span>
+            )}
           </div>
 
-          <div className="space-y-2">
-            {items.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/40 px-3 py-2.5"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-bold">
-                    {item.name}
-                    {item.brand ? <span className="text-muted-foreground"> — {item.brand}</span> : null}
-                  </div>
-                  <div className="nums mt-1 text-[0.7rem] text-muted-foreground">
-                    {toPersianDigits(item.quantity)} {formatUnit(item.unit)} ×{" "}
-                    {formatToman(item.unitPrice, false)} ={" "}
-                    <span className="font-bold text-foreground">
-                      {formatToman(Math.round(item.quantity * item.unitPrice), false)}
-                    </span>
-                  </div>
-                </div>
+          {/* UI-08: جابجایی ترتیب اقلام با درگ — دستگیرهٔ سمت راست هر ردیف */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={() => haptic.medium()}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {items.map((item, idx) => (
+                  <SortableItemRow
+                    key={item.rowId}
+                    rowId={item.rowId}
+                    item={item}
+                    error={submitAttempted ? itemRowErrors[idx] : null}
+                    onRemove={() => setItems(items.filter((_, i) => i !== idx))}
+                    registerNode={(id, el) => {
+                      if (el) rowRefs.current.set(id, el)
+                      else rowRefs.current.delete(id)
+                    }}
+                  />
+                ))}
+
                 <button
                   type="button"
-                  onClick={() => setItems(items.filter((_, i) => i !== idx))}
-                  className="rounded-xl p-2 text-destructive/70 transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="حذف قلم"
+                  onClick={() => setItemSheet(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-input py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary active:scale-[0.98]"
                 >
-                  <Trash2 className="size-4" />
+                  <PackagePlus className="size-4" />
+                  افزودن جنس
                 </button>
               </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={() => setItemSheet(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-input py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
-            >
-              <PackagePlus className="size-4" />
-              افزودن جنس
-            </button>
-          </div>
+            </SortableContext>
+          </DndContext>
 
           {items.length > 0 && (
             <div className="mt-3 flex items-center justify-between border-t border-dashed pt-3 text-sm">
               <span className="text-muted-foreground">جمع اقلام</span>
-              <span className="nums font-extrabold">{formatToman(subtotal, false)}</span>
+              <span className="nums font-extrabold">
+                <AnimatedNumber value={subtotal} duration={500} format={(n) => formatToman(n, false)} />
+              </span>
             </div>
           )}
         </section>
@@ -412,17 +633,35 @@ function NewInvoicePageInner() {
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div>
+            <div ref={dateFieldRef}>
               <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
                 تاریخ فاکتور
               </label>
               <JalaliDateField value={date} onChange={setDate} />
+              {showDateError && (
+                <p className="mt-1 text-[0.65rem] font-medium text-destructive">
+                  تاریخ فاکتور را انتخاب کنید
+                </p>
+              )}
             </div>
-            <div>
+            <div ref={discountFieldRef}>
               <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
                 تخفیف (تومان)
               </label>
-              <AmountInput value={discount} onChange={setDiscount} placeholder="بدون تخفیف" showWords={false} />
+              <AmountInput
+                value={discount}
+                onChange={(v) => {
+                  setDiscount(v)
+                  setDiscountTouched(true)
+                }}
+                placeholder="بدون تخفیف"
+                showWords={false}
+              />
+              {showDiscountError && (
+                <p className="mt-1 text-[0.65rem] font-medium text-destructive">
+                  تخفیف بیشتر از جمع اقلام است
+                </p>
+              )}
             </div>
           </div>
 
@@ -568,13 +807,13 @@ function NewInvoicePageInner() {
           <div className="min-w-0 flex-1">
             <div className="text-[0.65rem] text-muted-foreground">مبلغ نهایی فاکتور</div>
             <div className="nums truncate text-base font-extrabold sm:text-lg">
-              {formatToman(total, false)}
+              <AnimatedNumber value={total} duration={500} format={(n) => formatToman(n, false)} />
               <span className="ms-1 text-[0.65rem] font-medium text-muted-foreground">تومان</span>
             </div>
           </div>
           <Button
             onClick={submit}
-            disabled={saving || !person || items.length === 0 || lockedChecks}
+            disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors}
             className={cn(
               "h-12 rounded-2xl px-8 text-sm font-bold shadow-fab",
               type === "SALE" ? "bg-income hover:bg-income/90" : "bg-destructive hover:bg-destructive/90"
@@ -621,7 +860,7 @@ function NewInvoicePageInner() {
         onClose={() => setItemSheet(false)}
         products={productsData?.products ?? []}
         onAdd={(item) => {
-          setItems((prev) => [...prev, item])
+          setItems((prev) => [...prev, { ...item, rowId: genRowId() }])
           setItemSheet(false)
         }}
       />
@@ -661,6 +900,78 @@ function NewInvoicePageInner() {
         }}
         suggestedAmount={Math.max(0, total - paidCash - checkTotal)}
       />
+    </div>
+  )
+}
+
+// ═══════════════ ردیف قابل جابجایی اقلام (UI-08 — dnd-kit) ═══════════════
+function SortableItemRow({
+  rowId,
+  item,
+  error,
+  onRemove,
+  registerNode,
+}: {
+  rowId: string
+  item: DraftItem
+  error: string | null
+  onRemove: () => void
+  registerNode: (id: string, el: HTMLDivElement | null) => void
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: rowId })
+  return (
+    <div
+      ref={(el) => {
+        setNodeRef(el)
+        registerNode(rowId, el)
+      }}
+      style={{
+        // فقط Translate — چرخش/اسکیلِ transform در RTL گلیچ می‌کند
+        transform: CSS.Translate.toString(transform),
+        transition,
+      }}
+      className={cn(
+        "rounded-2xl border bg-muted/40 px-3 py-2.5",
+        error ? "border-destructive/60" : "border-border/60",
+        isDragging && "relative z-10 scale-[1.02] border-border bg-card shadow-lg"
+      )}
+    >
+      <div className="flex items-center gap-3">
+        {/* دستگیرهٔ جابجایی — لبهٔ راست (RTL)؛ درگ فقط از همین دستگیره شروع می‌شود */}
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label="جابجایی این قلم"
+          className="touch-none cursor-grab active:cursor-grabbing rounded-xl p-1.5 text-muted-foreground/60 transition-colors hover:bg-accent/60 hover:text-muted-foreground"
+        >
+          <GripVertical className="size-4" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-bold">
+            {item.name}
+            {item.brand ? <span className="text-muted-foreground"> — {item.brand}</span> : null}
+          </div>
+          <div className="nums mt-1 text-[0.7rem] text-muted-foreground">
+            {toPersianDigits(item.quantity)} {formatUnit(item.unit)} ×{" "}
+            {formatToman(item.unitPrice, false)} ={" "}
+            <span className="font-bold text-foreground">
+              {formatToman(Math.round(item.quantity * item.unitPrice), false)}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded-xl p-2 text-destructive/70 transition-colors hover:bg-destructive/10 hover:text-destructive"
+          aria-label="حذف قلم"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+      {error && <p className="mt-1 text-[0.65rem] font-medium text-destructive">{error}</p>}
     </div>
   )
 }

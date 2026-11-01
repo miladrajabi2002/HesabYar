@@ -198,3 +198,38 @@ model Setting {
   miniAppUrl        String?
   checkDueDaysBefore Int    @default(3) // چند روز قبل سررسید چک خبر بدهد
 }
+
+// ───────────────────────── Passkey (ورود بیومتریک Face ID / Touch ID) ─────────────────────────
+model Passkey {
+  id           String    @id @default(cuid())
+  credentialId String    @unique // base64url از WebAuthn
+  publicKey    String // کلید عمومی COSE به base64
+  counter      Int       @default(0)
+  deviceName   String    @default("دستگاه ناشناس")
+  transports   String? // جدا‌شده با کاما
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+}
+
+// ───────────────────────── اشتراک نوتیفیکیشن وب (Web Push) ─────────────────────────
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+// ───────────────────────── پیوست تصویر (چک / فاکتور / شخص) ─────────────────────────
+model Attachment {
+  id        String   @id @default(cuid())
+  refType   String // CHECK | INVOICE | PERSON
+  refId     String
+  filename  String
+  mime      String
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@index([refType, refId])
+}

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import fs from "node:fs"
 import { fail, requireApiAuth, serverError } from "@/lib/api-helpers"
-import { createBackup } from "@/lib/backup"
+import { createBackup, encryptBackup } from "@/lib/backup"
 import { jalaliOf } from "@/lib/jalali"
 import { clientIp, rateLimit } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-/** GET /api/backup — دانلود فایل بکاپ دیتابیس با نام تاریخ شمسی */
+/** GET /api/backup — دانلود فایل بکاپ دیتابیس با نام تاریخ شمسی
+ * SEC-08: با پارامتر password فایل با AES-256-GCM رمزگذاری می‌شود */
 export async function GET(req: NextRequest) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
@@ -17,11 +18,13 @@ export async function GET(req: NextRequest) {
   if (!rl.ok) return fail(`درخواست‌های زیاد؛ ${rl.retryAfterSec} ثانیه دیگر امتحان کنید`, 429)
 
   try {
+    const password = new URL(req.url).searchParams.get("password")?.trim() || ""
     const filePath = await createBackup()
-    const buffer = fs.readFileSync(filePath)
+    const raw = fs.readFileSync(filePath)
+    const buffer = password.length >= 4 ? encryptBackup(raw, password) : raw
     const j = jalaliOf(new Date())
     const p = (n: number) => String(n).padStart(2, "0")
-    const name = `hesab-yar-backup-${j.jy}-${p(j.jm)}-${p(j.jd)}.db`
+    const name = `hesab-yar-backup-${j.jy}-${p(j.jm)}-${p(j.jd)}.db${password ? ".enc" : ""}`
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

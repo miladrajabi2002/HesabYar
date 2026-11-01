@@ -2,8 +2,9 @@
 
 /**
  * پروفایل شخص — مشخصات، تراز، فاکتورها، چک‌ها، تسویه‌ها + ثبت تسویه
+ * + اشتراک صورتحساب در واتس‌اپ/سیستمی/کپی (ADV-06) + گالری تصاویر شخص (ADV-04)
  */
-import { use, useState } from "react"
+import { use, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -21,10 +22,16 @@ import {
   MapPin,
   Loader2,
   CheckCheck,
+  Copy,
+  ImagePlus,
+  Images,
+  MessageCircle,
+  Share2,
+  X,
 } from "lucide-react"
-import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
-import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
-import { formatJalaliShort } from "@/lib/jalali"
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client"
+import { formatToman, formatTomanCompact, toLatinDigits, toPersianDigits } from "@/lib/money"
+import { formatJalaliShort, formatJalaliWithWeekday } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
@@ -33,6 +40,9 @@ import { JalaliDateField } from "@/components/ui/jalali-date-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useConfirm } from "@/components/ui/confirm"
+import { useTelegram } from "@/hooks/use-telegram"
 
 interface PersonDetail {
   person: {
@@ -80,10 +90,86 @@ interface Account {
   balance: number
 }
 
+/** پیوست تصویری شخص — مطابق select در GET /api/attachments (ADV-04) */
+interface Attachment {
+  id: string
+  filename: string
+  mime: string
+  size: number
+  createdAt: string
+}
+
+/** حد مجاز حجم پیوست — همان MAX_SIZE مسیر /api/attachments */
+const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024 // ۸ مگابایت
+
+/** جداکننده بخش‌های متن صورتحساب اشتراکی (ADV-06) */
+const SHARE_SEPARATOR = "——————————"
+
+/** initData مینی‌اپ تلگرام — همان منطق lib/api-client (در وب، کوکی نشست خودکار ارسال می‌شود) */
+function telegramInitData(): string | null {
+  if (typeof window === "undefined") return null
+  return window.Telegram?.WebApp?.initData ?? null
+}
+
+/**
+ * آپلود پیوست با fetch خام — چون apiUpload روی بدنهٔ FormData هدر
+ * content-type: application/json می‌گذارد و req.formData() سمت سرور با آن
+ * قابل خواندن نیست («فایل ارسال نشده است»)، آپلود multipart مستقیم با
+ * هدر احراز هویت فرستاده می‌شود تا مرورگر boundary را خودش تعیین کند.
+ */
+async function postAttachmentForm(path: string, fd: FormData): Promise<void> {
+  const initData = telegramInitData()
+  const headers: Record<string, string> = {}
+  if (initData) headers["x-telegram-init-data"] = initData
+  const res = await fetch(path, { method: "POST", headers, body: fd })
+  if (!res.ok) {
+    let msg = "آپلود تصویر ناموفق بود"
+    try {
+      const j = (await res.json()) as { error?: string }
+      if (j?.error) msg = j.error
+    } catch {
+      /* پاسخ غیر JSON */
+    }
+    if (res.status === 401 && !initData && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login"
+    }
+    throw new Error(msg)
+  }
+}
+
+/**
+ * دانلود خود پیوست به‌صورت Blob و ساخت objectURL — مسیر GET ?id= احراز هویت
+ * می‌خواهد و <img src> ساده (بدون کوکی نشست وب یا هدر مینی‌اپ) ۴۰۱ می‌گیرد.
+ */
+async function fetchAttachmentObjectUrl(id: string): Promise<string> {
+  const initData = telegramInitData()
+  const headers: Record<string, string> = {}
+  if (initData) headers["x-telegram-init-data"] = initData
+  const res = await fetch(`/api/attachments?id=${id}`, { headers })
+  if (!res.ok) throw new Error("دریافت تصویر ناموفق بود")
+  return URL.createObjectURL(await res.blob())
+}
+
+/**
+ * نرمال‌سازی شماره موبایل برای wa.me — فرمت بین‌المللی بدون + (مثل 98912…):
+ * ارقام فارسی/عربی → لاتین، حذف +/فاصله/خط تیره، سپس ۰۰۹۸/۰/۹۱۲… → 98…
+ */
+function normalizeWaPhone(raw: string): string | null {
+  const digits = toLatinDigits(raw).replace(/\D/g, "")
+  if (!digits) return null
+  if (digits.startsWith("0098")) return `98${digits.slice(4)}`
+  if (digits.startsWith("98") && digits.length >= 12) return digits
+  if (digits.startsWith("0")) return `98${digits.slice(1)}`
+  if (digits.startsWith("9") && digits.length === 10) return `98${digits}`
+  return digits.length >= 8 ? digits : null
+}
+
 export default function PersonPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { confirm } = useConfirm()
+  const { webApp } = useTelegram()
 
   const { data, isLoading } = useQuery({
     queryKey: ["person", id],
@@ -116,6 +202,64 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     queryFn: () => apiGet<{ accounts: Account[] }>("/api/accounts"),
     enabled: settleSheet,
   })
+
+  /* ── اشتراک صورتحساب (ADV-06) ── */
+  const [shareSheet, setShareSheet] = useState(false)
+  // قابلیت اشتراک سیستمی — فقط سمت کلاینت معتبر است؛ شیت همیشه بسته رندر می‌شود
+  // (شیت اشتراک فقط با تعامل کاربر باز می‌شود) پس روی hydration اثری ندارد.
+  const canSystemShare = typeof navigator !== "undefined" && typeof navigator.share === "function"
+
+  /* ── گالری تصاویر شخص (ADV-04) ── */
+  const { data: attData, isLoading: attLoading } = useQuery({
+    queryKey: ["attachments", "PERSON", id],
+    queryFn: () => apiGet<{ attachments: Attachment[] }>(`/api/attachments?refType=PERSON&refId=${id}`),
+  })
+  const attachments = attData?.attachments ?? []
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [preview, setPreview] = useState<Attachment | null>(null)
+  const [imgUrls, setImgUrls] = useState<Record<string, string>>({})
+  const objectUrlsRef = useRef<Map<string, string>>(new Map())
+
+  /** کلید پایدار لیست تصویرها تا objectURL ها فقط یک‌بار و به‌ترتیب دانلود شوند */
+  const imageIdsKey = attachments
+    .filter((a) => a.mime.startsWith("image/"))
+    .map((a) => a.id)
+    .join("|")
+
+  useEffect(() => {
+    const ids = imageIdsKey ? imageIdsKey.split("|") : []
+    let cancelled = false
+    ;(async () => {
+      for (const attId of ids) {
+        if (objectUrlsRef.current.has(attId)) continue
+        try {
+          const url = await fetchAttachmentObjectUrl(attId)
+          if (cancelled) {
+            URL.revokeObjectURL(url)
+          } else {
+            objectUrlsRef.current.set(attId, url)
+            setImgUrls((prev) => (prev[attId] === url ? prev : { ...prev, [attId]: url }))
+          }
+        } catch {
+          /* دانلود این تصویر ناموفق — اسکلت لودینگ جای خود می‌ماند */
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [imageIdsKey])
+
+  /** آزادسازی همهٔ objectURL ها هنگام ترک صفحه */
+  useEffect(() => {
+    const urls = objectUrlsRef.current
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u))
+      urls.clear()
+    }
+  }, [])
 
   if (isLoading || !data) {
     return (
@@ -197,6 +341,163 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       toast.error(e instanceof Error ? e.message : "خطا در ثبت تسویه")
     } finally {
       setSaving(false)
+    }
+  }
+
+  /* ── ADV-06: متن صورتحساب فارسی برای اشتراک ── */
+  const buildShareText = () => {
+    const lines: string[] = []
+    lines.push(`🧾 صورتحساب «${p.name}»`)
+    lines.push(`تاریخ: ${formatJalaliWithWeekday(new Date())}`)
+    lines.push(SHARE_SEPARATOR)
+    if (balance > 0) {
+      lines.push(`مانده حساب: ${formatToman(balance, false)} تومان (طلب کاربر)`)
+    } else if (balance < 0) {
+      lines.push(`مانده حساب: ${formatToman(Math.abs(balance), false)} تومان (بستانکار)`)
+    } else {
+      lines.push("مانده حساب: تسویه کامل ✓")
+    }
+    lines.push(SHARE_SEPARATOR)
+    lines.push("آخرین تراکنش‌ها:")
+    const txns = [
+      ...data.invoices.map((inv) => ({
+        at: new Date(inv.date).getTime(),
+        line: `• فاکتور ${toPersianDigits(inv.number)} — ${formatJalaliShort(new Date(inv.date))} — ${formatToman(inv.total, false)} تومان (${inv.type === "SALE" ? "فروش" : "خرید"})`,
+      })),
+      ...data.settlements.map((s) => ({
+        at: new Date(s.date).getTime(),
+        line: `• تسویه — ${formatJalaliShort(new Date(s.date))} — ${formatToman(s.amount, false)} تومان (${s.direction === "RECEIVE" ? "دریافت" : "پرداخت"}${s.method === "CASH" ? " نقدی" : " چکی"})`,
+      })),
+      ...data.checks.map((c) => ({
+        at: new Date(c.dueDate).getTime(),
+        line: `• چک${c.serial ? ` ${toPersianDigits(c.serial)}` : ""} — ${formatJalaliShort(new Date(c.dueDate))} — ${formatToman(c.amount, false)} تومان (${c.direction === "RECEIVE" ? "دریافت" : "پرداخت"})`,
+      })),
+    ].sort((a, b) => b.at - a.at)
+    if (txns.length === 0) {
+      lines.push("• تراکنشی ثبت نشده است")
+    } else {
+      lines.push(...txns.slice(0, 5).map((t) => t.line))
+    }
+    lines.push(SHARE_SEPARATOR)
+    lines.push("ارسال شده با حساب‌یار 🌿")
+    return lines.join("\n")
+  }
+
+  /** بازکردن لینک خارجی — داخل مینی‌اپ تلگرام با openLink بومی، وگرنه window.open */
+  const openExternal = (url: string) => {
+    const tg = webApp as unknown as { openLink?: (url: string) => void } | null
+    if (typeof tg?.openLink === "function") {
+      try {
+        tg.openLink(url)
+        return
+      } catch {
+        /* افتادن به window.open */
+      }
+    }
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+
+  const waPhone = p.phone ? normalizeWaPhone(p.phone) : null
+
+  const shareWhatsApp = () => {
+    const text = buildShareText()
+    const base = waPhone ? `https://wa.me/${waPhone}` : "https://wa.me/"
+    setShareSheet(false)
+    openExternal(`${base}?text=${encodeURIComponent(text)}`)
+  }
+
+  const shareSystem = async () => {
+    const text = buildShareText()
+    setShareSheet(false)
+    try {
+      await navigator.share({ text })
+    } catch (e) {
+      // لغو توسط کاربر (AbortError) بی‌صدا نادیده گرفته می‌شود
+      if ((e as DOMException)?.name !== "AbortError") {
+        toast.error("اشتراک‌گذاری سیستمی ناموفق بود")
+      }
+    }
+  }
+
+  const shareCopy = async () => {
+    const text = buildShareText()
+    setShareSheet(false)
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("متن صورتحساب کپی شد ✅")
+    } catch {
+      toast.error("کپی متن ناموفق بود")
+    }
+  }
+
+  /* ── ADV-04: افزودن تصویر به گالری شخص ── */
+  const onPickImages = async (files: FileList | null) => {
+    // FileList نمایندهٔ زندهٔ انتخاب input است؛ باید پیش از ریست‌کردن value اسنپ‌شات شود
+    const picked = files ? Array.from(files) : []
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (picked.length === 0) return
+    const valid: File[] = []
+    for (const f of picked) {
+      if (!f.type.startsWith("image/")) {
+        toast.error(`«${f.name}» تصویر نیست — فقط تصویر مجاز است`)
+        continue
+      }
+      if (f.size > MAX_ATTACHMENT_SIZE) {
+        toast.error(`حجم «${f.name}» بیش از ۸ مگابایت است`)
+        continue
+      }
+      valid.push(f)
+    }
+    if (valid.length === 0) return
+
+    setUploading(true)
+    let okCount = 0
+    try {
+      for (const f of valid) {
+        const fd = new FormData()
+        fd.append("file", f)
+        fd.append("refType", "PERSON")
+        fd.append("refId", id)
+        await postAttachmentForm("/api/attachments", fd)
+        okCount++
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "آپلود تصویر ناموفق بود")
+    } finally {
+      setUploading(false)
+    }
+    if (okCount > 0) {
+      toast.success(okCount > 1 ? `${toPersianDigits(okCount)} تصویر اضافه شد ✅` : "تصویر اضافه شد ✅")
+      await queryClient.invalidateQueries({ queryKey: ["attachments", "PERSON", id] })
+    }
+  }
+
+  /* ── ADV-04: حذف تصویر با تأیید ── */
+  const removeAttachment = async (att: Attachment) => {
+    const okRemove = await confirm({
+      title: "حذف تصویر",
+      description: `تصویر «${att.filename}» برای همیشه حذف شود؟`,
+      confirmText: "بله، حذف کن",
+      tone: "danger",
+    })
+    if (!okRemove) return
+    try {
+      await apiDelete(`/api/attachments?id=${att.id}`)
+      if (preview?.id === att.id) setPreview(null)
+      const url = objectUrlsRef.current.get(att.id)
+      if (url) {
+        URL.revokeObjectURL(url)
+        objectUrlsRef.current.delete(att.id)
+        setImgUrls((prev) => {
+          const next = { ...prev }
+          delete next[att.id]
+          return next
+        })
+      }
+      toast.success("تصویر حذف شد")
+      await queryClient.invalidateQueries({ queryKey: ["attachments", "PERSON", id] })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "حذف تصویر ناموفق بود")
     }
   }
 
@@ -303,6 +604,16 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
             پرداخت به شخص
           </Button>
         </div>
+
+        {/* اشتراک صورتحساب (ADV-06) */}
+        <Button
+          onClick={() => setShareSheet(true)}
+          variant="outline"
+          className="mt-2 h-11 w-full rounded-2xl border-primary/30 text-xs font-bold text-primary hover:bg-primary/10"
+        >
+          <MessageCircle className="size-4" />
+          اشتراک گذاری
+        </Button>
       </div>
 
       {/* فاکتورها */}
@@ -422,6 +733,94 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           )}
         </div>
       </div>
+
+      {/* تصاویر شخص (ADV-04) */}
+      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-bold">
+            <Images className="size-4 shrink-0 text-primary" />
+            <span className="truncate">تصاویر</span>
+            <span className="nums shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-bold text-muted-foreground">
+              {toPersianDigits(attachments.length)}
+            </span>
+            {attLoading && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="h-9 shrink-0 rounded-2xl px-3 text-xs font-bold"
+          >
+            {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+            {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
+          </Button>
+        </div>
+
+        {attachments.length === 0 && !attLoading ? (
+          <p className="rounded-2xl bg-muted/40 px-3 py-6 text-center text-xs text-muted-foreground">
+            تصویری ثبت نشده — عکس چک، کارت ویزیت یا مدارک این شخص را همین‌جا نگه دارید.
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            {attachments.map((att) => {
+              const isImage = att.mime.startsWith("image/")
+              const url = imgUrls[att.id]
+              return (
+                <div
+                  key={att.id}
+                  className="relative aspect-square overflow-hidden rounded-xl border border-border/60 bg-muted/40"
+                >
+                  {isImage ? (
+                    url ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreview(att)}
+                        aria-label={`پیش‌نمایش ${att.filename}`}
+                        className="size-full cursor-zoom-in transition-transform duration-150 active:scale-95"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={att.filename} className="size-full object-cover" loading="lazy" />
+                      </button>
+                    ) : (
+                      <div className="flex size-full items-center justify-center" aria-label="در حال بارگذاری تصویر">
+                        <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex size-full flex-col items-center justify-center gap-1 p-2 text-center">
+                      <FileText className="size-6 text-muted-foreground" />
+                      <span className="w-full truncate text-[0.6rem] text-muted-foreground">{att.filename}</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(att)}
+                    aria-label={`حذف تصویر ${att.filename}`}
+                    className="absolute end-1.5 top-1.5 z-10 flex size-6 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
+                  >
+                    <X className="size-3.5" strokeWidth={2.4} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          multiple
+          className="hidden"
+          onChange={(e) => onPickImages(e.target.files)}
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+      </section>
 
       {/* ───────── شیت ویرایش ───────── */}
       <BottomSheet
@@ -609,6 +1008,86 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           ))}
         </div>
       </BottomSheet>
+
+      {/* ───────── شیت اشتراک صورتحساب (ADV-06) ───────── */}
+      <BottomSheet
+        open={shareSheet}
+        onClose={() => setShareSheet(false)}
+        title="اشتراک گذاری صورتحساب"
+        description={p.name}
+      >
+        <div className="space-y-3">
+          {/* پیش‌نمایش متن */}
+          <pre
+            dir="rtl"
+            className="max-h-48 overflow-y-auto rounded-2xl bg-muted/50 px-3 py-3 text-[0.7rem] leading-relaxed text-muted-foreground whitespace-pre-wrap"
+          >
+            {buildShareText()}
+          </pre>
+          <div className="space-y-2">
+            <SheetOption
+              icon={<MessageCircle className="size-5" />}
+              title="ارسال با WhatsApp"
+              subtitle={
+                !p.phone
+                  ? "شماره ثبت نشده — مخاطب را در واتس‌اپ انتخاب کنید"
+                  : waPhone
+                    ? `به شماره ${toPersianDigits(toLatinDigits(p.phone))}`
+                    : "شماره نامعتبر — مخاطب را در واتس‌اپ انتخاب کنید"
+              }
+              tone="primary"
+              onClick={shareWhatsApp}
+            />
+            {canSystemShare && (
+              <SheetOption
+                icon={<Share2 className="size-5" />}
+                title="اشتراک‌گذاری سیستمی"
+                subtitle="اشتراک بومی گوشی (تلگرام، پیامک و…)"
+                onClick={() => shareSystem()}
+              />
+            )}
+            <SheetOption
+              icon={<Copy className="size-5" />}
+              title="کپی متن"
+              subtitle="متن صورتحساب در کلیپ‌بورد کپی می‌شود"
+              onClick={() => shareCopy()}
+            />
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* پیش‌نمایش تمام‌صفحه تصویر (ADV-04) */}
+      <Dialog
+        open={!!preview}
+        onOpenChange={(o) => {
+          if (!o) setPreview(null)
+        }}
+      >
+        <DialogContent className="max-w-[min(94vw,42rem)] gap-3 sm:max-w-[42rem]">
+          <DialogHeader className="sr-only">
+            <DialogTitle>پیش‌نمایش تصویر</DialogTitle>
+            <DialogDescription>{preview?.filename}</DialogDescription>
+          </DialogHeader>
+          {preview && imgUrls[preview.id] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imgUrls[preview.id]}
+              alt={preview.filename}
+              className="mx-auto max-h-[72vh] max-w-full rounded-xl object-contain"
+            />
+          ) : (
+            <div className="flex h-56 items-center justify-center">
+              <Loader2 className="size-8 animate-spin text-primary" />
+            </div>
+          )}
+          {preview && (
+            <p className="text-center text-xs text-muted-foreground">
+              {preview.filename} •{" "}
+              <span className="nums">{toPersianDigits(Math.max(1, Math.round(preview.size / 1024)))} کیلوبایت</span>
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

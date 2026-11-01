@@ -8,6 +8,7 @@ import { resolveTelegramConfig } from "./config"
 import { formatToman } from "@/lib/money"
 import { formatJalali, diffJalaliDays, nowTehran } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
+import { sendPushToAll } from "@/lib/web-push"
 
 export async function telegramApi(
   token: string,
@@ -79,6 +80,7 @@ export async function sendTestMessage(): Promise<{ ok: boolean; error?: string }
  *  - «چند روز مانده» (طبق تنظیم checkDueDaysBefore)
  *  - «امروز سررسید است»
  * هر چک در هر فاز فقط یک بار خبر داده می‌شود.
+ * SEC-03: هم‌زمان با تلگرام، نوتیفیکیشن وب (Web Push) هم ارسال می‌شود.
  */
 export async function checkDueAlerts(): Promise<{ sent: number }> {
   const setting = await db.setting.findUnique({ where: { id: "default" } }).catch(() => null)
@@ -91,6 +93,7 @@ export async function checkDueAlerts(): Promise<{ sent: number }> {
   })
 
   let sent = 0
+  let pushCount = 0
   for (const check of pending) {
     const diff = diffJalaliDays(today, check.dueDate) // منفی = گذشته
     const bank = getBank(check.bankKey)
@@ -111,6 +114,14 @@ export async function checkDueAlerts(): Promise<{ sent: number }> {
             `\nبه‌موقع اقدام کنید تا چک برگشت نخورد.`,
           key
         )
+        // نوتیفیکیشن وب — با همان کلید یکتا فقط یک‌بار
+        const push = await sendPushToAll({
+          title: `⏰ سررسید چک ${when} است`,
+          body: `چک ${dirText} «${check.person.name}» — بانک ${bank.name} — ${formatToman(check.amount)}`,
+          tag: key,
+          url: "/checks",
+        }).catch(() => ({ sent: 0, removed: 0 }))
+        pushCount += push.sent
         if (ok) sent++
       }
     }
@@ -128,9 +139,17 @@ export async function checkDueAlerts(): Promise<{ sent: number }> {
             `${Math.abs(diff)} روز از سررسید گذشته است. پیگیری کنید.`,
           key
         )
+        const push = await sendPushToAll({
+          title: "🚨 سررسید چک گذشته است",
+          body: `چک ${dirText} «${check.person.name}» — ${Math.abs(diff)} روز گذشته — ${formatToman(check.amount)}`,
+          tag: key,
+          url: "/checks",
+        }).catch(() => ({ sent: 0, removed: 0 }))
+        pushCount += push.sent
         if (ok) sent++
       }
     }
   }
+  if (pushCount > 0) console.log(`[hesabyar] 🔔 ${pushCount} نوتیفیکیشن وب ارسال شد`)
   return { sent }
 }

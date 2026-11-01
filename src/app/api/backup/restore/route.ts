@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
     if (file.size > MAX_BACKUP_SIZE) return fail("حجم فایل بیش از حد مجاز (۱۰۰ مگابایت) است", 400)
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    await restoreBackup(buffer)
+    const password = (formData.get("password") as string | null)?.trim() || undefined
+    await restoreBackup(buffer, password)
     return ok({ ok: true, message: "بازیابی با موفقیت انجام شد" })
   } catch (e) {
     return fail(e instanceof Error ? e.message : "بازیابی بکاپ ناموفق بود", 400)

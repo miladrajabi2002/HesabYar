@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 
 interface TelegramWebApp {
   initData: string
@@ -129,4 +130,86 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
 export function useTelegram() {
   return useContext(TelegramContext)
+}
+
+/**
+ * IMP-02: دکمه برگشت بومی تلگرام — داخل مینی‌اپ، دکمه Back گوشی
+ * بدون این hook فشردنش مینی‌اپ را می‌بندد؛ با این hook مثل اپ واقعی به عقب برمی‌گردد.
+ * @param enabled روشن/خاموش (پیش‌فرض روشن داخل مینی‌اپ)
+ * @param fallback رفتار دلخواه (پیش‌فرض router.back())
+ */
+export function useTelegramBackButton(enabled = true, fallback?: () => void) {
+  const { webApp, isTelegram } = useTelegram()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!isTelegram || !webApp?.BackButton || !enabled) return
+    const bb = webApp.BackButton
+    const handler = fallback ?? (() => router.back())
+    try {
+      bb.onClick(handler)
+      bb.show()
+    } catch {
+      /* ignore */
+    }
+    return () => {
+      try {
+        bb.offClick(handler)
+        bb.hide()
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [isTelegram, webApp, enabled, fallback, router])
+}
+
+/**
+ * IMP-05: دکمه ثبت بومی تلگرام (MainButton) — فرم‌ها با دکمه پایین خود تلگرام ثبت می‌شوند.
+ * دکمه داخلی اپ هم می‌ماند؛ در مینی‌اپ دکمه اصلی پایین صفحه خود تلگرام است.
+ */
+export function useTelegramMainButton(options: {
+  visible: boolean
+  text: string
+  enabled?: boolean
+  loading?: boolean
+  color?: string
+  onClick: () => void
+}) {
+  const { webApp, isTelegram } = useTelegram()
+  const { visible, text, enabled = true, loading = false, color, onClick } = options
+  const onClickRef = useRef(onClick)
+  onClickRef.current = onClick
+
+  useEffect(() => {
+    if (!isTelegram || !webApp?.MainButton) return
+    const mb = webApp.MainButton
+    const handler = () => onClickRef.current()
+    try {
+      if (!visible) {
+        mb.hide()
+        return
+      }
+      mb.setText(text)
+      mb.setParams({
+        color: color || "#0E7C66",
+        text_color: "#FFFFFF",
+        is_active: enabled && !loading,
+      })
+      if (loading) mb.showProgress(true)
+      else mb.hideProgress()
+      mb.onClick(handler)
+      mb.show()
+    } catch {
+      /* ignore */
+    }
+    return () => {
+      try {
+        mb.offClick(handler)
+        mb.hide()
+        mb.hideProgress()
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [isTelegram, webApp, visible, text, enabled, loading, color])
 }

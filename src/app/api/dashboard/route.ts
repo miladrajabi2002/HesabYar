@@ -13,6 +13,7 @@ import {
   endOfJalaliDay,
   startOfJalaliMonth,
   endOfJalaliMonth,
+  addJalaliMonths,
   diffJalaliDays,
 } from "@/lib/jalali"
 
@@ -26,19 +27,35 @@ export async function GET(req: NextRequest) {
     const now = nowTehran()
     const [dayStart, dayEnd] = [startOfJalaliDay(now), endOfJalaliDay(now)]
     const [monthStart, monthEnd] = [startOfJalaliMonth(now), endOfJalaliMonth(now)]
+    // ST-01: ماه قبل برای مقایسه دوره‌ای KPIها
+    const prevMonthStart = startOfJalaliMonth(addJalaliMonths(now, -1))
+    const prevMonthEnd = endOfJalaliMonth(addJalaliMonths(now, -1))
     // هفته: از ابتدای شنبه این هفته
     const wall = new Date(now.getTime() + 3.5 * 3600_000)
     const gteDay = wall.getUTCDay() // 0=یکشنبه میلادی → شنبه‌محور
     const saturdayOffset = (gteDay + 1) % 7
     const weekStart = new Date(startOfJalaliDay(now).getTime() - saturdayOffset * 86_400_000)
 
-    const [today, week, month, accounts, personBalances] = await Promise.all([
+    const [today, week, month, prevMonth, accounts, personBalances] = await Promise.all([
       periodSummary(dayStart, dayEnd),
       periodSummary(weekStart, dayEnd),
       periodSummary(monthStart, monthEnd),
+      periodSummary(prevMonthStart, prevMonthEnd),
       getAccountBalances(),
       getPersonBalances(),
     ])
+
+    // ST-01: درصد تغییر ماه جاری نسبت به ماه قبل (null = ماه قبل صفر بوده)
+    const pct = (cur: number, prev: number): number | null => {
+      if (prev === 0) return cur === 0 ? 0 : null
+      return Math.round(((cur - prev) / Math.abs(prev)) * 100)
+    }
+    const monthComparison = {
+      sales: pct(month.sales, prevMonth.sales),
+      purchases: pct(month.purchases, prevMonth.purchases),
+      profit: pct(month.profit, prevMonth.profit),
+      saleCount: pct(month.saleCount, prevMonth.saleCount),
+    }
 
     // طلبکاران و بستانکاران (۱۵ نفر اول هر کدام)
     const people = await db.person.findMany({
@@ -95,6 +112,8 @@ export async function GET(req: NextRequest) {
       today,
       week,
       month,
+      prevMonth,
+      monthComparison,
       accounts,
       totalBankBalance: accounts.reduce((s, a) => s + a.balance, 0),
       debtors,

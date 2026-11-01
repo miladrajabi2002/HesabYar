@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>حساب‌یار — آفلاین</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+    background: #f7f8fa;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    direction: rtl;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #eceef2;
+    border-radius: 24px;
+    padding: 40px 32px;
+    text-align: center;
+    max-width: 340px;
+    box-shadow: 0 6px 20px -4px rgba(16,24,40,0.08);
+  }
+  .icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 16px;
+    border-radius: 20px;
+    background: #0e7c66;
+    display: grid;
+    place-items: center;
+    color: #fff;
+  }
+  .icon svg { width: 32px; height: 32px; }
+  h1 { font-size: 18px; font-weight: 800; color: #111827; }
+  p { font-size: 13px; color: #6b7280; line-height: 2; margin-top: 8px; }
+  button {
+    margin-top: 20px;
+    width: 100%;
+    height: 48px;
+    border: none;
+    border-radius: 16px;
+    background: #0e7c66;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:active { transform: scale(0.98); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2 L21 9 L12 22 L3 9 Z"/>
+      <path d="M3 9 h18" opacity="0.5"/>
+    </svg>
+  </div>
+  <h1>اتصال اینترنت قطع است</h1>
+  <p>
+    آخرین نسخه صفحات ذخیره شده است.
+    فاکتورهایی که آفلاین ثبت کنید به‌محض وصل شدن اینترنت، خودکار ثبت می‌شوند.
+  </p>
+  <button onclick="location.reload()">تلاش مجدد</button>
+</div>
+</body>
+</html>

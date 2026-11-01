@@ -7,8 +7,20 @@ import crypto from "node:crypto"
 export const SESSION_COOKIE = "hesabyar_session"
 export const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60 // ۳۰ روز
 
+/** SEC-05: در پروداکشن مقادیر توسعه‌ای ممنوع — سرویس باید fail-closed بالا بیاید */
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production"
+}
+
 function getSecret(): string {
-  return process.env.SESSION_SECRET || "hesabyar-insecure-dev-secret"
+  const secret = process.env.SESSION_SECRET
+  if (!secret || secret.length < 16) {
+    if (isProduction()) {
+      throw new Error("[SEC-05] SESSION_SECRET در پروداکشن تنظیم نشده است — سرویس بالا نمی‌آید")
+    }
+    return "hesabyar-insecure-dev-secret"
+  }
+  return secret
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -21,10 +33,18 @@ function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(ba, bb)
 }
 
-/** بررسی اعتبار ورود (مقاوم به حملات زمانی) */
+/** بررسی اعتبار ورود (مقاوم به حملات زمانی) — SEC-05: بدون مقادیر پیش‌فرض */
 export function verifyCredentials(username: string, password: string): boolean {
-  const expectedUser = process.env.APP_USERNAME || "admin"
-  const expectedPass = process.env.APP_PASSWORD || "admin1234"
+  const expectedUser = process.env.APP_USERNAME
+  const expectedPass = process.env.APP_PASSWORD
+  // در پروداکشن بدون اعتبار env، ورود به‌کل رد می‌شود
+  if (!expectedUser || !expectedPass) {
+    if (isProduction()) {
+      console.error("[SEC-05] APP_USERNAME/APP_PASSWORD تنظیم نشده — ورود رد شد")
+      return false
+    }
+    return safeEqual(username, "admin") && safeEqual(password, "admin1234")
+  }
   return safeEqual(username, expectedUser) && safeEqual(password, expectedPass)
 }
 
