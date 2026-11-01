@@ -23,6 +23,8 @@ import {
   Download,
   ChevronDown,
   Loader2,
+  ShoppingCart,
+  ReceiptText,
 } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
@@ -33,7 +35,6 @@ import { Button } from "@/components/ui/button"
 import { ListSkeleton } from "@/components/ui/page-skeletons"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ErrorState } from "@/components/ui/error-state"
-import { PersonAvatar } from "@/components/ui/person-avatar"
 import { useTelegram } from "@/hooks/use-telegram"
 import { useUIStore } from "@/lib/ui-store"
 import { cn } from "@/lib/utils"
@@ -275,7 +276,18 @@ function InvoicesPageInner() {
                   >
                     <td className="px-4 py-3">
                       <Link href={`/invoices/${inv.id}`} className="flex items-center gap-2.5">
-                        <PersonAvatar name={inv.person.name} size={32} className="rounded-lg" />
+                        <span
+                          className={cn(
+                            "flex size-9 shrink-0 items-center justify-center rounded-xl",
+                            inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
+                          )}
+                        >
+                          {inv.type === "SALE" ? (
+                            <ReceiptText className="size-[1.1rem]" strokeWidth={2.1} />
+                          ) : (
+                            <ShoppingCart className="size-[1.1rem]" strokeWidth={2.1} />
+                          )}
+                        </span>
                         <span className="font-bold">{inv.person.name}</span>
                       </Link>
                     </td>
@@ -332,7 +344,18 @@ function InvoicesPageInner() {
                   className="block rounded-3xl border border-border/70 bg-card p-4 shadow-card transition-all hover:shadow-card-hover active:scale-[0.995]"
                 >
                   <div className="flex items-center gap-3">
-                    <PersonAvatar name={inv.person.name} size={44} />
+                    <span
+                      className={cn(
+                        "flex size-11 shrink-0 items-center justify-center rounded-2xl",
+                        inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
+                      )}
+                    >
+                      {inv.type === "SALE" ? (
+                        <ReceiptText className="size-5" strokeWidth={2.1} />
+                      ) : (
+                        <ShoppingCart className="size-5" strokeWidth={2.1} />
+                      )}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-sm font-extrabold">{inv.person.name}</span>

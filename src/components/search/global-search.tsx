@@ -9,12 +9,12 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
-import { Search, FileText, Users, Package, CheckSquare2, Loader2, CornerDownLeft } from "lucide-react"
+import { Search, FileText, Users, Package, CheckSquare2, Loader2, CornerDownLeft, ShoppingCart, ReceiptText, ArrowDownToLine, ArrowUpFromLine } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatTomanCompact } from "@/lib/money"
 import { formatJalaliShort } from "@/lib/jalali"
 import { BankLogo } from "@/components/ui/bank-logo"
-import { PersonAvatar } from "@/components/ui/person-avatar"
+import { RoleAvatar } from "@/components/ui/role-avatar"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { useTelegram } from "@/hooks/use-telegram"
 
@@ -136,7 +136,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                         inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
                       }`}
                     >
-                      <FileText className="size-4" />
+                      {inv.type === "SALE" ? <ReceiptText className="size-4" /> : <ShoppingCart className="size-4" />}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-bold">
@@ -170,7 +170,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                     onClick={() => go(`/people/${p.id}`)}
                     className="flex w-full items-center gap-3 rounded-2xl border border-border/60 px-3 py-2.5 text-start transition-colors hover:bg-accent/50"
                   >
-                    <PersonAvatar name={p.name} size={36} />
+                    <RoleAvatar role={p.role} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-bold">{p.name}</span>
                       <span className="nums block truncate text-[0.65rem] text-muted-foreground">
@@ -243,6 +243,17 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                         {formatJalaliShort(new Date(c.dueDate))}
                         {c.serial ? ` • ${c.serial}` : ""}
                       </span>
+                    </span>
+                    <span
+                      className={`flex size-8 shrink-0 items-center justify-center rounded-xl ${
+                        c.direction === "RECEIVED" ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
+                      }`}
+                    >
+                      {c.direction === "RECEIVED" ? (
+                        <ArrowDownToLine className="size-4" />
+                      ) : (
+                        <ArrowUpFromLine className="size-4" />
+                      )}
                     </span>
                     <span className="nums shrink-0 text-xs font-extrabold">{formatTomanCompact(c.amount)}</span>
                   </button>

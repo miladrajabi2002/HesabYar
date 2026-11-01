@@ -4,7 +4,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { toast } from "sonner"
-import { Loader2, Send, LockKeyhole, UserRound, Fingerprint } from "lucide-react"
+import { Loader2, LockKeyhole, UserRound, Fingerprint } from "lucide-react"
+import { BrandLogo } from "@/components/ui/brand-logo"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -134,9 +135,8 @@ export default function LoginPage() {
             initial={{ scale: 0.7, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.15, type: "spring", stiffness: 260, damping: 18 }}
-            className="flex size-16 items-center justify-center rounded-3xl bg-primary text-white shadow-fab"
           >
-            <Send className="size-7 -scale-x-100" />
+            <BrandLogo size={72} className="rounded-3xl shadow-fab" />
           </motion.div>
           <div className="text-center">
             <h1 className="text-2xl font-extrabold">حساب‌یار</h1>

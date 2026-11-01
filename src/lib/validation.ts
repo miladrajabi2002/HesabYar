@@ -163,12 +163,30 @@ export const productQuickCreateSchema = productCreateSchema.extend({
 
 // ───────────────────────── چک ─────────────────────────
 
+/** کد ملی ایرانی — ارقام فارسی/لاتین پذیرفته می‌شود؛ خالی → null */
+export const nationalIdSchema = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .transform((v) => {
+    if (!v) return null
+    return toLatinDigits(v).replace(/[^\d]/g, "") || null
+  })
+  .refine((v) => v === null || /^\d{10}$/.test(v), {
+    message: "کد ملی باید ۱۰ رقم باشد",
+  })
+
 export const checkInputSchema = z.object({
   serial: optionalText(40),
   amount: positiveAmount,
   bankKey: z.string().trim().min(1, "بانک چک را انتخاب کنید"),
   dueDate: jalaliDaySchema,
   note: optionalText(200),
+  // ── ثبت چک ──
+  isRegistered: z.boolean().default(false),
+  registeredName: optionalText(100),
+  registeredNationalId: nationalIdSchema,
 })
 
 // ───────────────────────── فاکتور خرید/فروش ─────────────────────────
@@ -214,15 +232,27 @@ export const settleSchema = z
     path: ["accountId"],
   })
 
-// ───────────────────────── تغییر وضعیت چک ─────────────────────────
+// ───────────────────────── تغییر وضعیت / ثبت چک ─────────────────────────
 
 export const checkStatusSchema = z.object({
+  /** تمایزدهندهٔ نوع PATCH — پیش‌فرض status */
+  action: z.literal("status").default("status"),
   status: z.enum(["CASHED", "BOUNCED", "CANCELED", "PENDING"], {
     message: "وضعیت چک نامعتبر است",
   }),
   accountId: z.string().optional().nullable(),
   note: optionalText(200),
 })
+
+/** PATCH action=register — ثبت چک به نام (ما یا مشتری) */
+export const checkRegisterSchema = z.object({
+  action: z.literal("register"),
+  isRegistered: z.boolean(),
+  registeredName: optionalText(100),
+  registeredNationalId: nationalIdSchema,
+})
+
+export const checkPatchSchema = z.union([checkRegisterSchema, checkStatusSchema])
 
 // ───────────────────────── فیلترهای لیست ─────────────────────────
 

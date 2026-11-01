@@ -60,7 +60,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <PWAProvider>
             <ConfirmProvider>
               {children}
-              <Toaster position="top-center" dir="rtl" richColors closeButton expand={false} />
+              <Toaster position="top-center" dir="rtl" richColors closeButton expand={false} gap={10} />
             </ConfirmProvider>
           </PWAProvider>
         </TelegramProvider>

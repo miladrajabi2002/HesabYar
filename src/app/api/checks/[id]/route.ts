@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
-import { checkStatusSchema } from "@/lib/validation"
+import { checkPatchSchema } from "@/lib/validation"
 import { checkInclude } from "@/lib/includes"
 import { nowTehran } from "@/lib/jalali"
 import { recomputeInvoice } from "@/lib/finance"
@@ -23,24 +23,70 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 }
 
 /**
- * PATCH /api/checks/[id] — تغییر وضعیت چک:
- *  CASHED  → پاس: ثبت گردش بانکی روی حساب انتخابی
- *  BOUNCED → برگشت: بازگشت مبلغ به مانده فاکتور / حذف تسویه چکی
- *  CANCELED → لغو: فقط وقتی چک بابت فاکتور است و هنوز سررسید نشده
+ * PATCH /api/checks/[id] — دو عمل:
+ *  ۱) action=register → ثبت چک به نام (چک دریافتی به نام ما، صادره به نام مشتری)
+ *  ۲) تغییر وضعیت: CASHED (پاس) / BOUNCED (برگشت) / CANCELED (لغو) / PENDING (بازگشت از لغو)
+ *  قاعده: چکِ ثبت‌نشده قابل پاس/برگشت/لغو نیست — اول باید ثبت شود.
  */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
   try {
     const { id } = await ctx.params
-    const { data, error } = await parseBody(req, checkStatusSchema)
+    const { data, error } = await parseBody(req, checkPatchSchema)
     if (error) return error
 
     const check = await db.checkPaper.findUnique({ where: { id }, include: { person: true } })
     if (!check) return fail("چک پیدا نشد", 404)
+
+    // ───────── ثبت چک به نام ─────────
+    if (data.action === "register") {
+      if (check.status !== "PENDING") {
+        return fail("فقط چک در جریان قابل ثبت است", 400)
+      }
+      if (data.isRegistered) {
+        if (!data.registeredName) return fail("نام صاحب حساب را وارد کنید", 400)
+        await db.checkPaper.update({
+          where: { id: check.id },
+          data: {
+            isRegistered: true,
+            registeredName: data.registeredName,
+            registeredNationalId: data.registeredNationalId ?? null,
+            registeredAt: nowTehran(),
+          },
+        })
+      } else {
+        // برگرداندن به حالت ثبت‌نشده (ادیت اشتباه)
+        await db.checkPaper.update({
+          where: { id: check.id },
+          data: {
+            isRegistered: false,
+            registeredName: null,
+            registeredNationalId: null,
+            registeredAt: null,
+          },
+        })
+      }
+      const updated = await db.checkPaper.findUnique({ where: { id }, include: checkInclude })
+      return ok({ check: updated })
+    }
+
+    // ───────── تغییر وضعیت ─────────
     if (check.status === data.status) return fail("چک هم‌اکنون در این وضعیت است", 400)
     if (check.status === "CASHED" && data.status !== "CASHED") {
       return fail("چک پاس‌شده قابل تغییر نیست", 400)
+    }
+
+    // قاعده کسب‌وکار: چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود
+    if (
+      !check.isRegistered &&
+      (data.status === "CASHED" || data.status === "BOUNCED" || data.status === "CANCELED")
+    ) {
+      const who = check.direction === "RECEIVED" ? "به نام شما" : "به نام مشتری"
+      return fail(
+        `این چک هنوز ثبت نشده است — اول چک را ${who} ثبت کنید، بعد پاس/برگشت/لغو امکان‌پذیر است`,
+        400
+      )
     }
 
     // ───────── پاس شدن چک ─────────

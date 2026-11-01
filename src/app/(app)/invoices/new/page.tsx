@@ -45,6 +45,13 @@ import {
   Building2,
   Pencil,
   GripVertical,
+  Sparkles,
+  BadgeCheck,
+  Paperclip,
+  UserRound,
+  IdCard,
+  CheckCircle2,
+  ImagePlus,
 } from "lucide-react"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
@@ -62,7 +69,6 @@ import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
 import { cn } from "@/lib/utils"
 import { useTelegram, useTelegramBackButton, useTelegramMainButton } from "@/hooks/use-telegram"
 import { SuccessCelebration } from "@/components/ui/success-celebration"
-import { AnimatedNumber } from "@/components/ui/animated-number"
 
 // ───────── تایپ‌ها ─────────
 interface Person {
@@ -104,6 +110,11 @@ interface DraftCheck {
   bankKey: string
   serial: string
   dueDate: string
+  // ثبت چک (نسخهٔ ۳) — عکس چک بعد از ثبت فاکتور آپلود می‌شود
+  isRegistered?: boolean
+  registeredName?: string
+  registeredNationalId?: string
+  photo?: File | null
 }
 
 /** فاکتور دریافتی برای حالت ویرایش (?edit=<id>) */
@@ -257,7 +268,8 @@ function NewInvoicePageInner() {
               discount,
               paidCash,
               accountId: account?.id ?? null,
-              checks,
+              // عکس چک (File) قابل ذخیره در پیش‌نویس نیست — فقط مشخصات
+              checks: checks.map(({ photo: _photo, ...rest }) => rest),
               note,
               savedAt: Date.now(),
             })
@@ -359,7 +371,7 @@ function NewInvoicePageInner() {
     haptic.tap()
   }
 
-  const personTypeLabel = type === "SALE" ? "مشتری" : "تأمین‌کننده"
+  const personTypeLabel = type === "SALE" ? "مشتری" : "فروشنده"
 
   // اگر فاکتور ویرایشی چک نقدشده/برگشتی دارد، فقط قابل مشاهده است
   const lockedChecks =
@@ -413,6 +425,9 @@ function NewInvoicePageInner() {
           bankKey: c.bankKey,
           serial: c.serial || undefined,
           dueDate: c.dueDate,
+          isRegistered: !!c.isRegistered,
+          registeredName: c.isRegistered ? c.registeredName || undefined : undefined,
+          registeredNationalId: c.isRegistered ? c.registeredNationalId || undefined : undefined,
         })),
         note: note || undefined,
       }
@@ -441,6 +456,32 @@ function NewInvoicePageInner() {
       )
       if (r.excess > 0) {
         toast.info(`مازاد ${formatToman(r.excess)} به علی‌الحساب «${person.name}» اضافه شد`)
+      }
+      // آپلود عکس چک‌های ثبت‌شده (اگر داشت) — بعد از ساخت فاکتور و چک‌ها
+      const createdChecks = ((r as { invoice?: { checks?: { id: string }[] } }).invoice?.checks ?? []) as { id: string }[]
+      const withPhotos = checks.filter((c) => c.photo)
+      if (!editId && withPhotos.length > 0 && createdChecks.length >= checks.length) {
+        let uploaded = 0
+        for (let i = 0; i < checks.length; i++) {
+          const photo = checks[i].photo
+          if (!photo || !createdChecks[i]) continue
+          try {
+            const fd = new FormData()
+            fd.append("file", photo)
+            fd.append("refType", "CHECK")
+            fd.append("refId", createdChecks[i].id)
+            const headers: Record<string, string> = {}
+            const initData = window.Telegram?.WebApp?.initData
+            if (initData) headers["x-telegram-init-data"] = initData
+            const res = await fetch("/api/attachments", { method: "POST", body: fd, headers })
+            if (res.ok) uploaded++
+          } catch {
+            /* عکس این چک آپلود نشد — بقیه ادامه می‌یابند */
+          }
+        }
+        if (uploaded > 0) {
+          toast.success(`${toPersianDigits(uploaded)} عکس چک پیوست شد 📎`)
+        }
       }
       // پاک‌سازی پیش‌نویس بعد از ثبت موفق
       if (!editId) localStorage.removeItem(DRAFT_KEY)
@@ -612,9 +653,7 @@ function NewInvoicePageInner() {
           {items.length > 0 && (
             <div className="mt-3 flex items-center justify-between border-t border-dashed pt-3 text-sm">
               <span className="text-muted-foreground">جمع اقلام</span>
-              <span className="nums font-extrabold">
-                <AnimatedNumber value={subtotal} duration={500} format={(n) => formatToman(n, false)} />
-              </span>
+              <span className="nums font-extrabold">{formatToman(subtotal, false)}</span>
             </div>
           )}
         </section>
@@ -680,11 +719,21 @@ function NewInvoicePageInner() {
                       className="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-0.5 text-[0.7rem] font-bold text-primary transition-colors hover:bg-primary/20"
                     >
                       <Banknote className="size-3.5" />
-                      کل مبلغ نقدی
+                      بقیه را نقدی بده ({formatToman(Math.max(0, total - checkTotal), false)})
                     </button>
                   )}
                 </div>
                 <AmountInput value={paidCash} onChange={setPaidCash} placeholder="۰" showWords={false} />
+                {/* حساب هوشمند: بعد از این نقدی، چقدر برای چک/نسیه می‌ماند */}
+                {total > 0 && paidCash > 0 && (
+                  <p className="nums mt-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[0.65rem] leading-4 text-muted-foreground">
+                    {total - checkTotal - paidCash > 0
+                      ? `مانده برای چک یا نسیه: ${formatToman(Math.max(0, total - checkTotal - paidCash), false)} تومان`
+                      : paidCash + checkTotal - total > 0
+                        ? `مازاد نقدی: ${formatToman(paidCash + checkTotal - total, false)} تومان (علی‌الحساب)`
+                        : "با این نقدی، فاکتور کامل تسویه می‌شود ✅"}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
@@ -740,7 +789,20 @@ function NewInvoicePageInner() {
                 >
                   <BankLogo bankKey={c.bankKey} size={30} />
                   <div className="min-w-0 flex-1">
-                    <div className="nums text-xs font-bold">{formatToman(c.amount, false)}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="nums text-xs font-bold">{formatToman(c.amount, false)}</span>
+                      {c.isRegistered ? (
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-income/10 px-1.5 py-px text-[0.56rem] font-bold text-income">
+                          <BadgeCheck className="size-2.5" />
+                          ثبت‌شده
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-md bg-warning/10 px-1.5 py-px text-[0.56rem] font-bold text-warning">
+                          ثبت‌نشده
+                        </span>
+                      )}
+                      {c.photo && <Paperclip className="size-2.5 shrink-0 text-muted-foreground" />}
+                    </div>
                     <div className="nums text-[0.65rem] text-muted-foreground">
                       سررسید: {c.dueDate.replace(/-/g, "/")}
                       {c.serial ? ` • ${c.serial}` : ""}
@@ -807,7 +869,7 @@ function NewInvoicePageInner() {
           <div className="min-w-0 flex-1">
             <div className="text-[0.65rem] text-muted-foreground">مبلغ نهایی فاکتور</div>
             <div className="nums truncate text-base font-extrabold sm:text-lg">
-              <AnimatedNumber value={total} duration={500} format={(n) => formatToman(n, false)} />
+              {formatToman(total, false)}
               <span className="ms-1 text-[0.65rem] font-medium text-muted-foreground">تومان</span>
             </div>
           </div>
@@ -898,7 +960,10 @@ function NewInvoicePageInner() {
           setChecks((prev) => [...prev, c])
           setCheckSheet(false)
         }}
-        suggestedAmount={Math.max(0, total - paidCash - checkTotal)}
+        invoiceTotal={total}
+        paidCash={paidCash}
+        existingChecksTotal={checkTotal}
+        invoiceType={type}
       />
     </div>
   )
@@ -1004,7 +1069,7 @@ function PersonPickerSheet({
     <BottomSheet
       open={open}
       onClose={onClose}
-      title={type === "SALE" ? "انتخاب مشتری" : "انتخاب تأمین‌کننده"}
+      title={type === "SALE" ? "انتخاب مشتری" : "انتخاب فروشنده"}
       size="tall"
       footer={
         <Button onClick={onQuickAdd} className="h-12 w-full rounded-2xl font-bold">
@@ -1375,17 +1440,26 @@ function ItemPickerSheet({
   )
 }
 
-// ═══════════════ شیت افزودن چک ═══════════════
+// ═══════════════ شیت افزودن چک — حساب هوشمند + ثبت چک (نسخهٔ ۳) ═══════════════
 function QuickCheckSheet({
   open,
   onClose,
   onAdd,
-  suggestedAmount,
+  invoiceTotal,
+  paidCash,
+  existingChecksTotal,
+  invoiceType,
 }: {
   open: boolean
   onClose: () => void
   onAdd: (c: DraftCheck) => void
-  suggestedAmount: number
+  /** مبلغ نهایی فاکتور */
+  invoiceTotal: number
+  /** نقدی پرداخت‌شده تا الان */
+  paidCash: number
+  /** جمع چک‌های افزوده‌شده تا الان */
+  existingChecksTotal: number
+  invoiceType: "SALE" | "PURCHASE"
 }) {
   const [amount, setAmount] = useState(0)
   const [bankKey, setBankKey] = useState("mellat")
@@ -1393,17 +1467,52 @@ function QuickCheckSheet({
   const [dueDate, setDueDate] = useState("")
   const [bankSheet, setBankSheet] = useState(false)
 
+  /* ثبت چک */
+  const [isRegistered, setIsRegistered] = useState(false)
+  const [regName, setRegName] = useState("")
+  const [regNationalId, setRegNationalId] = useState("")
+  const [photo, setPhoto] = useState<File | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  // جهت چک: فروش → از مشتری می‌گیریم (دریافتی)؛ خرید → به فروشنده می‌دهیم (صادره)
+  const isReceived = invoiceType === "SALE"
+
+  // حساب هوشمند: ماندهٔ واقعی برای این چک
+  const remaining = Math.max(0, invoiceTotal - paidCash - existingChecksTotal)
+  const afterThisCheck = remaining - amount
+  // اگر کاربر مبلغ چک را دستی عوض کرد دکمهٔ مانده را دوباره نشان می‌دهیم
+  const showFillRemaining = remaining > 0 && amount !== remaining
+
   const reset = () => {
     setAmount(0)
     setBankKey("mellat")
     setSerial("")
     setDueDate("")
+    setIsRegistered(false)
+    setRegName("")
+    setRegNationalId("")
+    setPhoto(null)
   }
 
   const add = () => {
     if (amount <= 0) return toast.error("مبلغ چک را وارد کنید")
     if (!dueDate) return toast.error("سررسید چک را انتخاب کنید")
-    onAdd({ amount, bankKey, serial, dueDate })
+    if (isRegistered) {
+      const name = regName.trim()
+      if (name.length < 2) return toast.error("نام صاحب حساب چک را وارد کنید")
+      if (regNationalId.trim() && !/^\d{10}$/.test(regNationalId.trim())) {
+        return toast.error("کد ملی باید ۱۰ رقم باشد")
+      }
+    }
+    onAdd({
+      amount,
+      bankKey,
+      serial,
+      dueDate,
+      isRegistered,
+      registeredName: isRegistered ? regName.trim() : undefined,
+      registeredNationalId: isRegistered ? regNationalId.trim() || undefined : undefined,
+      photo: photo ?? null,
+    })
     reset()
   }
 
@@ -1424,20 +1533,57 @@ function QuickCheckSheet({
       }
     >
       <div className="space-y-3">
+        {/* حساب هوشمند — وضعیت لحظه‌ای فاکتور */}
+        <div className="rounded-2xl border border-primary/25 bg-primary/[0.05] p-3">
+          <div className="flex items-center justify-between text-[0.68rem]">
+            <span className="text-muted-foreground">مبلغ فاکتور</span>
+            <span className="nums font-bold">{formatToman(invoiceTotal, false)}</span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[0.68rem]">
+            <span className="text-muted-foreground">نقدی پرداخت‌شده</span>
+            <span className="nums font-bold text-income">− {formatToman(paidCash, false)}</span>
+          </div>
+          {existingChecksTotal > 0 && (
+            <div className="mt-1 flex items-center justify-between text-[0.68rem]">
+              <span className="text-muted-foreground">چک‌های افزوده‌شده</span>
+              <span className="nums font-bold text-primary">− {formatToman(existingChecksTotal, false)}</span>
+            </div>
+          )}
+          <div className="mt-2 flex items-center justify-between border-t border-dashed pt-2 text-[0.72rem]">
+            <span className="font-bold text-muted-foreground">
+              {remaining > 0 ? "مانده برای چک / نسیه" : "فاکتور با نقدی و چک‌ها تسویه است"}
+            </span>
+            {remaining > 0 && (
+              <span className="nums font-extrabold text-primary">{formatToman(remaining, false)}</span>
+            )}
+          </div>
+          {showFillRemaining && remaining > 0 && (
+            <button
+              type="button"
+              onClick={() => setAmount(remaining)}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary/10 py-2 text-[0.7rem] font-bold text-primary transition-colors hover:bg-primary/20 active:scale-[0.98]"
+            >
+              <Sparkles className="size-3.5" />
+              مبلغ این چک = کل مانده ({formatToman(remaining, false)})
+            </button>
+          )}
+          {/* پیش‌نمایش پس از این چک */}
+          {amount > 0 && (
+            <p className="nums mt-2 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[0.62rem] leading-4 text-muted-foreground">
+              {afterThisCheck > 0
+                ? `پس از این چک، مانده: ${formatToman(afterThisCheck, false)} تومان`
+                : afterThisCheck === 0
+                  ? "با این چک، فاکتور کامل تسویه می‌شود ✅"
+                  : `${formatToman(-afterThisCheck, false)} تومان مازاد می‌رود به علی‌الحساب`}
+            </p>
+          )}
+        </div>
+
         <div>
           <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
             مبلغ چک (تومان) *
           </label>
           <AmountInput value={amount} onChange={setAmount} />
-          {suggestedAmount > 0 && amount === 0 && (
-            <button
-              type="button"
-              onClick={() => setAmount(suggestedAmount)}
-              className="mt-1.5 text-[0.7rem] font-medium text-primary hover:underline"
-            >
-              استفاده از مانده فاکتور ({formatToman(suggestedAmount, false)})
-            </button>
-          )}
         </div>
         <div>
           <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
@@ -1473,6 +1619,111 @@ function QuickCheckSheet({
             </label>
             <JalaliDateField value={dueDate} onChange={setDueDate} />
           </div>
+        </div>
+
+        {/* ── ثبت چک ── */}
+        <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
+          <button
+            type="button"
+            onClick={() => setIsRegistered((v) => !v)}
+            className="flex w-full items-center gap-2.5 text-start"
+          >
+            <span
+              className={cn(
+                "flex size-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
+                isRegistered ? "border-primary bg-primary text-white" : "border-input bg-card"
+              )}
+            >
+              {isRegistered && <BadgeCheck className="size-3.5" strokeWidth={2.6} />}
+            </span>
+            <span className="flex-1">
+              <span className="block text-xs font-bold">چک ثبت شده است</span>
+              <span className="mt-0.5 block text-[0.62rem] leading-4 text-muted-foreground">
+                {isReceived ? "چک به نام خودتان در بانک ثبت شده" : "چک به نام مشتری در بانک ثبت شده"}
+              </span>
+            </span>
+          </button>
+
+          {isRegistered && (
+            <div className="mt-3 space-y-2.5 border-t border-dashed pt-3">
+              <div>
+                <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
+                  <UserRound className="size-3.5" />
+                  نام صاحب حساب *
+                </label>
+                <Input
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  placeholder={isReceived ? "نام خودتان" : "نام مشتری"}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
+                    <IdCard className="size-3.5" />
+                    کد ملی (اختیاری)
+                  </label>
+                  <Input
+                    value={regNationalId}
+                    onChange={(e) => setRegNationalId(e.target.value)}
+                    inputMode="numeric"
+                    dir="ltr"
+                    placeholder="۱۲۳۴۵۶۷۸۹۰"
+                    className="nums text-end"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
+                    <ImagePlus className="size-3.5" />
+                    عکس چک (اختیاری)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-input bg-card text-[0.68rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                  >
+                    {photo ? (
+                      <>
+                        <CheckCircle2 className="size-3.5 text-income" />
+                        <span className="truncate">{photo.name}</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus className="size-3.5" />
+                        انتخاب عکس
+                      </>
+                    )}
+                  </button>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null
+                      if (f && !f.type.startsWith("image/")) {
+                        toast.error("فقط تصویر مجاز است")
+                        return
+                      }
+                      if (f && f.size > 8 * 1024 * 1024) {
+                        toast.error("حجم عکس بیش از ۸ مگابایت است")
+                        return
+                      }
+                      setPhoto(f)
+                      if (photoInputRef.current) photoInputRef.current.value = ""
+                    }}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                  />
+                </div>
+              </div>
+              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-[0.6rem] leading-4 text-muted-foreground">
+                چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود — اول باید به نام{" "}
+                {isReceived ? "شما" : "مشتری"} ثبت شود.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

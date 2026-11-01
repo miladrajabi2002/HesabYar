@@ -22,7 +22,6 @@ import {
   Loader2,
   Paperclip,
   Pencil,
-  Send,
   X,
 } from "lucide-react"
 import { apiDelete, apiGet, apiPost } from "@/lib/api-client"
@@ -39,6 +38,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfirm } from "@/components/ui/confirm"
 import { cn } from "@/lib/utils"
+import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 
 interface Invoice {
   id: string
@@ -70,8 +70,12 @@ interface Invoice {
     serial: string
     amount: number
     bankKey: string
+    direction: string
     dueDate: string
     status: string
+    isRegistered: boolean
+    registeredName: string | null
+    registeredNationalId: string | null
   }[]
   settlements: { id: string; amount: number; method: string; direction: string; date: string }[]
 }
@@ -140,156 +144,6 @@ async function fetchAttachmentObjectUrl(id: string): Promise<string> {
   return URL.createObjectURL(await res.blob())
 }
 
-/* ───────── نسخهٔ چاپی رسمی فاکتور (UI-04) — فقط در چاپ دیده می‌شود ───────── */
-function PrintableInvoice({ inv }: { inv: Invoice }) {
-  const isSale = inv.type === "SALE"
-  const counterpartyLabel = isSale ? "خریدار" : "فروشنده"
-  return (
-    <div className="print-area hidden print:block bg-white text-black" dir="rtl">
-      {/* سربرگ رسمی */}
-      <header className="flex items-start justify-between gap-4 border-b-2 border-black/70 pb-3">
-        <div className="flex items-center gap-3">
-          <span className="flex size-12 items-center justify-center rounded-xl bg-[#0e7c66] text-white">
-            <Send className="size-6 -scale-x-100" />
-          </span>
-          <div>
-            <p className="text-xl font-extrabold leading-tight">حساب‌یار</p>
-            <p className="text-[10px] text-black/60">دفتر فروش و خرید</p>
-          </div>
-        </div>
-        <div className="text-end">
-          <p className="text-lg font-extrabold leading-tight">{isSale ? "فاکتور فروش" : "فاکتور خرید"}</p>
-          <p className="nums mt-0.5 text-xs text-black/70">شماره {toPersianDigits(inv.number)}</p>
-        </div>
-      </header>
-
-      {/* مشخصات فاکتور و طرف حساب */}
-      <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1.5 text-[11px] leading-relaxed">
-        <p>
-          <span className="text-black/55">تاریخ صدور: </span>
-          <span className="nums">{formatJalaliWithWeekday(new Date(inv.date))}</span>
-        </p>
-        <p className="text-end">
-          <span className="text-black/55">{counterpartyLabel}: </span>
-          <span className="font-bold">{inv.person.name}</span>
-          {inv.person.company ? <span className="text-black/70"> ({inv.person.company})</span> : null}
-        </p>
-        <p>
-          <span className="text-black/55">وضعیت تسویه: </span>
-          {inv.credit > 0 ? (
-            <span>مانده {formatToman(inv.credit)} — نسیه</span>
-          ) : (
-            <span className="font-bold">تسویه شده</span>
-          )}
-        </p>
-        {inv.person.phone && (
-          <p className="text-end">
-            <span className="text-black/55">تلفن: </span>
-            <span className="nums">{toPersianDigits(inv.person.phone)}</span>
-          </p>
-        )}
-      </div>
-
-      {/* جدول اقلام */}
-      <table className="mt-4 w-full border-collapse text-center text-[11px]">
-        <thead>
-          <tr className="bg-black/[0.05]">
-            <th className="border border-black/25 px-1.5 py-2 font-bold">ردیف</th>
-            <th className="border border-black/25 px-2 py-2 text-start font-bold">شرح کالا</th>
-            <th className="border border-black/25 px-2 py-2 font-bold">برند / کد</th>
-            <th className="border border-black/25 px-1.5 py-2 font-bold">تعداد</th>
-            <th className="border border-black/25 px-1.5 py-2 font-bold">واحد</th>
-            <th className="border border-black/25 px-2 py-2 font-bold">فی (تومان)</th>
-            <th className="border border-black/25 px-2 py-2 font-bold">مبلغ کل (تومان)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {inv.items.map((it, i) => (
-            <tr key={it.id} className="break-inside-avoid">
-              <td className="nums border border-black/25 px-1.5 py-1.5">{toPersianDigits(i + 1)}</td>
-              <td className="border border-black/25 px-2 py-1.5 text-start font-semibold">{it.productName}</td>
-              <td className="border border-black/25 px-2 py-1.5 text-black/70">
-                {it.brand || it.code
-                  ? `${it.brand ?? ""}${it.brand && it.code ? " • " : ""}${it.code ? `کد ${it.code}` : ""}`
-                  : "—"}
-              </td>
-              <td className="nums border border-black/25 px-1.5 py-1.5">{toPersianDigits(it.quantity)}</td>
-              <td className="border border-black/25 px-1.5 py-1.5">{formatUnit(it.unit)}</td>
-              <td className="nums border border-black/25 px-2 py-1.5">{formatToman(it.unitPrice, false)}</td>
-              <td className="nums border border-black/25 px-2 py-1.5 font-bold">{formatToman(it.total, false)}</td>
-            </tr>
-          ))}
-          {inv.items.length === 0 && (
-            <tr>
-              <td colSpan={7} className="border border-black/25 px-2 py-3 text-black/60">
-                قلمی ثبت نشده است
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-
-      {/* جمع‌ها */}
-      <div className="mt-3 flex justify-start">
-        <table className="w-72 border-collapse text-[11px]">
-          <tbody>
-            <tr>
-              <td className="border border-black/25 bg-black/[0.03] px-3 py-1.5">جمع اقلام</td>
-              <td className="nums border border-black/25 px-3 py-1.5 text-end">{formatToman(inv.subtotal, false)}</td>
-            </tr>
-            {inv.discount > 0 && (
-              <tr>
-                <td className="border border-black/25 bg-black/[0.03] px-3 py-1.5">تخفیف</td>
-                <td className="nums border border-black/25 px-3 py-1.5 text-end">−{formatToman(inv.discount, false)}</td>
-              </tr>
-            )}
-            <tr className="font-extrabold">
-              <td className="border border-black/25 bg-black/[0.03] px-3 py-2">مبلغ نهایی</td>
-              <td className="nums border border-black/25 px-3 py-2 text-end">{formatToman(inv.total, false)}</td>
-            </tr>
-            <tr>
-              <td className="border border-black/25 bg-black/[0.03] px-3 py-1.5">پرداخت نقدی</td>
-              <td className="nums border border-black/25 px-3 py-1.5 text-end">{formatToman(inv.paidCash, false)}</td>
-            </tr>
-            <tr>
-              <td className="border border-black/25 bg-black/[0.03] px-3 py-1.5">پرداخت با چک</td>
-              <td className="nums border border-black/25 px-3 py-1.5 text-end">{formatToman(inv.paidChecks, false)}</td>
-            </tr>
-            <tr className="font-bold">
-              <td className="border border-black/25 bg-black/[0.03] px-3 py-1.5">مانده</td>
-              <td className="nums border border-black/25 px-3 py-1.5 text-end">
-                {inv.credit > 0 ? formatToman(inv.credit, false) : "تسویه شده ✓"}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {inv.note && (
-        <p className="mt-3 rounded border border-black/15 bg-black/[0.02] px-3 py-2 text-[11px]">
-          <span className="text-black/55">توضیحات: </span>
-          {inv.note}
-        </p>
-      )}
-
-      {/* امضاها */}
-      <div className="mt-10 grid grid-cols-2 gap-10">
-        <div className="flex h-24 items-end justify-center border-t border-black/50 pt-2 text-center text-[11px] font-bold">
-          مهر و امضای فروشنده
-        </div>
-        <div className="flex h-24 items-end justify-center border-t border-black/50 pt-2 text-center text-[11px] font-bold">
-          امضای خریدار
-        </div>
-      </div>
-
-      {/* پانوشت */}
-      <footer className="mt-6 border-t border-black/20 pt-2 text-center text-[10px] text-black/60">
-        صادرشده با حساب‌یار • فاکتور شماره <span className="nums">{toPersianDigits(inv.number)}</span>
-      </footer>
-    </div>
-  )
-}
-
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const queryClient = useQueryClient()
@@ -310,6 +164,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [checkDue, setCheckDue] = useState("")
   const [accountSheet, setAccountSheet] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [printing, setPrinting] = useState(false)
 
   /* ── پیوست‌های تصویری (ADV-04) ── */
   const { data: attData, isLoading: attLoading } = useQuery({
@@ -413,6 +268,29 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  /* ── چاپ فاکتور: صفحهٔ مستقل با توکن — window.print داخل تلگرام کار نمی‌کند ── */
+  const printInvoice = async () => {
+    if (printing) return
+    setPrinting(true)
+    try {
+      const r = await apiPost<{ token: string }>("/api/print-token", { resource: "invoice", id: inv.id })
+      const url = `${window.location.origin}/api/invoices/${inv.id}/print?t=${encodeURIComponent(r.token)}`
+      const tg = window.Telegram?.WebApp
+      if (tg?.openLink) {
+        tg.openLink(url)
+      } else {
+        const w = window.open(url, "_blank", "noopener")
+        if (!w) {
+          toast.error("مرورگر پنجرهٔ چاپ را مسدود کرد — popup را مجاز کنید")
+        }
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "آماده‌سازی چاپ ناموفق بود")
+    } finally {
+      setPrinting(false)
+    }
+  }
+
   const remove = async () => {
     const okRemove = await confirm({
       title: "حذف فاکتور",
@@ -504,9 +382,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <>
-      <div className="space-y-4 print:hidden">
+      <div className="space-y-4 ">
         {/* هدر */}
-        <div className="flex items-center justify-between gap-3 print:hidden">
+        <div className="flex items-center justify-between gap-3 ">
           <Link
             href="/invoices"
             className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
@@ -522,11 +400,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <Pencil className="size-4" />
             </Link>
             <button
-              onClick={() => window.print()}
+              onClick={printInvoice}
+              disabled={printing}
               className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
               aria-label="چاپ فاکتور"
+              title="چاپ / ذخیره PDF"
             >
-              <Printer className="size-4" />
+              {printing ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
             </button>
             <button
               onClick={remove}
@@ -541,7 +421,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         {/* کارت اصلی */}
         <div
           className={cn(
-            "overflow-hidden rounded-3xl border shadow-card print:hidden",
+            "overflow-hidden rounded-3xl border shadow-card ",
             isSale ? "border-income/25" : "border-destructive/25"
           )}
         >
@@ -620,7 +500,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* پرداخت‌ها */}
-        <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 print:hidden">
+        <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 ">
           <div className="mb-3 flex items-center gap-2 text-sm font-bold">
             <Banknote className="size-4 text-primary" />
             پرداخت‌ها
@@ -676,8 +556,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <div className="nums text-[0.62rem] text-muted-foreground">
                       {getBank(c.bankKey).name} • سررسید{" "}
                       {new Date(c.dueDate).toLocaleDateString("fa-IR")}
+                      {c.isRegistered
+                        ? c.registeredName
+                          ? ` • ثبت به نام ${c.registeredName}`
+                          : " • ثبت‌شده"
+                        : " • ثبت‌نشده"}
                     </div>
                   </div>
+                  <CheckDirectionBadge direction={c.direction} size="sm" />
                   <span
                     className={cn(
                       "shrink-0 rounded-md px-1.5 py-px text-[0.6rem] font-bold",
@@ -740,7 +626,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* پیوست‌ها (تصاویر) — ADV-04 */}
-        <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 print:hidden">
+        <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 ">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2 text-sm font-bold">
               <Paperclip className="size-4 shrink-0 text-primary" />
@@ -832,7 +718,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           open={settleSheet}
           onClose={() => setSettleSheet(false)}
           title={`تسویه مانده فاکتور ${toPersianDigits(inv.number)}`}
-          description={isSale ? "از مشتری دریافت می‌کنید" : "به تأمین‌کننده پرداخت می‌کنید"}
+          description={isSale ? "از مشتری دریافت می‌کنید" : "به فروشنده پرداخت می‌کنید"}
           size="tall"
           footer={
             <Button onClick={settle} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
@@ -958,8 +844,6 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         </BottomSheet>
       </div>
 
-      {/* ───────── نسخهٔ چاپی رسمی (UI-04) — روی صفحه مخفی، فقط در چاپ ───────── */}
-      <PrintableInvoice inv={inv} />
 
       {/* پیش‌نمایش تمام‌صفحه پیوست */}
       <Dialog

@@ -73,6 +73,11 @@ export async function POST(req: NextRequest) {
             personId: data.personId,
             settlementId: settlement.id,
             note: data.check.note ?? "تسویه چکی",
+            // ثبت چک: دریافتی به نام ما، صادره به نام مشتری
+            isRegistered: data.check.isRegistered,
+            registeredName: data.check.isRegistered ? data.check.registeredName ?? null : null,
+            registeredNationalId: data.check.isRegistered ? data.check.registeredNationalId ?? null : null,
+            registeredAt: data.check.isRegistered ? date : null,
           },
         })
       }

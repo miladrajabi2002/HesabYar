@@ -162,6 +162,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
             personId: data.personId,
             invoiceId: id,
             note: c.note ?? `بابت فاکتور ${existing.number}`,
+            // ثبت چک: دریافتی به نام ما، صادره به نام مشتری
+            isRegistered: c.isRegistered,
+            registeredName: c.isRegistered ? c.registeredName ?? null : null,
+            registeredNationalId: c.isRegistered ? c.registeredNationalId ?? null : null,
+            registeredAt: c.isRegistered ? date : null,
           },
         })
       }

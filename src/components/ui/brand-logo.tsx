@@ -1,0 +1,47 @@
+"use client"
+
+/**
+ * لوگوی حساب‌یار — سند فاکتور + سکه با تیک (vector، هر سایزی شارپ).
+ */
+import { cn } from "@/lib/utils"
+
+export function BrandLogo({
+  size = 40,
+  className,
+}: {
+  size?: number
+  className?: string
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="لوگوی حساب‌یار"
+      className={cn("shrink-0 select-none", className)}
+    >
+      <defs>
+        <linearGradient id="hy-brand-g" x1="0" y1="0" x2="0" y2="48" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#12a189" />
+          <stop offset="1" stopColor="#0b6a58" />
+        </linearGradient>
+      </defs>
+      <rect x="1.5" y="1.5" width="45" height="45" rx="12" fill="url(#hy-brand-g)" />
+      <rect x="13" y="9" width="22" height="30" rx="3.2" fill="#ffffff" />
+      <rect x="16.5" y="13.5" width="15" height="3.6" rx="1.8" fill="#0e7c66" />
+      <rect x="16.5" y="21.5" width="15" height="2.4" rx="1.2" fill="#c9d6d2" />
+      <rect x="16.5" y="26.5" width="11" height="2.4" rx="1.2" fill="#c9d6d2" />
+      <circle cx="34" cy="33" r="7.6" fill="#f59e0b" stroke="#ffffff" strokeWidth="2.4" />
+      <path
+        d="M30.8 33.2l2.3 2.3 4.4-4.9"
+        stroke="#ffffff"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}

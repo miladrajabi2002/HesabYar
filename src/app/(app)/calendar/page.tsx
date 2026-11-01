@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/ui/error-state"
 import { useTelegramBackButton } from "@/hooks/use-telegram"
+import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { cn } from "@/lib/utils"
 
 // ───────────────────────── انواع ─────────────────────────
@@ -221,6 +222,7 @@ export default function CalendarPage() {
     if (!data) return null
     let pendingChecks = 0
     let pendingChecksSum = 0
+    let allChecks = 0
     let salesCount = 0
     let salesSum = 0
     let purchaseCount = 0
@@ -229,6 +231,7 @@ export default function CalendarPage() {
     let settleSum = 0
     for (const day of Object.values(data.days)) {
       for (const c of day.checks) {
+        allChecks += 1
         if (c.status === "PENDING") {
           pendingChecks += 1
           pendingChecksSum += c.amount
@@ -251,13 +254,14 @@ export default function CalendarPage() {
     return {
       pendingChecks,
       pendingChecksSum,
+      allChecks,
       salesCount,
       salesSum,
       purchaseCount,
       purchaseSum,
       settleCount,
       settleSum,
-      totalEvents: pendingChecks + salesCount + purchaseCount + settleCount,
+      totalEvents: allChecks + salesCount + purchaseCount + settleCount,
     }
   }, [data])
 
@@ -339,9 +343,9 @@ export default function CalendarPage() {
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <SummaryChip
                 icon={<CheckSquare2 className="size-3.5" />}
-                label="چک‌های در جریان"
+                label="چک‌های این ماه"
                 value={formatTomanCompact(summary.pendingChecksSum)}
-                sub={`${toPersianDigits(summary.pendingChecks)} فقره سررسید`}
+                sub={`${toPersianDigits(summary.allChecks)} فقره در ماه • ${toPersianDigits(summary.pendingChecks)} در جریان`}
                 classes="border-destructive/25 bg-destructive/[0.06] text-destructive"
               />
               <SummaryChip
@@ -508,16 +512,7 @@ export default function CalendarPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate text-sm font-bold">{c.person.name}</span>
-                          <span
-                            className={cn(
-                              "shrink-0 rounded-md px-1.5 py-px text-[0.6rem] font-bold",
-                              c.direction === "RECEIVED"
-                                ? "bg-primary/10 text-primary"
-                                : "bg-destructive/10 text-destructive"
-                            )}
-                          >
-                            {c.direction === "RECEIVED" ? "دریافتی" : "صادره"}
-                          </span>
+                          <CheckDirectionBadge direction={c.direction} size="sm" />
                         </div>
                         <p className="nums mt-0.5 truncate text-[0.65rem] text-muted-foreground">
                           {getBank(c.bankKey).name} • سریال {toPersianDigits(c.serial)}

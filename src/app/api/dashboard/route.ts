@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     // طلبکاران و بستانکاران (۱۵ نفر اول هر کدام)
     const people = await db.person.findMany({
       where: { isArchived: false },
-      select: { id: true, name: true, phone: true, company: true },
+      select: { id: true, name: true, phone: true, company: true, role: true },
     })
     const withBalance = people
       .map((p) => ({ ...p, balance: personBalances.get(p.id) ?? 0 }))
@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
       orderBy: [{ date: "desc" }, { number: "desc" }],
       take: 6,
       include: {
-        person: { select: { id: true, name: true } },
+        person: { select: { id: true, name: true, role: true } },
         checks: { select: { id: true, amount: true, bankKey: true, dueDate: true, status: true } },
       },
     })

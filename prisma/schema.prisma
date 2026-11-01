@@ -130,12 +130,20 @@ model CheckPaper {
   accountId    String? // حساب محل وصول / برداشت
   account      Account?    @relation(fields: [accountId], references: [id])
   note         String?
+  // ── ثبت چک (سنجاق به نام) ──
+  // چک دریافتی باید «به نام ما» و چک صادره «به نام مشتری» ثبت شود؛
+  // تا وقتی ثبت نشده، پاس/برگشت/لغو مجاز نیست.
+  isRegistered        Boolean   @default(false) // آیا چک ثبت شده است
+  registeredName      String? // نام صاحب حساب که چک به نام او ثبت شده
+  registeredNationalId String? // کد ملی صاحب حساب
+  registeredAt        DateTime? // تاریخ ثبت
   createdAt    DateTime    @default(now())
 
   @@index([dueDate])
   @@index([status])
   @@index([personId])
   @@index([direction])
+  @@index([isRegistered])
 }
 
 // ───────────────────────── تسویه طلب/بدهی اشخاص ─────────────────────────

@@ -24,6 +24,7 @@ import { formatTomanCompact } from "@/lib/money"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { RoleAvatar } from "@/components/ui/role-avatar"
 import { cn } from "@/lib/utils"
 
 interface Person {
@@ -38,8 +39,8 @@ interface Person {
 
 const ROLE_LABEL: Record<string, string> = {
   CUSTOMER: "مشتری",
-  SUPPLIER: "تأمین‌کننده",
-  BOTH: "مشتری و تأمین‌کننده",
+  SUPPLIER: "فروشنده",
+  BOTH: "مشتری و فروشنده",
 }
 
 function PeoplePageInner() {
@@ -159,7 +160,7 @@ function PeoplePageInner() {
             [
               { key: "ALL", label: "همه" },
               { key: "CUSTOMER", label: "مشتری‌ها" },
-              { key: "SUPPLIER", label: "تأمین‌کننده‌ها" },
+              { key: "SUPPLIER", label: "فروشنده‌ها" },
             ] as const
           ).map((f) => (
             <button
@@ -228,14 +229,7 @@ function PeoplePageInner() {
               className="block rounded-3xl border border-border/70 bg-card p-4 shadow-card transition-all hover:shadow-card-hover active:scale-[0.995]"
             >
               <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "flex size-11 shrink-0 items-center justify-center rounded-2xl text-sm font-extrabold",
-                    p.role === "SUPPLIER" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
-                  )}
-                >
-                  {p.name.trim().charAt(0)}
-                </span>
+                <RoleAvatar role={p.role} size={44} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-extrabold">{p.name}</div>
                   <div className="mt-0.5 flex items-center gap-1.5 text-[0.65rem] text-muted-foreground">
@@ -383,7 +377,7 @@ export function AddPersonSheet({
             {(
               [
                 { key: "CUSTOMER", label: "مشتری" },
-                { key: "SUPPLIER", label: "تأمین‌کننده" },
+                { key: "SUPPLIER", label: "فروشنده" },
                 { key: "BOTH", label: "هردو" },
               ] as const
             ).map((r) => (
@@ -400,8 +394,10 @@ export function AddPersonSheet({
               >
                 {r.key === "CUSTOMER" ? (
                   <UserRound className="size-3.5" />
-                ) : (
+                ) : r.key === "SUPPLIER" ? (
                   <Building2 className="size-3.5" />
+                ) : (
+                  <UserRound className="size-3.5" />
                 )}
                 {r.label}
               </button>

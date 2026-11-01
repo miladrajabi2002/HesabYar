@@ -239,56 +239,149 @@
   }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   چاپ فاکتور رسمی (UI-04)
-   فقط ناحیهٔ .print-area چاپ می‌شود؛ بقیهٔ رابط (سایدبار، منوی شناور،
-   هدر و دکمه‌ها) با تکنیک کلاسیک visibility پنهان می‌شود و خروجی
-   A4 با حاشیهٔ ۱۲ میلی‌متری صادر می‌گردد.
-   ═══════════════════════════════════════════════════════════ */
-@page {
-  size: A4;
-  margin: 12mm;
+/* ═══════════════════════════════════════════════════════════════
+   چاپ فاکتور (نسخهٔ ۳) — صفحهٔ چاپ مستقل با استایل داخلی خودش در
+   /api/invoices/[id]/print سرو می‌شود؛ قواعد چاپ قبلی حذف شدند تا
+   Ctrl+P صفحهٔ خالی چاپ نکند.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
+   نوتیفیکیشن‌های داخلی (sonner) — بازطراحی نسخهٔ ۳
+   شیشه‌ای، آیکون‌های رنگی دایره‌ای، RTL و مناسب موبایل + دسکتاپ
+   ═══════════════════════════════════════════════════════════════ */
+.toaster {
+  --normal-bg: var(--card);
+  --normal-text: var(--foreground);
+  --normal-border: var(--border);
+  --border-radius: 1.15rem;
 }
 
-@media print {
-  /* پنهان‌سازی کل رابط، نمایش فقط ناحیه چاپ */
-  body * {
-    visibility: hidden !important;
-  }
-  .print-area,
-  .print-area * {
-    visibility: visible !important;
-  }
-  .print-area {
-    position: absolute !important;
-    inset: 0;
-    width: 100%;
-    /* خنثی‌کردن ظاهر اپ: بدون سایه و قاب، روی کاغذ سفید */
-    box-shadow: none !important;
-    border: none !important;
-    background: #fff !important;
-    color: #000 !important;
-    /* چاپ دقیق رنگ‌ها (لوگوی فیروزه‌ای، ردیف‌های سایه‌دار و…) */
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+.toaster [data-sonner-toaster] {
+  direction: rtl;
+}
 
-  /* کاغذ سفید — پس‌زمینهٔ تیرهٔ اپ چاپ نشود */
-  html,
-  body {
-    background: #fff !important;
-  }
+/* بدنهٔ اصلی توست */
+.cn-toast {
+  align-items: flex-start !important;
+  gap: 0.7rem !important;
+  padding: 0.85rem 1rem !important;
+  border-radius: 1.15rem !important;
+  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent) !important;
+  background: color-mix(in oklab, var(--card) 88%, transparent) !important;
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow:
+    0 2px 6px -2px rgb(16 24 40 / 0.08),
+    0 12px 28px -8px rgb(16 24 40 / 0.18) !important;
+  font-family: "Vazirmatn", "Segoe UI", Tahoma, sans-serif !important;
+}
 
-  /* کمربند و بندکولی برای عناصر تعاملی داخل ناحیه چاپ
-     (Tailwind خودش print:hidden را می‌سازد؛ این برای اطمینان بیشتر است) */
-  .print-area .print\:hidden {
-    display: none !important;
-  }
+/* نوار رنگی کنار توست بر اساس نوع */
+.cn-toast::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.7rem;
+  inset-inline-start: 0;
+  width: 0.28rem;
+  border-radius: 99px;
+  background: var(--muted-foreground);
+  opacity: 0.55;
+}
+.cn-toast[data-type="success"]::before { background: var(--income); opacity: 1; }
+.cn-toast[data-type="error"]::before { background: var(--destructive); opacity: 1; }
+.cn-toast[data-type="warning"]::before { background: var(--warning); opacity: 1; }
+.cn-toast[data-type="info"]::before { background: var(--primary); opacity: 1; }
+.cn-toast[data-type="loading"]::before { background: var(--primary); opacity: 0.6; }
 
-  /* شکستن تمیز صفحه‌ها در فاکتورهای بلند */
-  .print-area tr,
-  .print-area img,
-  .print-area .avoid-break {
-    break-inside: avoid;
+/* جایگاه آیکون — دایرهٔ رنگی */
+.cn-toast [data-icon] {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem !important;
+  height: 2.1rem !important;
+  border-radius: 0.85rem !important;
+  margin-inline-start: 0.15rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+.cn-toast[data-type="success"] [data-icon] { background: color-mix(in oklab, var(--income) 14%, transparent); color: var(--income); }
+.cn-toast[data-type="error"] [data-icon] { background: color-mix(in oklab, var(--destructive) 12%, transparent); color: var(--destructive); }
+.cn-toast[data-type="warning"] [data-icon] { background: color-mix(in oklab, var(--warning) 16%, transparent); color: var(--warning); }
+.cn-toast[data-type="info"] [data-icon] { background: color-mix(in oklab, var(--primary) 12%, transparent); color: var(--primary); }
+.cn-toast[data-type="loading"] [data-icon] { background: color-mix(in oklab, var(--primary) 10%, transparent); color: var(--primary); }
+
+.cn-toast [data-icon] svg {
+  width: 1.15rem !important;
+  height: 1.15rem !important;
+  stroke-width: 2.2;
+}
+
+/* متن‌ها */
+.cn-toast [data-title] {
+  font-weight: 700 !important;
+  font-size: 0.82rem !important;
+  line-height: 1.45 !important;
+  text-align: start !important;
+  color: var(--foreground) !important;
+}
+.cn-toast [data-description] {
+  font-weight: 500 !important;
+  font-size: 0.72rem !important;
+  line-height: 1.55 !important;
+  text-align: start !important;
+  color: var(--muted-foreground) !important;
+  margin-top: 0.1rem !important;
+}
+
+/* دکمهٔ بستن */
+.cn-toast [data-close-button] {
+  position: relative !important;
+  margin-inline-start: auto !important;
+  background: transparent !important;
+  border: 0 !important;
+  color: var(--muted-foreground) !important;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  align-self: flex-start;
+}
+.cn-toast [data-close-button]:hover {
+  opacity: 1;
+  background: color-mix(in oklab, var(--muted) 70%, transparent) !important;
+}
+
+/* انواع رنگی کامل (richColors) */
+.cn-toast[data-type="success"] {
+  background: color-mix(in oklab, var(--card) 92%, var(--income) 4%) !important;
+  border-color: color-mix(in oklab, var(--income) 30%, transparent) !important;
+}
+.cn-toast[data-type="error"] {
+  background: color-mix(in oklab, var(--card) 92%, var(--destructive) 4%) !important;
+  border-color: color-mix(in oklab, var(--destructive) 28%, transparent) !important;
+}
+.cn-toast[data-type="warning"] {
+  background: color-mix(in oklab, var(--card) 92%, var(--warning) 5%) !important;
+  border-color: color-mix(in oklab, var(--warning) 34%, transparent) !important;
+}
+
+/* موبایل: توست زیر هدر چسبان؛ دسکتاپ: بالای صفحه با فاصلهٔ کمتر */
+.toaster {
+  --y-offset: 4.6rem;
+}
+@media (min-width: 1024px) {
+  .toaster {
+    --y-offset: 1.4rem;
   }
+}
+.toaster {
+  top: var(--y-offset) !important;
+}
+
+/* دکمه‌های اکشن داخل توست (مثل «بازگردانی») */
+.cn-toast [data-button] {
+  border-radius: 0.7rem !important;
+  font-weight: 700 !important;
+  font-size: 0.72rem !important;
+  padding: 0.4rem 0.8rem !important;
+  font-family: inherit !important;
 }

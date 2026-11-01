@@ -28,11 +28,12 @@ import {
   MessageCircle,
   Share2,
   X,
+  BadgeCheck,
 } from "lucide-react"
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toLatinDigits, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort, formatJalaliWithWeekday } from "@/lib/jalali"
-import { getBank } from "@/lib/banks"
+import { BANKS, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { AmountInput } from "@/components/ui/amount-input"
@@ -40,6 +41,8 @@ import { JalaliDateField } from "@/components/ui/jalali-date-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { RoleAvatar } from "@/components/ui/role-avatar"
+import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfirm } from "@/components/ui/confirm"
 import { useTelegram } from "@/hooks/use-telegram"
@@ -194,6 +197,10 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
   const [checkBank, setCheckBank] = useState("mellat")
   const [checkSerial, setCheckSerial] = useState("")
   const [checkDue, setCheckDue] = useState("")
+  const [bankSheet, setBankSheet] = useState(false)
+  const [checkRegistered, setCheckRegistered] = useState(false)
+  const [checkRegName, setCheckRegName] = useState("")
+  const [checkRegNationalId, setCheckRegNationalId] = useState("")
   const [accountSheet, setAccountSheet] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -319,6 +326,16 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     } else {
       if (amount <= 0) return toast.error("مبلغ چک را وارد کنید")
       if (!checkDue) return toast.error("سررسید چک را انتخاب کنید")
+      if (checkRegistered && checkRegName.trim().length < 2) {
+        return toast.error("نام صاحب حساب چک را وارد کنید")
+      }
+      if (
+        checkRegistered &&
+        checkRegNationalId.trim() &&
+        !/^\d{10}$/.test(checkRegNationalId.trim())
+      ) {
+        return toast.error("کد ملی باید ۱۰ رقم باشد")
+      }
     }
     setSaving(true)
     try {
@@ -330,11 +347,24 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         accountId: method === "CASH" ? account?.id : undefined,
         check:
           method === "CHECK"
-            ? { amount, bankKey: checkBank, serial: checkSerial || undefined, dueDate: checkDue }
+            ? {
+                amount,
+                bankKey: checkBank,
+                serial: checkSerial || undefined,
+                dueDate: checkDue,
+                isRegistered: checkRegistered,
+                registeredName: checkRegistered ? checkRegName.trim() || undefined : undefined,
+                registeredNationalId: checkRegistered
+                  ? checkRegNationalId.trim() || undefined
+                  : undefined,
+              }
             : undefined,
         note: "تسویه از پروفایل شخص",
       })
       toast.success("تسویه ثبت شد ✅")
+      setCheckRegistered(false)
+      setCheckRegName("")
+      setCheckRegNationalId("")
       setSettleSheet(false)
       await queryClient.invalidateQueries()
     } catch (e) {
@@ -523,14 +553,12 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       {/* کارت شخص */}
       <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
         <div className="flex items-center gap-3">
-          <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-xl font-extrabold text-primary">
-            {p.name.charAt(0)}
-          </span>
+          <RoleAvatar role={p.role} size={56} />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-extrabold sm:text-lg">{p.name}</h1>
             <div className="mt-1 flex flex-wrap gap-1.5 text-[0.65rem] text-muted-foreground">
               <span className="rounded-md bg-muted px-1.5 py-px font-medium">
-                {p.role === "CUSTOMER" ? "مشتری" : p.role === "SUPPLIER" ? "تأمین‌کننده" : "مشتری و تأمین‌کننده"}
+                {p.role === "CUSTOMER" ? "مشتری" : p.role === "SUPPLIER" ? "فروشنده" : "مشتری و فروشنده"}
               </span>
             </div>
           </div>
@@ -685,6 +713,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   {getBank(c.bankKey).name} • سررسید {formatJalaliShort(new Date(c.dueDate))}
                 </div>
               </div>
+              <CheckDirectionBadge direction={c.direction} size="sm" />
               <span
                 className={cn(
                   "shrink-0 rounded-md px-1.5 py-px text-[0.6rem] font-bold",
@@ -864,7 +893,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               {(
                 [
                   { key: "CUSTOMER", label: "مشتری" },
-                  { key: "SUPPLIER", label: "تأمین‌کننده" },
+                  { key: "SUPPLIER", label: "فروشنده" },
                   { key: "BOTH", label: "هردو" },
                 ] as const
               ).map((r) => (
@@ -965,6 +994,20 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
             </div>
           ) : (
             <>
+              <div>
+                <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+                  بانک چک *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setBankSheet(true)}
+                  className="flex h-12 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3 transition-[color,border-color,box-shadow] hover:border-input/80"
+                >
+                  <BankLogo bankKey={checkBank} size={32} />
+                  <span className="flex-1 text-start text-sm">{getBank(checkBank).name}</span>
+                  <span className="text-[0.65rem] text-muted-foreground">تغییر</span>
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">سریال</label>
@@ -982,11 +1025,90 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   <JalaliDateField value={checkDue} onChange={setCheckDue} />
                 </div>
               </div>
+
+              {/* ثبت چک */}
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
+                <button
+                  type="button"
+                  onClick={() => setCheckRegistered((v) => !v)}
+                  className="flex w-full items-center gap-2.5 text-start"
+                >
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
+                      checkRegistered ? "border-primary bg-primary text-white" : "border-input bg-card"
+                    )}
+                  >
+                    {checkRegistered && <BadgeCheck className="size-3.5" strokeWidth={2.6} />}
+                  </span>
+                  <span className="flex-1">
+                    <span className="block text-xs font-bold">چک ثبت شده است</span>
+                    <span className="mt-0.5 block text-[0.62rem] leading-4 text-muted-foreground">
+                      {direction === "RECEIVE" ? "به نام خودتان در بانک ثبت شده" : "به نام این شخص ثبت شده"}
+                    </span>
+                  </span>
+                </button>
+                {checkRegistered && (
+                  <div className="mt-3 grid grid-cols-2 gap-2.5 border-t border-dashed pt-3">
+                    <div>
+                      <label className="mb-1.5 block text-[0.68rem] font-medium text-muted-foreground">
+                        نام صاحب حساب *
+                      </label>
+                      <input
+                        value={checkRegName}
+                        onChange={(e) => setCheckRegName(e.target.value)}
+                        className="field"
+                        placeholder={direction === "RECEIVE" ? "نام خودتان" : p.name}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[0.68rem] font-medium text-muted-foreground">
+                        کد ملی (اختیاری)
+                      </label>
+                      <input
+                        value={checkRegNationalId}
+                        onChange={(e) => setCheckRegNationalId(e.target.value)}
+                        inputMode="numeric"
+                        dir="ltr"
+                        className="field nums text-end"
+                        placeholder="۱۲۳۴۵۶۷۸۹۰"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <p className="rounded-xl bg-primary/5 px-3 py-2 text-[0.65rem] text-muted-foreground">
-                چک دریافت‌شده از مشتری یا داده‌شده به تأمین‌کننده؛ ربات تلگرام قبل از سررسید خبر می‌دهد.
+                چک دریافت‌شده از مشتری یا داده‌شده به فروشنده؛ ربات تلگرام قبل از سررسید خبر می‌دهد.
+                چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود.
               </p>
             </>
           )}
+        </div>
+      </BottomSheet>
+
+      {/* شیت بانک چک */}
+      <BottomSheet open={bankSheet} onClose={() => setBankSheet(false)} title="بانک چک" size="tall">
+        <div className="grid grid-cols-2 gap-2">
+          {BANKS.map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => {
+                setCheckBank(b.key)
+                setBankSheet(false)
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-2xl border p-2.5 text-start transition-all active:scale-[0.98]",
+                checkBank === b.key
+                  ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                  : "border-border hover:bg-accent/60"
+              )}
+            >
+              <BankLogo bankKey={b.key} size={36} />
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{b.name}</span>
+            </button>
+          ))}
         </div>
       </BottomSheet>
 

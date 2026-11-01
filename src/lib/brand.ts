@@ -1,0 +1,25 @@
+/**
+ * برند «حساب‌یار» — لوگوی ساده: سند فاکتور + سکه با تیک.
+ * هم نسخهٔ رشته‌ای SVG (برای HTML چاپ) و هم رنگ‌های برند.
+ */
+export const BRAND_TEAL = "#0e7c66"
+export const BRAND_TEAL_DARK = "#0b6a58"
+export const BRAND_TEAL_LIGHT = "#12a189"
+export const BRAND_GOLD = "#f59e0b"
+
+/** لوگوی کامل — SVG مستقل (برای درج در HTML چاپ) */
+export const BRAND_SVG = `<svg width="44" height="44" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="حساب‌یار">
+  <defs>
+    <linearGradient id="hy-brand-g" x1="0" y1="0" x2="0" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12a189"/>
+      <stop offset="1" stop-color="#0b6a58"/>
+    </linearGradient>
+  </defs>
+  <rect x="1.5" y="1.5" width="45" height="45" rx="12" fill="url(#hy-brand-g)"/>
+  <rect x="13" y="9" width="22" height="30" rx="3.2" fill="#ffffff"/>
+  <rect x="16.5" y="13.5" width="15" height="3.6" rx="1.8" fill="#0e7c66"/>
+  <rect x="16.5" y="21.5" width="15" height="2.4" rx="1.2" fill="#c9d6d2"/>
+  <rect x="16.5" y="26.5" width="11" height="2.4" rx="1.2" fill="#c9d6d2"/>
+  <circle cx="34" cy="33" r="7.6" fill="#f59e0b" stroke="#ffffff" stroke-width="2.4"/>
+  <path d="M30.8 33.2l2.3 2.3 4.4-4.9" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`

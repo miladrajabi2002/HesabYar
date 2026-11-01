@@ -76,3 +76,51 @@ export function extractCookie(req: Request, name: string): string | null {
   const m = new RegExp(`(?:^|;\\s*)${name}=([^;]*)`).exec(header)
   return m ? decodeURIComponent(m[1]) : null
 }
+
+/** ───────── توکن چاپ (PRINT) ─────────
+ *  صفحهٔ چاپ فاکتور در مرورگر سیستم (خارج از مینی‌اپ تلگرام) باز می‌شود و
+ *  کوکی نشست آنجا نیست؛ پس یک توکن امضاشدهٔ کوتاه‌عمر می‌گیرد.
+ */
+export const PRINT_TOKEN_MAX_AGE_SEC = 10 * 60 // ۱۰ دقیقه
+
+export function createPrintToken(resource: string, refId: string): string {
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub: "print",
+      res: resource,
+      ref: refId,
+      exp: Math.floor(Date.now() / 1000) + PRINT_TOKEN_MAX_AGE_SEC,
+    })
+  ).toString("base64url")
+  const sig = crypto.createHmac("sha256", getSecret()).update(payload).digest("base64url")
+  return `${payload}.${sig}`
+}
+
+export function verifyPrintToken(
+  token: string | null | undefined,
+  resource: string,
+  refId: string
+): boolean {
+  if (!token) return false
+  const [payload, sig] = token.split(".")
+  if (!payload || !sig) return false
+  const expected = crypto.createHmac("sha256", getSecret()).update(payload).digest("base64url")
+  if (!safeEqual(sig, expected)) return false
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      sub?: string
+      res?: string
+      ref?: string
+      exp?: number
+    }
+    return (
+      data.sub === "print" &&
+      data.res === resource &&
+      data.ref === refId &&
+      typeof data.exp === "number" &&
+      data.exp > Math.floor(Date.now() / 1000)
+    )
+  } catch {
+    return false
+  }
+}

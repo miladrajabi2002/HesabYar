@@ -1,6 +1,6 @@
 "use client"
 
-import { ReactNode, useState } from "react"
+import { useEffect, ReactNode, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
@@ -16,7 +16,7 @@ import {
   Landmark,
   BarChart3,
   LogOut,
-  Send,
+  Search,
   ArrowDownLeft,
   ArrowUpRight,
   CalendarDays,
@@ -27,26 +27,27 @@ import { useUIStore } from "@/lib/ui-store"
 import { formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { SheetOption } from "@/components/ui/bottom-sheet"
-import { GlobalSearch, SearchTrigger } from "@/components/search/global-search"
+import { GlobalSearch } from "@/components/search/global-search"
+import { BrandLogo } from "@/components/ui/brand-logo"
 
 export const NAV_ITEMS = [
   { href: "/", label: "داشبورد", icon: LayoutDashboard },
   { href: "/invoices", label: "فاکتورها", icon: FileText },
-  { href: "/people", label: "اشخاص", icon: Users },
+  { href: "/calendar", label: "تقویم مالی", icon: CalendarDays },
   { href: "/checks", label: "چک‌ها", icon: CheckSquare },
+  { href: "/people", label: "اشخاص", icon: Users },
   { href: "/products", label: "اجناس", icon: Package },
   { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark },
-  { href: "/calendar", label: "تقویم مالی", icon: CalendarDays },
   { href: "/reports", label: "گزارش‌ها", icon: BarChart3 },
   { href: "/settings", label: "تنظیمات", icon: Settings },
 ] as const
 
-/** آیتم‌های منوی «بیشتر» موبایل */
+/** آیتم‌های منوی «بیشتر» موبایل — تقویم مالی در نوار اصلی است، اشخاص اینجاست */
 const MORE_ITEMS = [
+  { href: "/people", label: "اشخاص", icon: Users, desc: "مشتری‌ها و فروشنده‌ها" },
   { href: "/checks", label: "چک‌ها", icon: CheckSquare, desc: "سررسید و پاس چک‌ها" },
   { href: "/products", label: "اجناس", icon: Package, desc: "موجودی انبار" },
   { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark, desc: "گردش حساب‌ها" },
-  { href: "/calendar", label: "تقویم مالی", icon: CalendarDays, desc: "سررسیدهای ماه" },
   { href: "/reports", label: "گزارش‌ها", icon: BarChart3, desc: "سود و فروش" },
   { href: "/settings", label: "تنظیمات", icon: Settings, desc: "ربات، بکاپ و…" },
 ] as const
@@ -104,9 +105,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const bottomNav = [
     { href: "/", label: "داشبورد", icon: LayoutDashboard, active: pathname === "/" },
     { href: "/invoices", label: "فاکتورها", icon: FileText, active: isMainNav("/invoices") },
-    { href: "/people", label: "اشخاص", icon: Users, active: isMainNav("/people") },
+    { href: "/calendar", label: "تقویم", icon: CalendarDays, active: isMainNav("/calendar") },
   ]
   const moreActive = MORE_ITEMS.some((m) => isMainNav(m.href)) || moreSheetOpen
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => null)
+    window.location.href = "/login"
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -114,14 +120,28 @@ export function AppShell({ children }: { children: ReactNode }) {
       {showSidebar ? (
         <aside className="fixed inset-y-0 start-0 z-40 hidden w-64 flex-col border-e border-sidebar-border bg-sidebar lg:flex">
           <div className="flex items-center gap-3 px-5 py-6">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-fab">
-              <Send className="size-5 -scale-x-100" />
-            </div>
+            <BrandLogo size={44} className="shadow-fab rounded-2xl" />
             <div>
               <div className="text-base font-extrabold">حساب‌یار</div>
               <div className="text-xs text-muted-foreground">حسابداری فروشگاهی</div>
             </div>
           </div>
+
+          {/* جستجوی سراسری — دسکتاپ (همراه میانبر Ctrl+K) */}
+          <div className="px-3 pb-2">
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="flex w-full items-center gap-2.5 rounded-xl border border-border/80 bg-background px-3 py-2.5 text-sm text-muted-foreground transition-all hover:border-primary/40 hover:text-foreground"
+            >
+              <Search className="size-4 shrink-0" />
+              <span className="flex-1 text-start">جستجوی سراسری…</span>
+              <kbd className="pointer-events-none hidden select-none rounded-md border border-border bg-muted px-1.5 py-px text-[0.62rem] font-medium text-muted-foreground xl:block">
+                Ctrl K
+              </kbd>
+            </button>
+          </div>
+
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
             {NAV_ITEMS.map((item) => (
               <SidebarItem
@@ -135,10 +155,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
           <div className="border-t border-sidebar-border p-4">
             <button
-              onClick={async () => {
-                await fetch("/api/auth/logout", { method: "POST" }).catch(() => null)
-                window.location.href = "/login"
-              }}
+              onClick={logout}
               className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
             >
               <LogOut className="size-4" />
@@ -156,16 +173,21 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* هدر موبایل */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-background/85 px-4 py-3 backdrop-blur-md lg:hidden">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-white">
-              <Send className="size-4 -scale-x-100" />
-            </div>
+            <BrandLogo size={36} />
             <div>
               <div className="text-sm font-bold leading-tight">حساب‌یار فروشگاهی</div>
               <div className="nums text-[0.68rem] leading-tight text-muted-foreground">{today}</div>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <SearchTrigger onOpen={() => setSearchOpen(true)} />
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label="جستجوی سراسری"
+              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Search className="size-[1.1rem]" />
+            </button>
             <button
               type="button"
               onClick={() => setMoreSheetOpen(true)}
@@ -239,8 +261,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </button>
       </nav>
 
-      {/* جستجوی سراسری (ADV-01) */}
+      {/* جستجوی سراسری (ADV-01) — موبایل و دسکتاپ */}
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <SearchShortcut onOpen={() => setSearchOpen(true)} />
 
       {/* شیت «فاکتور جدید» — انتخاب نوع */}
       <BottomSheet
@@ -264,7 +287,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SheetOption
             icon={<ArrowDownLeft className="size-5" strokeWidth={2.4} />}
             title="فاکتور خرید"
-            subtitle="جنس خریدم — از تأمین‌کننده"
+            subtitle="جنس خریدم — از فروشنده"
             onClick={() => {
               closeAddSheet()
               router.push("/invoices/new?type=PURCHASE")
@@ -273,41 +296,76 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </BottomSheet>
 
-      {/* شیت «بیشتر» — IMP-03: ناوبری نرم بدون ریلود کامل */}
+      {/* شیت «بیشتر» — گرید کاشی‌های آیکونی، بدون نیاز به اسکرول */}
       <BottomSheet
         open={moreSheetOpen}
         onClose={() => setMoreSheetOpen(false)}
         title="بیشتر"
         desktopMode="dialog"
       >
-        <div className="space-y-2.5">
-          {MORE_ITEMS.map((item) => (
-            <SheetOption
-              key={item.href}
-              icon={<item.icon className="size-5" />}
-              title={item.label}
-              subtitle={item.desc}
-              selected={isMainNav(item.href)}
-              onClick={() => {
-                setMoreSheetOpen(false)
-                router.push(item.href)
-              }}
-            />
-          ))}
-          <SheetOption
-            icon={<LogOut className="size-5" />}
-            title="خروج از حساب"
-            tone="danger"
-            onClick={async () => {
-              setMoreSheetOpen(false)
-              await fetch("/api/auth/logout", { method: "POST" }).catch(() => null)
-              window.location.href = "/login"
-            }}
-          />
+        <div className="grid grid-cols-3 gap-2.5">
+          {MORE_ITEMS.map((item) => {
+            const active = isMainNav(item.href)
+            return (
+              <button
+                key={item.href}
+                type="button"
+                onClick={() => {
+                  setMoreSheetOpen(false)
+                  router.push(item.href)
+                }}
+                className={cn(
+                  "group flex flex-col items-center gap-2 rounded-2xl border p-3.5 text-center transition-all active:scale-[0.96]",
+                  active
+                    ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
+                    : "border-border bg-card hover:border-primary/30 hover:bg-accent/50"
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid size-11 place-items-center rounded-2xl transition-colors",
+                    active ? "bg-primary text-white shadow-fab" : "bg-primary/10 text-primary"
+                  )}
+                >
+                  <item.icon className="size-[1.35rem]" strokeWidth={2.1} />
+                </span>
+                <span className="text-[0.72rem] font-bold leading-tight">{item.label}</span>
+                <span className="text-[0.58rem] leading-tight text-muted-foreground">
+                  {item.desc}
+                </span>
+              </button>
+            )
+          })}
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            setMoreSheetOpen(false)
+            logout()
+          }}
+          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 py-3 text-xs font-bold text-destructive transition-colors hover:bg-destructive/10 active:scale-[0.98]"
+        >
+          <LogOut className="size-4" />
+          خروج از حساب
+        </button>
       </BottomSheet>
     </div>
   )
+}
+
+/** میانبر Ctrl+K / Cmd+K — همیشه فعال (موبایل و دسکتاپ) */
+function SearchShortcut({ onOpen }: { onOpen: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        onOpen()
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [onOpen])
+  return null
 }
 
 function BottomNavItem({

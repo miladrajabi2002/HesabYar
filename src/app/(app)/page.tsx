@@ -2,8 +2,8 @@
 
 /**
  * داشبورد فروشگاه — وضعیت امروز/هفته/ماه، طلب و بستانکار، چک‌ها، نمودار
- * MO-01: شمارش انیمیشنی KPIها • MO-03: ورود تدریجی کارت‌ها
  * UI-03: اسکلتون • IMP-04: مدیریت خطا • ST-01: مقایسه دوره‌ای
+ * نسخهٔ ۳: اعداد ثابت خوانا (بدون شمارندهٔ انیمیشنی) + نوار KPI یکپارچه
  */
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
@@ -22,12 +22,11 @@ import {
   TrendingDown,
   Wallet,
   HandCoins,
-  ArrowDownLeft,
-  ArrowUpRight,
+  ShoppingCart,
+  ReceiptText,
   ArrowUpLeftSquare,
   CheckSquare2,
   ChevronLeft,
-  FileText,
   Plus,
   Minus,
 } from "lucide-react"
@@ -36,10 +35,9 @@ import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort, dayKeyToDate, JALALI_MONTHS, jalaliOf, nowTehran } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
-import { AnimatedNumber } from "@/components/ui/animated-number"
 import { DashboardSkeleton } from "@/components/ui/page-skeletons"
 import { ErrorState } from "@/components/ui/error-state"
-import { PersonAvatar } from "@/components/ui/person-avatar"
+import { RoleAvatar } from "@/components/ui/role-avatar"
 import { cn } from "@/lib/utils"
 import { useUIStore } from "@/lib/ui-store"
 
@@ -51,8 +49,8 @@ interface DashboardData {
   monthComparison: { sales: number | null; purchases: number | null; profit: number | null; saleCount: number | null }
   accounts: { id: string; name: string; bankKey: string; balance: number }[]
   totalBankBalance: number
-  debtors: { id: string; name: string; phone: string | null; balance: number }[]
-  creditors: { id: string; name: string; phone: string | null; balance: number }[]
+  debtors: { id: string; name: string; phone: string | null; role: string | null; balance: number }[]
+  creditors: { id: string; name: string; phone: string | null; role: string | null; balance: number }[]
   totalReceivable: number
   totalPayable: number
   checks: {
@@ -77,7 +75,7 @@ interface DashboardData {
     total: number
     date: string
     status: string
-    person: { id: string; name: string }
+    person: { id: string; name: string; role: string | null }
   }[]
 }
 
@@ -192,7 +190,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      {/* ───────── کارت قهرمان — MO-03 ───────── */}
+      {/* ───────── کارت قهرمان ───────── */}
       <motion.div
         custom={0}
         variants={stagger}
@@ -204,7 +202,7 @@ export default function DashboardPage() {
           <div>
             <p className="text-xs opacity-80">فروش امروز</p>
             <p className="nums mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
-              <AnimatedNumber value={data.today.sales} format={(n) => formatToman(n, false)} />
+              {formatToman(data.today.sales, false)}
               <span className="ms-1 text-sm font-medium opacity-75">تومان</span>
             </p>
             <p className="mt-2 text-xs opacity-80">
@@ -224,84 +222,78 @@ export default function DashboardPage() {
         <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/15 pt-4 text-center">
           <div>
             <p className="text-[0.65rem] opacity-75">فروش این هفته</p>
-            <p className="nums mt-0.5 text-sm font-bold">
-              <AnimatedNumber value={data.week.sales} format={formatTomanCompact} />
-            </p>
+            <p className="nums mt-0.5 text-sm font-bold">{formatTomanCompact(data.week.sales)}</p>
           </div>
           <div className="border-x border-white/15">
             <p className="text-[0.65rem] opacity-75">سود این هفته</p>
-            <p className="nums mt-0.5 text-sm font-bold">
-              <AnimatedNumber value={data.week.profit} format={formatTomanCompact} />
-            </p>
+            <p className="nums mt-0.5 text-sm font-bold">{formatTomanCompact(data.week.profit)}</p>
           </div>
           <div>
             <p className="text-[0.65rem] opacity-75">خرید این هفته</p>
-            <p className="nums mt-0.5 text-sm font-bold">
-              <AnimatedNumber value={data.week.purchases} format={formatTomanCompact} />
-            </p>
+            <p className="nums mt-0.5 text-sm font-bold">{formatTomanCompact(data.week.purchases)}</p>
           </div>
         </div>
       </motion.div>
 
-      {/* ───────── KPIها با مقایسه دوره‌ای (ST-01) ───────── */}
+      {/* ───────── نوار KPI — یک کارت یکپارچه با جداکننده (ساده و حرفه‌ای) ───────── */}
       <motion.div
         custom={1}
         variants={stagger}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-card"
       >
-        <Link
-          href="/reports"
-          className="group rounded-2xl border border-border/70 bg-card p-3.5 shadow-card transition-all hover:shadow-card-hover sm:p-4"
-        >
-          <div className="flex items-center justify-between gap-1">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <TrendingUp className="size-3.5" />
-              <span className="text-[0.7rem] font-medium">سود {monthLabel}</span>
+        <div className="grid grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-x-reverse lg:divide-border/60">
+          <Link
+            href="/reports"
+            className="group flex flex-col gap-1.5 p-4 transition-colors hover:bg-accent/40 sm:p-5 lg:border-b-0"
+          >
+            <div className="flex items-center justify-between gap-1">
+              <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+                <TrendingUp className="size-3.5 text-primary" />
+                سود {monthLabel}
+              </span>
+              <DeltaBadge pct={data.monthComparison.profit} />
             </div>
-            <DeltaBadge pct={data.monthComparison.profit} />
-          </div>
-          <p className="nums mt-1.5 text-lg font-extrabold text-primary sm:text-xl">
-            <AnimatedNumber value={data.month.profit} format={formatTomanCompact} />
-          </p>
-        </Link>
-        <div className="rounded-2xl border border-border/70 bg-card p-3.5 shadow-card sm:p-4">
-          <div className="flex items-center justify-between gap-1">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <ArrowUpRight className="size-3.5" />
-              <span className="text-[0.7rem] font-medium">فروش {monthLabel}</span>
+            <p className="nums text-xl font-extrabold text-primary">{formatTomanCompact(data.month.profit)}</p>
+          </Link>
+
+          <Link
+            href="/reports"
+            className="group flex flex-col gap-1.5 border-t border-border/60 p-4 transition-colors hover:bg-accent/40 sm:p-5 lg:border-t-0"
+          >
+            <div className="flex items-center justify-between gap-1">
+              <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+                <ReceiptText className="size-3.5 text-income" />
+                فروش {monthLabel}
+              </span>
+              <DeltaBadge pct={data.monthComparison.sales} />
             </div>
-            <DeltaBadge pct={data.monthComparison.sales} />
-          </div>
-          <p className="nums mt-1.5 text-lg font-extrabold text-income sm:text-xl">
-            <AnimatedNumber value={data.month.sales} format={formatTomanCompact} />
-          </p>
+            <p className="nums text-xl font-extrabold text-income">{formatTomanCompact(data.month.sales)}</p>
+          </Link>
+
+          <Link
+            href="/people?filter=debtors"
+            className="group flex flex-col gap-1.5 border-t border-border/60 p-4 transition-colors hover:bg-accent/40 sm:p-5 lg:border-t-0"
+          >
+            <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+              <HandCoins className="size-3.5 text-warning" />
+              طلب از مشتریان
+            </span>
+            <p className="nums text-xl font-extrabold text-warning">{formatTomanCompact(data.totalReceivable)}</p>
+          </Link>
+
+          <Link
+            href="/people?filter=creditors"
+            className="group flex flex-col gap-1.5 border-t border-border/60 p-4 transition-colors hover:bg-accent/40 sm:p-5 lg:border-t-0"
+          >
+            <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+              <Wallet className="size-3.5 text-destructive" />
+              بدهی به فروشنده‌ها
+            </span>
+            <p className="nums text-xl font-extrabold text-destructive">{formatTomanCompact(data.totalPayable)}</p>
+          </Link>
         </div>
-        <Link
-          href="/people?filter=debtors"
-          className="group rounded-2xl border border-border/70 bg-card p-3.5 shadow-card transition-all hover:shadow-card-hover sm:p-4"
-        >
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <HandCoins className="size-3.5" />
-            <span className="text-[0.7rem] font-medium">طلب از مشتریان</span>
-          </div>
-          <p className="nums mt-1.5 text-lg font-extrabold text-warning sm:text-xl">
-            <AnimatedNumber value={data.totalReceivable} format={formatTomanCompact} />
-          </p>
-        </Link>
-        <Link
-          href="/people?filter=creditors"
-          className="group rounded-2xl border border-border/70 bg-card p-3.5 shadow-card transition-all hover:shadow-card-hover sm:p-4"
-        >
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Wallet className="size-3.5" />
-            <span className="text-[0.7rem] font-medium">بدهی به تأمین‌کننده</span>
-          </div>
-          <p className="nums mt-1.5 text-lg font-extrabold text-destructive sm:text-xl">
-            <AnimatedNumber value={data.totalPayable} format={formatTomanCompact} />
-          </p>
-        </Link>
       </motion.div>
 
       <div className="grid items-start gap-4 lg:grid-cols-5">
@@ -375,7 +367,7 @@ export default function DashboardPage() {
             </SectionCard>
           </motion.div>
 
-          {/* طلبکاران و بستانکاران — UI-07: آواتار رنگی */}
+          {/* طلبکاران و بستانکاران — آواتار نقش‌محور */}
           <motion.div custom={3} variants={stagger} initial="hidden" animate="visible" className="grid gap-4 sm:grid-cols-2">
             <SectionCard
               title="طلب از مشتریان"
@@ -395,7 +387,7 @@ export default function DashboardPage() {
                     href={`/people/${p.id}`}
                     className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-accent/60"
                   >
-                    <PersonAvatar name={p.name} size={30} className="rounded-xl" />
+                    <RoleAvatar role={p.role} size={30} className="rounded-xl" />
                     <span className="min-w-0 flex-1 truncate text-xs font-medium">{p.name}</span>
                     <span className="nums text-xs font-bold text-warning">
                       {formatTomanCompact(p.balance)}
@@ -411,7 +403,7 @@ export default function DashboardPage() {
             </SectionCard>
 
             <SectionCard
-              title="بدهی به تأمین‌کنندگان"
+              title="بدهی به فروشنده‌ها"
               icon={<ArrowUpLeftSquare className="size-4 text-destructive" />}
               href="/people?filter=creditors"
             >
@@ -428,7 +420,7 @@ export default function DashboardPage() {
                     href={`/people/${p.id}`}
                     className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-accent/60"
                   >
-                    <PersonAvatar name={p.name} size={30} className="rounded-xl" />
+                    <RoleAvatar role={p.role} size={30} className="rounded-xl" />
                     <span className="min-w-0 flex-1 truncate text-xs font-medium">{p.name}</span>
                     <span className="nums text-xs font-bold text-destructive">
                       {formatTomanCompact(Math.abs(p.balance))}
@@ -444,11 +436,11 @@ export default function DashboardPage() {
             </SectionCard>
           </motion.div>
 
-          {/* آخرین فاکتورها — UI-07: آواتار */}
+          {/* آخرین فاکتورها — آیکون نوع فاکتور */}
           <motion.div custom={4} variants={stagger} initial="hidden" animate="visible">
             <SectionCard
               title="آخرین فاکتورها"
-              icon={<FileText className="size-4 text-primary" />}
+              icon={<ReceiptText className="size-4 text-primary" />}
               href="/invoices"
             >
               <div className="space-y-1.5">
@@ -458,7 +450,18 @@ export default function DashboardPage() {
                     href={`/invoices/${inv.id}`}
                     className="flex items-center gap-3 rounded-2xl border border-border/60 px-3 py-2.5 transition-colors hover:bg-accent/50"
                   >
-                    <PersonAvatar name={inv.person.name} size={36} />
+                    <span
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-xl",
+                        inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
+                      )}
+                    >
+                      {inv.type === "SALE" ? (
+                        <ReceiptText className="size-[1.1rem]" strokeWidth={2.1} />
+                      ) : (
+                        <ShoppingCart className="size-[1.1rem]" strokeWidth={2.1} />
+                      )}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate text-xs font-bold">{inv.person.name}</span>
@@ -504,13 +507,13 @@ export default function DashboardPage() {
                 <div className="rounded-xl bg-primary/10 px-3 py-2">
                   <p className="text-[0.65rem] text-muted-foreground">چک دریافت‌شده در جریان</p>
                   <p className="nums mt-0.5 text-sm font-bold text-primary">
-                    <AnimatedNumber value={data.checks.pendingReceivedTotal} format={formatTomanCompact} />
+                    {formatTomanCompact(data.checks.pendingReceivedTotal)}
                   </p>
                 </div>
                 <div className="rounded-xl bg-destructive/10 px-3 py-2">
                   <p className="text-[0.65rem] text-muted-foreground">چک صادره در جریان</p>
                   <p className="nums mt-0.5 text-sm font-bold text-destructive">
-                    <AnimatedNumber value={data.checks.pendingIssuedTotal} format={formatTomanCompact} />
+                    {formatTomanCompact(data.checks.pendingIssuedTotal)}
                   </p>
                 </div>
               </div>
@@ -586,7 +589,7 @@ export default function DashboardPage() {
                 <div className="mt-1 flex items-baseline justify-between rounded-xl bg-muted/70 px-3 py-2">
                   <span className="text-[0.7rem] font-medium text-muted-foreground">جمع موجودی</span>
                   <span className="nums text-sm font-extrabold text-primary">
-                    <AnimatedNumber value={data.totalBankBalance} format={(n) => formatToman(n, false)} />
+                    {formatToman(data.totalBankBalance, false)}
                   </span>
                 </div>
                 {data.accounts.length === 0 && (

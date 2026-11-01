@@ -3,7 +3,8 @@
 /**
  * چک‌ها — دریافتی/صادره با وضعیت پاس، برگشت و سررسید
  * + پیوست‌های تصویری چک در شیت عملیات (ADV-04)
- * + تأیید لغو چک با ConfirmSheet یکدست (UI-05)
+ * + ثبت چک به نام (نسخهٔ ۳): چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود
+ *   دریافتی → به نام ما • صادره → به نام مشتری (نام + کد ملی)
  */
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
@@ -12,11 +13,8 @@ import { toast } from "sonner"
 import {
   CheckSquare2,
   Loader2,
-  ArrowDownToLine,
-  ArrowUpFromLine,
   Undo2,
   XCircle,
-  AlertTriangle,
   CheckCircle2,
   Clock3,
   Ban,
@@ -24,6 +22,10 @@ import {
   ImagePlus,
   Paperclip,
   X,
+  BadgeCheck,
+  BadgeMinus,
+  IdCard,
+  UserRound,
 } from "lucide-react"
 import { apiDelete, apiGet, apiPatch } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
@@ -32,7 +34,9 @@ import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { useConfirm } from "@/components/ui/confirm"
+import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { cn } from "@/lib/utils"
 
 interface Check {
@@ -44,6 +48,9 @@ interface Check {
   dueDate: string
   status: string
   note: string | null
+  isRegistered: boolean
+  registeredName: string | null
+  registeredNationalId: string | null
   person: { id: string; name: string }
   invoice: { id: string; number: number; type: string } | null
   account: { id: string; name: string; bankKey: string } | null
@@ -62,51 +69,26 @@ interface Attachment {
   filename: string
   mime: string
   size: number
-  createdAt: string
 }
 
-/** حد مجاز حجم پیوست — همان MAX_SIZE مسیر /api/attachments */
-const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024 // ۸ مگابایت
+const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024
 
-/** initData مینی‌اپ تلگرام — همان منطق lib/api-client (در وب، کوکی نشست خودکار ارسال می‌شود) */
-function telegramInitData(): string | null {
-  if (typeof window === "undefined") return null
-  return window.Telegram?.WebApp?.initData ?? null
-}
-
-/**
- * آپلود پیوست با fetch خام — چون apiUpload روی بدنهٔ FormData هدر
- * content-type: application/json می‌گذارد و req.formData() سمت سرور با آن
- * قابل خواندن نیست، آپلود multipart مستقیم با هدر احراز هویت فرستاده می‌شود
- * تا مرورگر boundary را خودش تعیین کند.
- */
-async function postAttachmentForm(path: string, fd: FormData): Promise<void> {
-  const initData = telegramInitData()
+/** آپلود پیوست با FormData — در مینی‌اپ تلگرام fetch خودکار JSON نمی‌گذارد */
+async function postAttachmentForm(url: string, fd: FormData): Promise<void> {
   const headers: Record<string, string> = {}
+  const initData = window.Telegram?.WebApp?.initData
   if (initData) headers["x-telegram-init-data"] = initData
-  const res = await fetch(path, { method: "POST", headers, body: fd })
+  const res = await fetch(url, { method: "POST", body: fd, headers })
   if (!res.ok) {
-    let msg = "آپلود پیوست ناموفق بود"
-    try {
-      const j = (await res.json()) as { error?: string }
-      if (j?.error) msg = j.error
-    } catch {
-      /* پاسخ غیر JSON */
-    }
-    if (res.status === 401 && !initData && !window.location.pathname.startsWith("/login")) {
-      window.location.href = "/login"
-    }
-    throw new Error(msg)
+    const body = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(body?.error || "آپلود پیوست ناموفق بود")
   }
 }
 
-/**
- * دانلود خود پیوست به‌صورت Blob و ساخت objectURL — مسیر GET ?id= احراز هویت
- * می‌خواهد و <img src> ساده (بدون کوکی نشست وب یا هدر مینی‌اپ) ۴۰۱ می‌گیرد.
- */
+/** دانلود پیوست به‌صورت blob — کوکی نشست در تلگرام نیست، هدر مینی‌اپ لازم است */
 async function fetchAttachmentObjectUrl(id: string): Promise<string> {
-  const initData = telegramInitData()
   const headers: Record<string, string> = {}
+  const initData = window.Telegram?.WebApp?.initData
   if (initData) headers["x-telegram-init-data"] = initData
   const res = await fetch(`/api/attachments?id=${id}`, { headers })
   if (!res.ok) throw new Error("دریافت پیوست ناموفق بود")
@@ -127,8 +109,12 @@ export default function ChecksPage() {
   const [status, setStatus] = useState<"PENDING" | "CASHED" | "BOUNCED" | "ALL">("PENDING")
   const [actionSheet, setActionSheet] = useState<Check | null>(null)
   const [accountSheet, setAccountSheet] = useState(false)
-  const [bounceSheet, setBounceSheet] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  /* ── شیت ثبت چک ── */
+  const [registerSheet, setRegisterSheet] = useState(false)
+  const [regName, setRegName] = useState("")
+  const [regNationalId, setRegNationalId] = useState("")
 
   const params = new URLSearchParams()
   if (direction !== "ALL") params.set("direction", direction)
@@ -161,7 +147,9 @@ export default function ChecksPage() {
   const checkAttachments = attData?.attachments ?? []
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const regFileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [regUploading, setRegUploading] = useState(false)
   const [preview, setPreview] = useState<Attachment | null>(null)
   const [imgUrls, setImgUrls] = useState<Record<string, string>>({})
   const objectUrlsRef = useRef<Map<string, string>>(new Map())
@@ -228,7 +216,6 @@ export default function ChecksPage() {
     try {
       await apiPatch(`/api/checks/${check.id}`, { status: "BOUNCED" })
       toast.success("برگشت چک ثبت شد؛ مانده به حساب شخص برگشت")
-      setBounceSheet(false)
       setActionSheet(null)
       await queryClient.invalidateQueries()
     } catch (e) {
@@ -258,6 +245,41 @@ export default function ChecksPage() {
       await queryClient.invalidateQueries()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "خطا در لغو")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /* ── ثبت چک به نام ── */
+  const openRegisterSheet = () => {
+    if (!actionSheet) return
+    setRegName(actionSheet.registeredName ?? "")
+    setRegNationalId(actionSheet.registeredNationalId ?? "")
+    setRegisterSheet(true)
+  }
+
+  const registerCheck = async () => {
+    const check = actionSheet
+    if (!check) return
+    const name = regName.trim()
+    if (name.length < 2) return toast.error("نام صاحب حساب را وارد کنید")
+    if (regNationalId.trim() && !/^\d{10}$/.test(regNationalId.trim())) {
+      return toast.error("کد ملی باید ۱۰ رقم باشد")
+    }
+    setSaving(true)
+    try {
+      await apiPatch(`/api/checks/${check.id}`, {
+        action: "register",
+        isRegistered: true,
+        registeredName: name,
+        registeredNationalId: regNationalId.trim() || undefined,
+      })
+      toast.success("چک ثبت شد ✅")
+      setRegisterSheet(false)
+      setActionSheet(null)
+      await queryClient.invalidateQueries()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا در ثبت چک")
     } finally {
       setSaving(false)
     }
@@ -307,6 +329,40 @@ export default function ChecksPage() {
     }
   }
 
+  /* ── پیوست تصویر موقع «ثبت چک» ── */
+  const onPickRegisterImages = async (files: FileList | null) => {
+    const check = actionSheet
+    if (!check) return
+    const picked = files ? Array.from(files) : []
+    if (regFileInputRef.current) regFileInputRef.current.value = ""
+    if (picked.length === 0) return
+    const valid = picked.filter((f) => f.type.startsWith("image/") && f.size <= MAX_ATTACHMENT_SIZE)
+    if (valid.length === 0) {
+      toast.error("فقط تصویر (حداکثر ۸ مگابایت) مجاز است")
+      return
+    }
+    setRegUploading(true)
+    let okCount = 0
+    try {
+      for (const f of valid) {
+        const fd = new FormData()
+        fd.append("file", f)
+        fd.append("refType", "CHECK")
+        fd.append("refId", check.id)
+        await postAttachmentForm("/api/attachments", fd)
+        okCount++
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "آپلود پیوست ناموفق بود")
+    } finally {
+      setRegUploading(false)
+    }
+    if (okCount > 0) {
+      toast.success("تصویر چک پیوست شد ✅")
+      await queryClient.invalidateQueries({ queryKey: ["attachments", "CHECK", check.id] })
+    }
+  }
+
   /* ── حذف پیوست تصویری چک ── */
   const removeAttachment = async (att: Attachment) => {
     const check = actionSheet
@@ -349,7 +405,7 @@ export default function ChecksPage() {
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3.5">
             <div className="flex items-center gap-1.5 text-[0.7rem] text-primary">
-              <ArrowDownToLine className="size-3.5" />
+              <CheckDirectionBadge direction="RECEIVED" size="sm" />
               چک دریافت‌شده در جریان
             </div>
             <p className="nums mt-1 text-base font-extrabold text-primary sm:text-lg">
@@ -358,7 +414,7 @@ export default function ChecksPage() {
           </div>
           <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-3.5">
             <div className="flex items-center gap-1.5 text-[0.7rem] text-destructive">
-              <ArrowUpFromLine className="size-3.5" />
+              <CheckDirectionBadge direction="ISSUED" size="sm" />
               چک صادره در جریان
             </div>
             <p className="nums mt-1 text-base font-extrabold text-destructive sm:text-lg">
@@ -465,16 +521,7 @@ export default function ChecksPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-extrabold">{c.person.name}</span>
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-md px-1.5 py-px text-[0.6rem] font-bold",
-                          c.direction === "RECEIVED"
-                            ? "bg-primary/10 text-primary"
-                            : "bg-destructive/10 text-destructive"
-                        )}
-                      >
-                        {c.direction === "RECEIVED" ? "دریافتی" : "صادره"}
-                      </span>
+                      <CheckDirectionBadge direction={c.direction} size="sm" />
                     </div>
                     <div className="nums mt-0.5 text-[0.65rem] text-muted-foreground">
                       {getBank(c.bankKey).name} • سررسید {formatJalaliWithWeekday(new Date(c.dueDate))}
@@ -530,8 +577,8 @@ export default function ChecksPage() {
                     </div>
                   </div>
                 </div>
-                {(c.serial || c.invoice) && (
-                  <div className="mt-2 flex flex-wrap gap-1.5 border-t border-dashed pt-2 text-[0.6rem] text-muted-foreground">
+                {(c.serial || c.invoice || c.status === "PENDING") && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-dashed pt-2 text-[0.6rem] text-muted-foreground">
                     {c.serial && (
                       <span className="nums rounded-lg bg-muted px-2 py-0.5">سریال {c.serial}</span>
                     )}
@@ -544,6 +591,19 @@ export default function ChecksPage() {
                         فاکتور {toPersianDigits(c.invoice.number)}
                       </Link>
                     )}
+                    {/* نشان وضعیت ثبت */}
+                    {c.status === "PENDING" &&
+                      (c.isRegistered ? (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-income/10 px-2 py-0.5 font-bold text-income">
+                          <BadgeCheck className="size-3" />
+                          ثبت‌شده{c.registeredName ? ` به نام ${c.registeredName}` : ""}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-warning/10 px-2 py-0.5 font-bold text-warning">
+                          <BadgeMinus className="size-3" />
+                          ثبت‌نشده
+                        </span>
+                      ))}
                   </div>
                 )}
               </button>
@@ -561,26 +621,83 @@ export default function ChecksPage() {
       >
         {actionSheet && (
           <div className="space-y-2.5">
+            {/* هشدار چک ثبت‌نشده — پاس/برگشت/لغو قفل است تا ثبت شود */}
+            {!actionSheet.isRegistered && (
+              <div className="rounded-2xl border border-warning/40 bg-warning/10 p-3.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-warning">
+                  <BadgeMinus className="size-4 shrink-0" />
+                  این چک هنوز ثبت نشده است
+                </div>
+                <p className="mt-1.5 text-[0.68rem] leading-relaxed text-muted-foreground">
+                  {actionSheet.direction === "RECEIVED"
+                    ? "چک دریافتی را اول «به نام خودتان» ثبت کنید."
+                    : "چک صادره را اول «به نام مشتری» ثبت کنید."}{" "}
+                  تا وقتی ثبت نشده، پاس/برگشت/لغو ممکن نیست.
+                </p>
+                <Button
+                  onClick={openRegisterSheet}
+                  className="mt-2.5 h-11 w-full rounded-2xl text-xs font-bold"
+                >
+                  <BadgeCheck className="size-4" />
+                  ثبت چک به نام…
+                </Button>
+              </div>
+            )}
+
+            {actionSheet.isRegistered && (
+              <div className="flex items-center gap-2.5 rounded-2xl border border-income/30 bg-income/[0.06] p-3">
+                <BadgeCheck className="size-5 shrink-0 text-income" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-income">
+                    ثبت‌شده
+                    {actionSheet.direction === "RECEIVED" ? " به نام ما" : " به نام مشتری"}
+                  </p>
+                  <p className="nums mt-0.5 truncate text-[0.65rem] text-muted-foreground">
+                    {actionSheet.registeredName ?? "—"}
+                    {actionSheet.registeredNationalId
+                      ? ` • کد ملی ${toPersianDigits(actionSheet.registeredNationalId)}`
+                      : ""}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openRegisterSheet}
+                  className="h-8 shrink-0 rounded-xl px-2.5 text-[0.68rem] font-bold"
+                >
+                  ویرایش
+                </Button>
+              </div>
+            )}
+
             <SheetOption
               icon={<CheckCircle2 className="size-5" />}
               title="پاس شد"
-              subtitle="مبلغ به حساب بانکی واریز/برداشت شد"
+              subtitle={
+                actionSheet.isRegistered
+                  ? "مبلغ به حساب بانکی واریز/برداشت شد"
+                  : "اول باید چک ثبت شود"
+              }
               tone="primary"
-              onClick={() => setAccountSheet(true)}
+              onClick={() => (actionSheet.isRegistered ? setAccountSheet(true) : toast.error("چک ثبت‌نشده قابل پاس شدن نیست"))}
             />
             <SheetOption
               icon={<Undo2 className="size-5" />}
               title="برگشت خورد"
-              subtitle="چک پاس نشد؛ مانده به حساب شخص برمی‌گردد"
+              subtitle={
+                actionSheet.isRegistered
+                  ? "چک پاس نشد؛ مانده به حساب شخص برمی‌گردد"
+                  : "اول باید چک ثبت شود"
+              }
               tone="danger"
-              onClick={() => bounceCheck(actionSheet)}
+              onClick={() => (actionSheet.isRegistered ? bounceCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل برگشت نیست"))}
             />
             <SheetOption
               icon={<XCircle className="size-5" />}
               title="لغو"
-              subtitle="چک باطل شد"
+              subtitle={actionSheet.isRegistered ? "چک باطل شد" : "اول باید چک ثبت شود"}
               tone="danger"
-              onClick={() => cancelCheck(actionSheet)}
+              onClick={() => (actionSheet.isRegistered ? cancelCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل لغو نیست"))}
             />
 
             {/* پیوست‌های تصویری چک (ADV-04) — نوار بندانگشتی‌ها داخل همان شیت */}
@@ -676,6 +793,100 @@ export default function ChecksPage() {
             </div>
           </div>
         )}
+      </BottomSheet>
+
+      {/* شیت «ثبت چک به نام» — نام + کد ملی + پیوست تصویر */}
+      <BottomSheet
+        open={registerSheet}
+        onClose={() => setRegisterSheet(false)}
+        title="ثبت چک"
+        description={
+          actionSheet
+            ? `${actionSheet.person.name} • ${formatToman(actionSheet.amount)} — ${
+                actionSheet.direction === "RECEIVED" ? "دریافتی" : "صادره"
+              }`
+            : ""
+        }
+        size="tall"
+        footer={
+          <Button onClick={registerCheck} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <BadgeCheck className="size-4" />}
+            ثبت چک
+          </Button>
+        }
+      >
+        <div className="space-y-3">
+          <p className="rounded-xl bg-primary/5 px-3 py-2.5 text-[0.68rem] leading-relaxed text-muted-foreground">
+            {actionSheet?.direction === "RECEIVED" ? (
+              <>
+                این چک را <b className="text-primary">به نام خودتان</b> ثبت کنید — یعنی چک در بانک به
+                نام شما سنجاق شده و قابل وصول است.
+              </>
+            ) : (
+              <>
+                این چک را <b className="text-destructive">به نام مشتری</b> ثبت کنید — یعنی چک شما
+                به نام او ثبت شده و سررسید از حساب او برداشت می‌شود.
+              </>
+            )}
+          </p>
+
+          <div>
+            <label className="mb-1.5 flex items-center gap-1 text-[0.7rem] font-medium text-muted-foreground">
+              <UserRound className="size-3.5" />
+              نام صاحب حساب *
+            </label>
+            <Input
+              value={regName}
+              onChange={(e) => setRegName(e.target.value)}
+              placeholder={actionSheet?.direction === "RECEIVED" ? "مثلاً: میلد رجبی" : "نام مشتری"}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 flex items-center gap-1 text-[0.7rem] font-medium text-muted-foreground">
+              <IdCard className="size-3.5" />
+              کد ملی صاحب حساب (اختیاری)
+            </label>
+            <Input
+              value={regNationalId}
+              onChange={(e) => setRegNationalId(e.target.value)}
+              inputMode="numeric"
+              dir="ltr"
+              placeholder="۱۲۳۴۵۶۷۸۹۰"
+              className="nums text-end"
+            />
+          </div>
+
+          {/* پیوست تصویر موقع ثبت */}
+          <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5 text-center">
+            <p className="mb-2 flex items-center justify-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+              <ImagePlus className="size-3.5" />
+              تصویر چک ثبت‌شده (اختیاری)
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => regFileInputRef.current?.click()}
+              disabled={regUploading}
+              className="h-9 rounded-xl px-4 text-xs font-bold"
+            >
+              {regUploading ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
+              {regUploading ? "در حال بارگذاری…" : "افزودن تصویر چک"}
+            </Button>
+            <input
+              ref={regFileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              className="hidden"
+              onChange={(e) => onPickRegisterImages(e.target.files)}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+          </div>
+        </div>
       </BottomSheet>
 
       {/* شیت انتخاب حساب برای پاس چک */}
