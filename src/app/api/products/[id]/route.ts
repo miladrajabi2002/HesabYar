@@ -1,8 +1,23 @@
 import { NextRequest } from "next/server"
+import fs from "node:fs"
+import path from "node:path"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { productUpdateSchema } from "@/lib/validation"
 import { getProductStock } from "@/lib/finance"
+
+/** حذف پیوست‌های تصویری یک جنس (رکورد + فایل) — برای پاک‌سازی موقع حذف جنس */
+async function deleteProductAttachments(productId: string) {
+  const atts = await db.attachment.findMany({ where: { refType: "PRODUCT", refId: productId } })
+  for (const att of atts) {
+    await db.attachment.delete({ where: { id: att.id } })
+    try {
+      fs.unlinkSync(path.join(process.cwd(), "uploads", att.id))
+    } catch {
+      /* فایل از قبل نیست — بی‌خیال */
+    }
+  }
+}
 
 export const dynamic = "force-dynamic"
 
@@ -71,8 +86,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       total: it.total,
     }))
 
+    // عکس‌های جنس (ADV-05) — برای گالری شیت جزئیات
+    const attachments = await db.attachment.findMany({
+      where: { refType: "PRODUCT", refId: id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, filename: true, mime: true, size: true, createdAt: true },
+    })
+
     return ok({
       product: { ...product, stock },
+      attachments,
       stats: {
         stock,
         purchasedQty,
@@ -119,6 +142,8 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     const stock = await getProductStock(id)
     if (stock !== 0) return fail("موجودی این جنس صفر نیست", 400)
     await db.product.delete({ where: { id } })
+    // عکس‌های جنس هم پاک شوند تا یتیم نمانند (ADV-05)
+    await deleteProductAttachments(id)
     return ok({ ok: true })
   } catch (e) {
     return serverError(e)

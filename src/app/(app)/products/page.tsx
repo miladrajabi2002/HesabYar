@@ -3,8 +3,9 @@
 /**
  * اجناس — موجودی زنده انبار + قیمت آخرین خرید/فروش
  * کلیک روی هر جنس: شیت جزئیات (آمار خرید/فروش + گردش اخیر)
+ * + عکس جنس (ADV-05): اختیاری؛ در فرم جنس اضافه می‌شود، بندانگشتی در لیست و گالری جزئیات
  */
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -24,8 +25,11 @@ import {
   TrendingDown,
   Wallet,
   Download,
+  ImagePlus,
+  FileText,
+  X,
 } from "lucide-react"
-import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort } from "@/lib/jalali"
 import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
@@ -33,6 +37,7 @@ import { AmountInput } from "@/components/ui/amount-input"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Attachment, postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
 import { cn } from "@/lib/utils"
 
 interface Product {
@@ -41,6 +46,8 @@ interface Product {
   brand: string | null
   code: string | null
   unit: string
+  /** عکس جنس (اختیاری) — شناسهٔ اولین پیوست تصویری (ADV-05) */
+  photoId: string | null
   stock: number
   initialStock: number
   initialStockCostPrice: number
@@ -64,6 +71,8 @@ interface Movement {
 
 interface ProductDetails {
   product: Product
+  /** عکس‌های پیوست جنس (ADV-05) */
+  attachments: Attachment[]
   stats: {
     stock: number
     purchasedQty: number
@@ -101,6 +110,95 @@ function ProductForm({
   )
   const [saving, setSaving] = useState(false)
 
+  /* ── عکس جنس (ADV-05) — اختیاری؛ در جنس جدید بعد از ذخیره پیوست می‌شود ── */
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [preview, setPreview] = useState<{ url: string; filename: string; size?: number } | null>(null)
+  // عکس‌های ثبت‌شدهٔ جنس (فقط حالت ویرایش)
+  const { data: attData, refetch: refetchPhotos } = useQuery({
+    queryKey: ["attachments", "PRODUCT", editing?.id ?? "new"],
+    queryFn: () =>
+      apiGet<{ attachments: Attachment[] }>(
+        `/api/attachments?refType=PRODUCT&refId=${editing!.id}`
+      ),
+    enabled: !!editing,
+  })
+  const savedPhotos = attData?.attachments ?? []
+  const savedUrls = useAttachmentUrls(
+    savedPhotos.filter((a) => a.mime.startsWith("image/")).map((a) => a.id)
+  )
+  // عکس‌های انتخاب‌شدهٔ هنوز آپلودنشده (جنس جدید) — پیش‌نمایش محلی
+  const [pending, setPending] = useState<{ file: File; url: string }[]>([])
+  const pendingUrlsRef = useRef<string[]>([])
+
+  /** آزادسازی پیش‌نمایش‌های محلی هنگام ترک صفحه */
+  useEffect(() => {
+    const urls = pendingUrlsRef.current
+    return () => urls.forEach((u) => URL.revokeObjectURL(u))
+  }, [])
+
+  /** آپلود فوری عکس در حالت ویرایش — چند فایل پشت‌سرهم؛ خطای هرکدام مانع بقیه نیست */
+  const uploadSavedPhotos = async (files: FileList) => {
+    if (!editing) return
+    setUploading(true)
+    let okCount = 0
+    let failCount = 0
+    for (const f of Array.from(files)) {
+      if (!f.type.startsWith("image/")) {
+        failCount++
+        continue
+      }
+      try {
+        const fd = new FormData()
+        fd.append("file", f)
+        fd.append("refType", "PRODUCT")
+        fd.append("refId", editing.id)
+        await postAttachmentForm("/api/attachments", fd)
+        okCount++
+      } catch {
+        failCount++
+      }
+    }
+    setUploading(false)
+    if (okCount > 0) {
+      toast.success(`${toPersianDigits(okCount)} عکس پیوست شد 📎`)
+      await refetchPhotos()
+    }
+    if (failCount > 0) toast.error("برخی فایل‌ها آپلود نشدند — فقط تصویر تا ۸ مگابایت")
+  }
+
+  /** انتخاب فایل: ویرایش ← آپلود فوری؛ جدید ← صف تا بعد از ذخیرهٔ جنس */
+  const onPickPhotos = (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    if (editing) {
+      void uploadSavedPhotos(files)
+    } else {
+      const items: { file: File; url: string }[] = []
+      for (const f of Array.from(files)) {
+        if (!f.type.startsWith("image/")) continue
+        const url = URL.createObjectURL(f)
+        pendingUrlsRef.current.push(url)
+        items.push({ file: f, url })
+      }
+      if (items.length === 0) {
+        toast.error("فقط تصویر (JPG/PNG/WebP) مجاز است")
+        return
+      }
+      setPending((p) => [...p, ...items])
+    }
+    if (photoInputRef.current) photoInputRef.current.value = ""
+  }
+
+  /** حذف عکس ثبت‌شده (ویرایش) */
+  const removeSavedPhoto = async (att: Attachment) => {
+    try {
+      await apiDelete(`/api/attachments?id=${att.id}`)
+      await refetchPhotos()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "حذف عکس ناموفق بود")
+    }
+  }
+
   const submit = async () => {
     if (name.trim().length < 2) return toast.error("نام جنس را وارد کنید")
     setSaving(true)
@@ -116,7 +214,7 @@ function ProductForm({
         })
         toast.success("جنس ویرایش شد ✅")
       } else {
-        await apiPost("/api/products", {
+        const r = await apiPost<{ product: { id: string } }>("/api/products", {
           name: name.trim(),
           brand: brand || undefined,
           code: code || undefined,
@@ -125,6 +223,25 @@ function ProductForm({
           initialStockCostPrice: initialStockCost,
         })
         toast.success("جنس اضافه شد ✅")
+        // آپلود عکس‌های انتخاب‌شده — بعد از ساخت جنس؛ خطای عکس مانع ثبت جنس نیست (ADV-05)
+        if (pending.length > 0 && r?.product?.id) {
+          let okCount = 0
+          for (const p of pending) {
+            try {
+              const fd = new FormData()
+              fd.append("file", p.file)
+              fd.append("refType", "PRODUCT")
+              fd.append("refId", r.product.id)
+              await postAttachmentForm("/api/attachments", fd)
+              okCount++
+            } catch {
+              /* عکس این یکی آپلود نشد — بقیه ادامه می‌یابند */
+            }
+          }
+          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس جنس پیوست شد 📎`)
+          if (okCount < pending.length) toast.error("برخی عکس‌ها آپلود نشدند")
+          setPending([])
+        }
       }
       onClose()
       await onSaved()
@@ -136,7 +253,8 @@ function ProductForm({
   }
 
   return (
-    <BottomSheet
+    <>
+      <BottomSheet
       open={open}
       onClose={onClose}
       title={editing ? "ویرایش جنس" : "جنس جدید"}
@@ -187,6 +305,111 @@ function ProductForm({
             ))}
           </div>
         </div>
+        {/* عکس جنس (ADV-05) — اختیاری و مستقل از هر وضعیت */}
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+              <ImagePlus className="size-3.5" />
+              عکس جنس (اختیاری)
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploading}
+              className="h-8 shrink-0 rounded-xl px-2.5 text-[0.7rem] font-bold"
+            >
+              {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
+              {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
+            </Button>
+          </div>
+          <p className="mb-2 text-[0.62rem] leading-relaxed text-muted-foreground">
+            عکس در لیست اجناس و هنگام انتخاب جنس در فاکتور نمایش داده می‌شود — اجباری نیست.
+            {editing ? "" : " بعد از ذخیرهٔ جنس پیوست می‌شود."}
+          </p>
+
+          {savedPhotos.length === 0 && pending.length === 0 ? (
+            <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-[0.68rem] text-muted-foreground">
+              هنوز عکسی ندارد — می‌توانید همین‌جا عکس جنس را بگیرید یا انتخاب کنید.
+            </p>
+          ) : (
+            <div className="grid grid-cols-4 gap-2">
+              {savedPhotos.map((att) => {
+                const isImage = att.mime.startsWith("image/")
+                const url = savedUrls[att.id]
+                return (
+                  <div
+                    key={att.id}
+                    className="relative aspect-square overflow-hidden rounded-xl border border-border/60 bg-muted/40"
+                  >
+                    {isImage ? (
+                      url ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreview({ url, filename: att.filename, size: att.size })}
+                          aria-label={`پیش‌نمایش ${att.filename}`}
+                          className="size-full cursor-zoom-in"
+                        >
+                          <img src={url} alt={att.filename} className="size-full object-cover" loading="lazy" />
+                        </button>
+                      ) : (
+                        <div className="flex size-full items-center justify-center" aria-label="در حال بارگذاری عکس">
+                          <Loader2 className="size-4 animate-spin text-muted-foreground/60" />
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
+                        <FileText className="size-5 text-muted-foreground" />
+                        <span className="w-full truncate text-[0.55rem] text-muted-foreground">{att.filename}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeSavedPhoto(att)}
+                      aria-label={`حذف عکس ${att.filename}`}
+                      className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
+                    >
+                      <X className="size-3" strokeWidth={2.4} />
+                    </button>
+                  </div>
+                )
+              })}
+              {pending.map((p, i) => (
+                <div
+                  key={`pending-${i}`}
+                  className="relative aspect-square overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/5"
+                >
+                  <img src={p.url} alt={p.file.name} className="size-full object-cover" />
+                  <span className="absolute inset-x-0 bottom-0 bg-primary/80 py-px text-center text-[0.5rem] font-bold text-white">
+                    جدید
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPending((prev) => prev.filter((_, j) => j !== i))}
+                    aria-label="حذف از صف"
+                    className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
+                  >
+                    <X className="size-3" strokeWidth={2.4} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            className="hidden"
+            onChange={(e) => onPickPhotos(e.target.files)}
+            aria-hidden="true"
+            tabIndex={-1}
+          />
+        </div>
         <div>
           <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
             موجودی اولیه انبار
@@ -220,6 +443,33 @@ function ProductForm({
         )}
       </div>
     </BottomSheet>
+
+      {/* پیش‌نمایش عکس جنس */}
+      <BottomSheet
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        title="پیش‌نمایش عکس جنس"
+        description={preview?.filename}
+      >
+        <div className="space-y-3">
+          {preview && (
+            <img
+              src={preview.url}
+              alt={preview.filename}
+              className="mx-auto max-h-[64dvh] max-w-full rounded-xl object-contain"
+            />
+          )}
+          {preview && (
+            <p className="text-center text-xs text-muted-foreground">
+              {preview.filename} •{" "}
+              <span className="nums">
+                {toPersianDigits(Math.max(1, Math.round((preview.size ?? 0) / 1024)))} کیلوبایت
+              </span>
+            </p>
+          )}
+        </div>
+      </BottomSheet>
+    </>
   )
 }
 
@@ -241,7 +491,15 @@ function ProductDetailsSheet({
 
   const s = data?.stats
 
+  /* گالری عکس جنس (ADV-05) — پیش‌نمایش با کلیک */
+  const galleryPhotos = data?.attachments ?? []
+  const galleryUrls = useAttachmentUrls(
+    galleryPhotos.filter((a) => a.mime.startsWith("image/")).map((a) => a.id)
+  )
+  const [preview, setPreview] = useState<{ url: string; filename: string; size?: number } | null>(null)
+
   return (
+    <>
     <BottomSheet
       open={!!product}
       onClose={onClose}
@@ -264,6 +522,53 @@ function ProductDetailsSheet({
         </div>
       ) : (
         <div className="space-y-4">
+          {/* گالری عکس جنس (ADV-05) — اختیاری؛ کلیک = پیش‌نمایش */}
+          {galleryPhotos.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-bold">
+                <ImagePlus className="size-3.5 text-primary" />
+                عکس‌های جنس
+                <span className="nums rounded-full bg-muted px-1.5 py-px text-[0.6rem] font-bold text-muted-foreground">
+                  {toPersianDigits(galleryPhotos.length)}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {galleryPhotos.map((att) => {
+                  const isImage = att.mime.startsWith("image/")
+                  const url = galleryUrls[att.id]
+                  return (
+                    <div
+                      key={att.id}
+                      className="relative aspect-square overflow-hidden rounded-xl border border-border/60 bg-muted/40"
+                    >
+                      {isImage ? (
+                        url ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreview({ url, filename: att.filename, size: att.size })}
+                            aria-label={`پیش‌نمایش ${att.filename}`}
+                            className="size-full cursor-zoom-in"
+                          >
+                            <img src={url} alt={att.filename} className="size-full object-cover" loading="lazy" />
+                          </button>
+                        ) : (
+                          <div className="flex size-full items-center justify-center" aria-label="در حال بارگذاری عکس">
+                            <Loader2 className="size-4 animate-spin text-muted-foreground/60" />
+                          </div>
+                        )
+                      ) : (
+                        <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
+                          <FileText className="size-5 text-muted-foreground" />
+                          <span className="w-full truncate text-[0.55rem] text-muted-foreground">{att.filename}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* آمار اصلی */}
           <div className="grid grid-cols-2 gap-2.5">
             <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
@@ -393,6 +698,33 @@ function ProductDetailsSheet({
         </div>
       )}
     </BottomSheet>
+
+    {/* پیش‌نمایش عکس جنس */}
+    <BottomSheet
+      open={!!preview}
+      onClose={() => setPreview(null)}
+      title="پیش‌نمایش عکس جنس"
+      description={preview?.filename}
+    >
+      <div className="space-y-3">
+        {preview && (
+          <img
+            src={preview.url}
+            alt={preview.filename}
+            className="mx-auto max-h-[64dvh] max-w-full rounded-xl object-contain"
+          />
+        )}
+        {preview && (
+          <p className="text-center text-xs text-muted-foreground">
+            {preview.filename} •{" "}
+            <span className="nums">
+              {toPersianDigits(Math.max(1, Math.round((preview.size ?? 0) / 1024)))} کیلوبایت
+            </span>
+          </p>
+        )}
+      </div>
+    </BottomSheet>
+    </>
   )
 }
 
@@ -442,6 +774,9 @@ export default function ProductsPage() {
   })
 
   const products = data?.products ?? []
+  // بندانگشتی عکس اجناس (ADV-05) — فقط اجناسی که عکس دارند
+  const photoIds = products.map((p) => p.photoId).filter((x): x is string => !!x)
+  const photoUrls = useAttachmentUrls(photoIds)
   const totalValue = products.reduce(
     (s, p) => s + p.stock * (p.avgCostPrice || p.lastPurchasePrice || 0),
     0
@@ -533,9 +868,19 @@ export default function ProductsPage() {
               className="cursor-pointer rounded-3xl border border-border/70 bg-card p-4 shadow-card transition-all hover:shadow-card-hover active:scale-[0.995]"
             >
               <div className="flex items-center gap-3">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <Package className="size-5" />
-                </span>
+                {/* عکس جنس اگر داشته باشد، وگرنه آیکون پیش‌فرض (ADV-05) */}
+                {p.photoId && photoUrls[p.photoId] ? (
+                  <img
+                    src={photoUrls[p.photoId]}
+                    alt={p.name}
+                    loading="lazy"
+                    className="size-11 shrink-0 rounded-2xl border border-border/60 object-cover"
+                  />
+                ) : (
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Package className="size-5" />
+                  </span>
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-extrabold">
                     {p.name}

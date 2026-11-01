@@ -1,4 +1,6 @@
 import { NextRequest } from "next/server"
+import fs from "node:fs"
+import path from "node:path"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { personUpdateSchema } from "@/lib/validation"
@@ -73,7 +75,20 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     if (inv + chk + st > 0) {
       return fail("این شخص سابقه فاکتور/چک/تسویه دارد؛ فقط می‌توانید بایگانی‌اش کنید", 400)
     }
+    // پیوست‌های تصویری شخص هم پاک شوند تا یتیم نمانند
+    const atts = await db.attachment.findMany({ where: { refType: "PERSON", refId: id }, select: { id: true } })
+    if (atts.length > 0) {
+      await db.attachment.deleteMany({ where: { id: { in: atts.map((a) => a.id) } } })
+    }
     await db.person.delete({ where: { id } })
+    // حذف فایل‌ها خارج از تراکنش — خطایش بحرانی نیست
+    for (const a of atts) {
+      try {
+        fs.unlinkSync(path.join(process.cwd(), "uploads", a.id))
+      } catch {
+        /* فایل از قبل نبود */
+      }
+    }
     return ok({ ok: true })
   } catch (e) {
     return serverError(e)

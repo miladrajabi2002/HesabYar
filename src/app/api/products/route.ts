@@ -65,6 +65,20 @@ export async function GET(req: NextRequest) {
       purAgg.map((r) => [r.productId, { qty: r._sum.quantity ?? 0, total: r._sum.total ?? 0 }])
     )
 
+    // عکس جنس (ADV-05): اولین تصویر پیوست‌شدهٔ هر جنس — اختیاری، برای بندانگشتی لیست
+    const productIds = products.map((p) => p.id)
+    const photoAtts = productIds.length
+      ? await db.attachment.findMany({
+          where: { refType: "PRODUCT", refId: { in: productIds }, mime: { startsWith: "image/" } },
+          orderBy: { createdAt: "desc" },
+          select: { refId: true, id: true },
+        })
+      : []
+    const photoMap = new Map<string, string>()
+    for (const a of photoAtts) {
+      if (!photoMap.has(a.refId)) photoMap.set(a.refId, a.id)
+    }
+
     const result = products.map((p) => {
       const pur = purMap.get(p.id)
       const initialQty = p.initialStock ?? 0
@@ -76,6 +90,7 @@ export async function GET(req: NextRequest) {
       return {
         ...p,
         stock: stocks.get(p.id) ?? 0,
+        photoId: photoMap.get(p.id) ?? null,
         avgCostPrice,
         lastPurchasePrice: lastPrices.get(p.id)?.purchase ?? 0,
         lastSalePrice: lastPrices.get(p.id)?.sale ?? 0,

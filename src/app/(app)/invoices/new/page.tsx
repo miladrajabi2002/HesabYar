@@ -6,6 +6,7 @@
  * IMP-05: دکمه ثبت بومی تلگرام • IMP-08: ذخیره خودکار پیش‌نویس
  * MO-02: جشن موفقیت + هپتیک • UI-08: جمع زنده با انیمیشن،
  * جابجایی اقلام با dnd-kit + اعتبارسنجی زندهٔ اقلام و تخفیف
+ * ADV-05: عکس جنس جدید (اختیاری) در همین شیت + بندانگشتی عکس در انتخاب اجناس
  */
 import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -52,8 +53,10 @@ import {
   IdCard,
   CheckCircle2,
   ImagePlus,
+  X,
 } from "lucide-react"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
+import { postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
 import { jalaliDayKey } from "@/lib/jalali"
 import { normalizeDigits } from "@/lib/digits"
@@ -84,6 +87,8 @@ interface Product {
   brand: string | null
   code: string | null
   unit: string
+  /** عکس جنس (اختیاری) — شناسهٔ اولین پیوست تصویری (ADV-05) */
+  photoId: string | null
 }
 interface Account {
   id: string
@@ -1242,6 +1247,17 @@ function ItemPickerSheet({
   const [name, setName] = useState("")
   const [brand, setBrand] = useState("")
   const [code, setCode] = useState("")
+  // عکس جنس جدید (ADV-05) — اختیاری؛ بعد از ساخت جنس آپلود می‌شود
+  const queryClient = useQueryClient()
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const [pendingPhotos, setPendingPhotos] = useState<{ file: File; url: string }[]>([])
+  const pendingPhotoUrlsRef = useRef<string[]>([])
+
+  /** آزادسازی پیش‌نمایش‌های محلی هنگام ترک صفحه */
+  useEffect(() => {
+    const urls = pendingPhotoUrlsRef.current
+    return () => urls.forEach((u) => URL.revokeObjectURL(u))
+  }, [])
 
   const reset = () => {
     setMode("pick")
@@ -1252,6 +1268,7 @@ function ItemPickerSheet({
     setName("")
     setBrand("")
     setCode("")
+    setPendingPhotos([])
   }
 
   const matches = (s: string | null | undefined) =>
@@ -1259,6 +1276,9 @@ function ItemPickerSheet({
   const filtered = products.filter(
     (p) => !q || matches(p.name) || matches(p.brand) || matches(p.code)
   )
+  // بندانگشتی عکس اجناس موجود در تب انتخاب (ADV-05)
+  const pickPhotoIds = filtered.map((p) => p.photoId).filter((x): x is string => !!x)
+  const pickPhotoUrls = useAttachmentUrls(pickPhotoIds)
 
   const addItem = async () => {
     if (quantity <= 0) return toast.error("تعداد را وارد کنید")
@@ -1282,6 +1302,26 @@ function ItemPickerSheet({
         finalBrand = r.product.brand
         finalCode = r.product.code
         finalUnit = r.product.unit
+        // آپلود عکس‌های انتخاب‌شده — بعد از ساخت جنس؛ خطای عکس مانع ثبت قلم نیست (ADV-05)
+        if (pendingPhotos.length > 0) {
+          let okCount = 0
+          for (const p of pendingPhotos) {
+            try {
+              const fd = new FormData()
+              fd.append("file", p.file)
+              fd.append("refType", "PRODUCT")
+              fd.append("refId", r.product.id)
+              await postAttachmentForm("/api/attachments", fd)
+              okCount++
+            } catch {
+              /* عکس این یکی آپلود نشد — بقیه ادامه می‌یابند */
+            }
+          }
+          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس جنس پیوست شد 📎`)
+          if (okCount < pendingPhotos.length) toast.error("برخی عکس‌ها آپلود نشدند")
+          setPendingPhotos([])
+          await queryClient.invalidateQueries({ queryKey: ["products"] })
+        }
       } catch (e) {
         return toast.error(e instanceof Error ? e.message : "خطا در ثبت جنس")
       }
@@ -1368,7 +1408,18 @@ function ItemPickerSheet({
             {filtered.map((p) => (
               <SheetOption
                 key={p.id}
-                icon={<Package className="size-4" />}
+                icon={
+                  p.photoId && pickPhotoUrls[p.photoId] ? (
+                    <img
+                      src={pickPhotoUrls[p.photoId]}
+                      alt={p.name}
+                      loading="lazy"
+                      className="size-full rounded-xl object-cover"
+                    />
+                  ) : (
+                    <Package className="size-4" />
+                  )
+                }
                 title={[p.name, p.brand].filter(Boolean).join(" — ")}
                 subtitle={[p.code ? `کد ${p.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
                 selected={selected?.id === p.id}
@@ -1427,6 +1478,76 @@ function ItemPickerSheet({
                 </button>
               ))}
             </div>
+          </div>
+          {/* عکس جنس (ADV-05) — اختیاری؛ با افزودن جنس پیوست می‌شود */}
+          <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+                <ImagePlus className="size-3.5" />
+                عکس جنس (اختیاری)
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => photoInputRef.current?.click()}
+                className="h-8 shrink-0 rounded-xl px-2.5 text-[0.7rem] font-bold"
+              >
+                <ImagePlus className="size-3.5" />
+                انتخاب تصویر
+              </Button>
+            </div>
+            {pendingPhotos.length === 0 ? (
+              <p className="rounded-xl bg-muted/40 px-2.5 py-3 text-center text-[0.68rem] leading-relaxed text-muted-foreground">
+                عکسی انتخاب نشده — با ثبت جنس، عکس در لیست اجناس هم آرشیو می‌شود.
+              </p>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                {pendingPhotos.map((p, i) => (
+                  <div
+                    key={`new-photo-${i}`}
+                    className="relative aspect-square overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/5"
+                  >
+                    <img src={p.url} alt={p.file.name} className="size-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setPendingPhotos((prev) => prev.filter((_, j) => j !== i))}
+                      aria-label="حذف عکس"
+                      className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
+                    >
+                      <X className="size-3" strokeWidth={2.4} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* ورودی مخفی انتخاب تصویر (دوربین در موبایل) */}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []).filter((f) =>
+                  f.type.startsWith("image/")
+                )
+                if (files.length === 0) {
+                  toast.error("فقط تصویر (JPG/PNG/WebP) مجاز است")
+                } else {
+                  const items = files.map((file) => {
+                    const url = URL.createObjectURL(file)
+                    pendingPhotoUrlsRef.current.push(url)
+                    return { file, url }
+                  })
+                  setPendingPhotos((prev) => [...prev, ...items])
+                }
+                if (photoInputRef.current) photoInputRef.current.value = ""
+              }}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
           </div>
         </div>
       )}

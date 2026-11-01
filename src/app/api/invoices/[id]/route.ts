@@ -239,6 +239,8 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     const invoice = await db.invoice.findUnique({ where: { id } })
     if (!invoice) return fail("فاکتور پیدا نشد", 404)
 
+    let orphanFiles: string[] = []
+
     await db.$transaction(async (tx) => {
       // ۱) چک‌های بابت خود فاکتور
       const directChecks = await tx.checkPaper.findMany({ where: { invoiceId: id }, select: { id: true } })
@@ -259,6 +261,21 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
         await tx.transaction.deleteMany({ where: { type: "CHECK_CASHED", refId: { in: allCheckIds } } })
       }
 
+      // ۳٫۵) حذف پیوست‌های تصویری فاکتور و چک‌هایش — تا یتیم نمانند
+      const atts = await tx.attachment.findMany({
+        where: {
+          OR: [
+            { refType: "INVOICE", refId: id },
+            ...(allCheckIds.length > 0 ? [{ refType: "CHECK", refId: { in: allCheckIds } }] : []),
+          ],
+        },
+        select: { id: true },
+      })
+      if (atts.length > 0) {
+        await tx.attachment.deleteMany({ where: { id: { in: atts.map((a) => a.id) } } })
+        orphanFiles = atts.map((a) => a.id)
+      }
+
       // ۴) حذف چک‌ها، تسویه‌ها، اقلام و خود فاکتور
       if (allCheckIds.length > 0) {
         await tx.checkPaper.deleteMany({ where: { id: { in: allCheckIds } } })
@@ -273,6 +290,15 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
       await tx.invoiceItem.deleteMany({ where: { invoiceId: id } })
       await tx.invoice.delete({ where: { id } })
     })
+
+    // پاک‌سازی فایل‌های پیوست حذف‌شده (خارج از تراکنش — خطایش بحرانی نیست)
+    for (const attId of orphanFiles) {
+      try {
+        fs.unlinkSync(path.join(process.cwd(), "uploads", attId))
+      } catch {
+        /* فایل از قبل نبود */
+      }
+    }
 
     return ok({ ok: true })
   } catch (e) {
