@@ -68,3 +68,6 @@ dev.log
 server.log
 agent-ctx/
 .bak-r3
+
+# پیوست‌های آپلودشده در زمان اجرا — داده است نه کد
+uploads/
