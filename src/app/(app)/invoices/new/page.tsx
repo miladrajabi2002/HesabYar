@@ -110,7 +110,9 @@ interface DraftCheck {
   bankKey: string
   serial: string
   dueDate: string
-  // ثبت چک (نسخهٔ ۳) — عکس چک بعد از ثبت فاکتور آپلود می‌شود
+  // شناسهٔ چک قدیم در حالت ویرایش — به‌روزرسانی درجا در PUT (حفظ id و پیوست‌های تصویری)
+  id?: string
+  // ثبت چک (نسخهٔ ۳) — عکس چک بعد از ثبت فاکتور آپلود می‌شود (مستقل از وضعیت ثبت)
   isRegistered?: boolean
   registeredName?: string
   registeredNationalId?: string
@@ -137,7 +139,17 @@ interface EditInvoice {
     quantity: number
     unitPrice: number
   }[]
-  checks: { serial: string; amount: number; bankKey: string; dueDate: string; status: string }[]
+  checks: {
+    id: string
+    serial: string
+    amount: number
+    bankKey: string
+    dueDate: string
+    status: string
+    isRegistered: boolean
+    registeredName: string | null
+    registeredNationalId: string | null
+  }[]
 }
 
 
@@ -199,10 +211,15 @@ function NewInvoicePageInner() {
     setPaidCash(inv.paidCash)
     setChecks(
       inv.checks.map((c) => ({
+        // id چک قدیم → در PUT به‌جای بازسازی، درجا به‌روز می‌شود → عکس و ثبت حفظ می‌ماند
+        id: c.id,
         amount: c.amount,
         bankKey: c.bankKey,
         serial: c.serial,
         dueDate: jalaliDayKey(new Date(c.dueDate)),
+        isRegistered: c.isRegistered,
+        registeredName: c.registeredName ?? undefined,
+        registeredNationalId: c.registeredNationalId ?? undefined,
       }))
     )
     setNote(inv.note ?? "")
@@ -421,6 +438,7 @@ function NewInvoicePageInner() {
         accountId: account?.id ?? null,
         paidCash,
         checks: checks.map((c) => ({
+          id: c.id || undefined,
           amount: c.amount,
           bankKey: c.bankKey,
           serial: c.serial || undefined,
@@ -457,10 +475,11 @@ function NewInvoicePageInner() {
       if (r.excess > 0) {
         toast.info(`مازاد ${formatToman(r.excess)} به علی‌الحساب «${person.name}» اضافه شد`)
       }
-      // آپلود عکس چک‌های ثبت‌شده (اگر داشت) — بعد از ساخت فاکتور و چک‌ها
+      // آپلود عکس چک‌ها (اگر داشتند) — بعد از ساخت/ویرایش فاکتور؛ مستقل از وضعیت ثبت
+      // در ویرایش فقط چک‌های تازه‌اضافه فایل دارند (چک‌های قبلی پیوست سرجایشان می‌ماند)
       const createdChecks = ((r as { invoice?: { checks?: { id: string }[] } }).invoice?.checks ?? []) as { id: string }[]
       const withPhotos = checks.filter((c) => c.photo)
-      if (!editId && withPhotos.length > 0 && createdChecks.length >= checks.length) {
+      if (withPhotos.length > 0 && createdChecks.length >= checks.length) {
         let uploaded = 0
         for (let i = 0; i < checks.length; i++) {
           const photo = checks[i].photo
@@ -1657,66 +1676,19 @@ function QuickCheckSheet({
                   placeholder={isReceived ? "نام خودتان" : "نام مشتری"}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
-                    <IdCard className="size-3.5" />
-                    کد ملی (اختیاری)
-                  </label>
-                  <Input
-                    value={regNationalId}
-                    onChange={(e) => setRegNationalId(e.target.value)}
-                    inputMode="numeric"
-                    dir="ltr"
-                    placeholder="۱۲۳۴۵۶۷۸۹۰"
-                    className="nums text-end"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
-                    <ImagePlus className="size-3.5" />
-                    عکس چک (اختیاری)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-input bg-card text-[0.68rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
-                  >
-                    {photo ? (
-                      <>
-                        <CheckCircle2 className="size-3.5 text-income" />
-                        <span className="truncate">{photo.name}</span>
-                      </>
-                    ) : (
-                      <>
-                        <ImagePlus className="size-3.5" />
-                        انتخاب عکس
-                      </>
-                    )}
-                  </button>
-                  <input
-                    ref={photoInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null
-                      if (f && !f.type.startsWith("image/")) {
-                        toast.error("فقط تصویر مجاز است")
-                        return
-                      }
-                      if (f && f.size > 8 * 1024 * 1024) {
-                        toast.error("حجم عکس بیش از ۸ مگابایت است")
-                        return
-                      }
-                      setPhoto(f)
-                      if (photoInputRef.current) photoInputRef.current.value = ""
-                    }}
-                    aria-hidden="true"
-                    tabIndex={-1}
-                  />
-                </div>
+              <div>
+                <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
+                  <IdCard className="size-3.5" />
+                  کد ملی (اختیاری)
+                </label>
+                <Input
+                  value={regNationalId}
+                  onChange={(e) => setRegNationalId(e.target.value)}
+                  inputMode="numeric"
+                  dir="ltr"
+                  placeholder="۱۲۳۴۵۶۷۸۹۰"
+                  className="nums text-end"
+                />
               </div>
               <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-[0.6rem] leading-4 text-muted-foreground">
                 چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود — اول باید به نام{" "}
@@ -1724,6 +1696,53 @@ function QuickCheckSheet({
               </p>
             </div>
           )}
+
+          {/* ── عکس چک — مستقل از وضعیت ثبت؛ چک ثبت‌نشده هم می‌تواند عکس داشته باشد ── */}
+          <div className="mt-3 border-t border-dashed pt-3">
+            <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
+              <ImagePlus className="size-3.5" />
+              عکس چک (اختیاری) — بدون نیاز به ثبت
+            </label>
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-input bg-card text-[0.68rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+            >
+              {photo ? (
+                <>
+                  <CheckCircle2 className="size-3.5 text-income" />
+                  <span className="truncate">{photo.name}</span>
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="size-3.5" />
+                  انتخاب عکس
+                </>
+              )}
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null
+                if (f && !f.type.startsWith("image/")) {
+                  toast.error("فقط تصویر مجاز است")
+                  return
+                }
+                if (f && f.size > 8 * 1024 * 1024) {
+                  toast.error("حجم عکس بیش از ۸ مگابایت است")
+                  return
+                }
+                setPhoto(f)
+                if (photoInputRef.current) photoInputRef.current.value = ""
+              }}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+          </div>
         </div>
       </div>
 

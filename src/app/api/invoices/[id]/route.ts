@@ -1,4 +1,6 @@
 import { NextRequest } from "next/server"
+import fs from "node:fs"
+import path from "node:path"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { invoiceCreateSchema } from "@/lib/validation"
@@ -58,9 +60,17 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     const oldChecks = await db.checkPaper.findMany({
       where: { invoiceId: id },
       select: { id: true, status: true },
+      orderBy: { createdAt: "asc" },
     })
     if (oldChecks.some((c) => c.status !== "PENDING")) {
       return fail("این فاکتور چک نقدشده/برگشتی دارد و قابل ویرایش نیست", 400)
+    }
+    // هر id چک ارسالی باید چکِ در جریانِ همین فاکتور باشد (به‌روزرسانی درجا)
+    const oldCheckIdSet = new Set(oldChecks.map((c) => c.id))
+    for (const c of data.checks) {
+      if (c.id && !oldCheckIdSet.has(c.id)) {
+        return fail("یکی از چک‌های ارسالی به این فاکتور تعلق ندارد", 400)
+      }
     }
 
     // تسویه‌های ثبت‌شدهٔ بعدی بابت فاکتور حفظ می‌شوند و در مانده لحاظ می‌گردند
@@ -69,6 +79,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       _sum: { amount: true },
     })
     const settledElsewhere = settledAgg._sum.amount ?? 0
+
+    // فایل‌های پیوستِ چک‌های حذف‌شده — بعد از موفقیت تراکنش از دیسک پاک می‌شوند
+    const removedAttachmentFiles: string[] = []
 
     const checkTotal = data.checks.reduce((s, c) => s + c.amount, 0)
     const subtotal = data.items.reduce((s, i) => s + Math.round(i.quantity * i.unitPrice), 0)
@@ -80,9 +93,19 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     await db.$transaction(async (tx) => {
       // ۱) پاکسازی وابستگی‌های قدیمی
       await tx.transaction.deleteMany({ where: { type: "INVOICE_CASH", refId: id } })
-      const oldCheckIds = oldChecks.map((c) => c.id)
-      if (oldCheckIds.length > 0) {
-        await tx.checkPaper.deleteMany({ where: { id: { in: oldCheckIds }, status: "PENDING" } })
+      // فقط چک‌های حذف‌شده از فاکتور پاک می‌شوند؛ بقیه درجا به‌روز می‌شوند
+      // (حفظ id چک → پیوست تصویری و وضعیت ثبت سر جایشان می‌ماند)
+      const payloadCheckIds = data.checks.map((c) => c.id).filter((x): x is string => !!x)
+      const removedCheckIds = oldChecks.map((c) => c.id).filter((oid) => !payloadCheckIds.includes(oid))
+      if (removedCheckIds.length > 0) {
+        await tx.checkPaper.deleteMany({ where: { id: { in: removedCheckIds }, status: "PENDING" } })
+        // پیوست‌های تصویری چک‌های حذف‌شده هم پاک می‌شوند (فایل‌ها بعد از تراکنش)
+        const removedAtts = await tx.attachment.findMany({
+          where: { refType: "CHECK", refId: { in: removedCheckIds } },
+          select: { id: true },
+        })
+        await tx.attachment.deleteMany({ where: { id: { in: removedAtts.map((a) => a.id) } } })
+        removedAttachmentFiles.push(...removedAtts.map((a) => a.id))
       }
       const removedExcess = await tx.settlement.findMany({
         where: { invoiceId: null, note: { endsWith: `(ref:${id})` } },
@@ -150,25 +173,28 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
         })
       }
 
-      // ۵) چک‌های جدید
+      // ۵) چک‌ها — با id قدیم: به‌روزرسانی درجا (حفظ پیوست تصویری)؛ بدون id: ساخت جدید
       for (const c of data.checks) {
-        await tx.checkPaper.create({
-          data: {
-            serial: c.serial ?? "",
-            amount: c.amount,
-            bankKey: c.bankKey,
-            direction: data.type === "SALE" ? "RECEIVED" : "ISSUED",
-            dueDate: dayKeyToDate(c.dueDate),
-            personId: data.personId,
-            invoiceId: id,
-            note: c.note ?? `بابت فاکتور ${existing.number}`,
-            // ثبت چک: دریافتی به نام ما، صادره به نام مشتری
-            isRegistered: c.isRegistered,
-            registeredName: c.isRegistered ? c.registeredName ?? null : null,
-            registeredNationalId: c.isRegistered ? c.registeredNationalId ?? null : null,
-            registeredAt: c.isRegistered ? date : null,
-          },
-        })
+        const checkData = {
+          serial: c.serial ?? "",
+          amount: c.amount,
+          bankKey: c.bankKey,
+          direction: data.type === "SALE" ? "RECEIVED" : "ISSUED",
+          dueDate: dayKeyToDate(c.dueDate),
+          personId: data.personId,
+          invoiceId: id,
+          note: c.note ?? `بابت فاکتور ${existing.number}`,
+          // ثبت چک: دریافتی به نام ما، صادره به نام مشتری
+          isRegistered: c.isRegistered,
+          registeredName: c.isRegistered ? c.registeredName ?? null : null,
+          registeredNationalId: c.isRegistered ? c.registeredNationalId ?? null : null,
+          registeredAt: c.isRegistered ? date : null,
+        }
+        if (c.id) {
+          await tx.checkPaper.update({ where: { id: c.id }, data: checkData })
+        } else {
+          await tx.checkPaper.create({ data: checkData })
+        }
       }
 
       // ۶) مازاد پرداخت → علی‌الحساب شخص
@@ -187,6 +213,15 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
         })
       }
     })
+
+    // پاک‌سازی فایل‌های پیوست چک‌های حذف‌شده (خارج از تراکنش — خطایش بحرانی نیست)
+    for (const attId of removedAttachmentFiles) {
+      try {
+        fs.unlinkSync(path.join(process.cwd(), "uploads", attId))
+      } catch {
+        /* فایل از قبل نبود */
+      }
+    }
 
     const full = await db.invoice.findUnique({ where: { id }, include: invoiceInclude })
     return ok({ invoice: full, excess })

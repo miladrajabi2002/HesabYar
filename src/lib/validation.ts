@@ -178,6 +178,8 @@ export const nationalIdSchema = z
   })
 
 export const checkInputSchema = z.object({
+  // شناسهٔ چک قدیم — فقط در ویرایش فاکتور؛ باعث به‌روزرسانی درجا و حفظ پیوست‌ها می‌شود
+  id: z.string().optional(),
   serial: optionalText(40),
   amount: positiveAmount,
   bankKey: z.string().trim().min(1, "بانک چک را انتخاب کنید"),
