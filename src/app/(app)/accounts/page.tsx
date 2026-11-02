@@ -18,12 +18,13 @@ import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, toLatinDigits, toPersianDigits } from "@/lib/money"
 import { BANKS, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
-import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
+import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { showUndoToast } from "@/components/ui/undo-toast"
 import { AmountInput } from "@/components/ui/amount-input"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { Sparkline } from "@/components/charts/finance-charts"
 
 interface Account {
   id: string
@@ -308,7 +309,7 @@ export default function AccountsPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-lg font-extrabold sm:text-xl">حساب‌های بانکی</h1>
+        <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">حساب‌های بانکی</h1>
         <Button
           onClick={() => {
             setEditing(null)
@@ -321,11 +322,40 @@ export default function AccountsPage() {
         </Button>
       </div>
 
-      {/* جمع موجودی */}
-      <div className="mb-4 rounded-3xl bg-gradient-to-l from-primary to-[#0a6353] p-4 text-white shadow-card sm:p-5">
-        <p className="text-xs opacity-80">جمع موجودی همه حساب‌ها</p>
-        <p className="nums mt-1 text-2xl font-extrabold sm:text-3xl">{formatToman(total, false)}</p>
-        <p className="text-[0.65rem] opacity-75">تومان — در {toPersianDigits(accounts.length)} حساب</p>
+      {/* جمع موجودی + سهم هر حساب */}
+      <div className="hero-gradient relative mb-4 overflow-hidden rounded-[1.75rem] p-5 text-white shadow-[0_20px_40px_-18px_rgba(7,74,61,0.6)] sm:p-6">
+        <p className="relative text-xs font-medium opacity-80">جمع موجودی همه حساب‌ها</p>
+        <p className="nums relative mt-1.5 text-[2rem] font-black leading-none tracking-tight sm:text-[2.5rem]">
+          {formatToman(total, false)}
+          <span className="ms-1.5 text-sm font-semibold opacity-70">تومان</span>
+        </p>
+        <p className="relative mt-2 text-xs opacity-80">در {toPersianDigits(accounts.length)} حساب</p>
+        {accounts.length > 1 && total > 0 && (
+          <div className="relative mt-4">
+            <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-white/15">
+              {accounts
+                .filter((a) => a.balance > 0)
+                .map((a) => (
+                  <span
+                    key={a.id}
+                    title={a.name}
+                    className="h-full first:rounded-s-full last:rounded-e-full"
+                    style={{ width: `${(a.balance / total) * 100}%`, background: getBank(a.bankKey).color, filter: "saturate(1.2) brightness(1.35)" }}
+                  />
+                ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.64rem] opacity-90">
+              {accounts
+                .filter((a) => a.balance > 0)
+                .map((a) => (
+                  <span key={a.id} className="nums flex items-center gap-1">
+                    <span className="size-1.5 rounded-full" style={{ background: getBank(a.bankKey).color, filter: "brightness(1.5)" }} />
+                    {a.name} {toPersianDigits(Math.round((a.balance / total) * 100))}٪
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {accounts.length >= 2 && (
@@ -353,9 +383,20 @@ export default function AccountsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-3 lg:grid-cols-2">
           {accounts.map((a) => {
             const bank = getBank(a.bankKey)
+            // روند مانده از روی گردش‌های اخیر (به عقب از مانده فعلی)
+            const trend = (() => {
+              if (a.recent.length < 2) return []
+              let bal = a.balance
+              const pts = [bal]
+              for (const t of a.recent) {
+                bal -= t.direction === "IN" ? t.amount : -t.amount
+                pts.push(bal)
+              }
+              return pts.reverse()
+            })()
             return (
               <div
                 key={a.id}
@@ -375,6 +416,11 @@ export default function AccountsPage() {
                     <div className="text-[0.6rem] text-muted-foreground">تومان</div>
                   </div>
                 </div>
+                {trend.length > 1 && (
+                  <div className="px-4 pb-2">
+                    <Sparkline values={trend} color={bank.color} height={26} />
+                  </div>
+                )}
                 {a.recent.length > 0 && (
                   <div className="border-t border-dashed px-4 py-2">
                     {a.recent.slice(0, 3).map((t) => (
@@ -460,31 +506,45 @@ export default function AccountsPage() {
         <div className="space-y-3">
           <div>
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">از حساب</label>
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
               {accounts.map((a) => (
-                <SheetOption
+                <button
                   key={a.id}
-                  icon={<BankLogo bankKey={a.bankKey} size={36} showBg={false} />}
-                  title={a.name}
-                  subtitle={`مانده ${formatToman(a.balance, false)}`}
-                  selected={fromId === a.id}
+                  type="button"
                   onClick={() => setFromId(a.id)}
-                />
+                  className={cn(
+                    "flex items-center gap-2 rounded-2xl border p-2.5 text-start transition-all active:scale-[0.98]",
+                    fromId === a.id ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "border-border bg-card hover:bg-accent/60"
+                  )}
+                >
+                  <BankLogo bankKey={a.bankKey} size={30} showBg={false} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold">{a.name}</span>
+                    <span className="nums block truncate text-[0.62rem] text-muted-foreground">{formatToman(a.balance, false)}</span>
+                  </span>
+                </button>
               ))}
             </div>
           </div>
           <div>
             <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">به حساب</label>
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
               {accounts.map((a) => (
-                <SheetOption
+                <button
                   key={a.id}
-                  icon={<BankLogo bankKey={a.bankKey} size={36} showBg={false} />}
-                  title={a.name}
-                  subtitle={`مانده ${formatToman(a.balance, false)}`}
-                  selected={toId === a.id}
+                  type="button"
                   onClick={() => setToId(a.id)}
-                />
+                  className={cn(
+                    "flex items-center gap-2 rounded-2xl border p-2.5 text-start transition-all active:scale-[0.98]",
+                    toId === a.id ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "border-border bg-card hover:bg-accent/60"
+                  )}
+                >
+                  <BankLogo bankKey={a.bankKey} size={30} showBg={false} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold">{a.name}</span>
+                    <span className="nums block truncate text-[0.62rem] text-muted-foreground">{formatToman(a.balance, false)}</span>
+                  </span>
+                </button>
               ))}
             </div>
           </div>

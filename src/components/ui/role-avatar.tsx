@@ -156,3 +156,73 @@ export function RoleBadge({ role, className }: { role?: string | null; className
     </span>
   )
 }
+
+/**
+ * آواتار تراز (نسخهٔ ۶) — به‌جای حرف اول نام، وضعیت حساب را نشان می‌دهد:
+ *  • حلقه: طول قوس = سهم این شخص از بزرگ‌ترین مانده؛ رنگ = طلب ما (کهربایی) / بدهی ما (بنفش) / تسویه (سبز)
+ *  • وسط: آیکون نقش (مشتری/فروشنده/هر دو)
+ */
+export function BalanceAvatar({
+  role,
+  balance,
+  maxAbs,
+  size = 48,
+  className,
+}: {
+  role?: string | null
+  balance: number
+  /** بزرگ‌ترین قدرمطلق مانده در فهرست — برای نسبت قوس */
+  maxAbs: number
+  size?: number
+  className?: string
+}) {
+  const settled = balance === 0
+  const tone = settled ? "var(--income)" : balance > 0 ? "var(--warning)" : "var(--role-supplier)"
+  const stroke = Math.max(3, Math.round(size * 0.075))
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const frac = settled ? 1 : Math.min(1, Math.max(0.1, maxAbs > 0 ? Math.abs(balance) / maxAbs : 0.1))
+  const roleTone = ROLE_TONE[role ?? ""] ?? "var(--muted-foreground)"
+  const label = settled ? "تسویه‌شده" : balance > 0 ? "طلب ما" : "بدهی ما"
+  return (
+    <span
+      role="img"
+      aria-label={`${ROLE_LABELS[role ?? ""] ?? "شخص"} — ${label}`}
+      className={cn("relative inline-grid shrink-0 select-none place-items-center", className)}
+      style={{ width: size, height: size }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={`color-mix(in srgb, ${tone} 16%, transparent)`}
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={tone}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${c * frac} ${c}`}
+          style={{ transition: "stroke-dasharray 0.6s var(--ease-out, ease-out)" }}
+        />
+      </svg>
+      <span
+        className="relative grid place-items-center rounded-full"
+        style={{
+          width: size - stroke * 2 - 6,
+          height: size - stroke * 2 - 6,
+          background: `color-mix(in srgb, ${role === "BOTH" ? "var(--role-customer)" : roleTone} 9%, var(--card))`,
+          color: role === "BOTH" ? "var(--foreground)" : roleTone,
+        }}
+      >
+        <RoleGlyph role={role} size={Math.round(size * 0.4)} />
+      </span>
+    </span>
+  )
+}

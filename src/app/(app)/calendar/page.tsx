@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import {
   CalendarDays,
   CheckSquare2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   HandCoins,
@@ -22,8 +23,10 @@ import {
 import { apiGet } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import {
+  JALALI_MONTHS,
   WEEKDAYS,
   currentMonthKey,
+  parseMonthKey,
   dayKeyToDate,
   formatJalaliWithWeekday,
   monthKeyLabel,
@@ -165,7 +168,6 @@ function SummaryChip({
       style={{ ["--tile" as string]: tone }}
       className="relative overflow-hidden rounded-3xl border border-border/70 bg-card p-3.5 shadow-card"
     >
-      <span className="pointer-events-none absolute -end-5 -top-5 size-16 rounded-full bg-[color:var(--tile)] opacity-10 blur-xl" />
       <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-muted-foreground">
         <span className="icon-soft grid size-6 place-items-center rounded-lg">{icon}</span>
         {label}
@@ -215,6 +217,141 @@ function CalendarSkeleton() {
   )
 }
 
+// ───────────────────────── انتخاب ماه/سال ─────────────────────────
+
+/** جابه‌جایی کلید ماه به اندازهٔ n ماه (مثبت = جلو) */
+function shiftMonth(key: string, n: number): string {
+  const { jy, jm } = parseMonthKey(key)
+  const idx = jy * 12 + (jm - 1) + n
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`
+}
+
+function MonthPickerSheet({
+  open,
+  onClose,
+  month,
+  onPick,
+}: {
+  open: boolean
+  onClose: () => void
+  month: string
+  onPick: (key: string) => void
+}) {
+  const cur = currentMonthKey()
+  const [year, setYear] = useState(() => parseMonthKey(month).jy)
+  const [prevOpen, setPrevOpen] = useState(open)
+  // هر بار شیت باز می‌شود، روی سالِ ماه انتخاب‌شده می‌ایستد
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) setYear(parseMonthKey(month).jy)
+  }
+  const curYear = parseMonthKey(cur).jy
+  const jumps = [
+    { label: "۳ ماه قبل", n: -3 },
+    { label: "۶ ماه قبل", n: -6 },
+    { label: "۹ ماه قبل", n: -9 },
+    { label: "سال قبل", n: -12 },
+  ]
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      title="رفتن به ماه یا سال"
+      description="هر ماه یا سالی را مستقیم باز کنید"
+      footer={
+        <Button
+          variant="outline"
+          className="h-12 w-full rounded-2xl font-bold"
+          onClick={() => {
+            onPick(cur)
+            onClose()
+          }}
+        >
+          <CalendarDays className="size-4" />
+          برگرد به امروز
+        </Button>
+      }
+    >
+      <div className="mb-3 flex items-center justify-between rounded-2xl bg-muted/60 p-1.5">
+        <button
+          type="button"
+          onClick={() => setYear((y) => y - 1)}
+          aria-label="سال قبل"
+          className="grid size-10 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-card active:scale-95"
+        >
+          <ChevronRight className="size-5" />
+        </button>
+        <div className="text-center">
+          <div className="nums text-xl font-black leading-none">{toPersianDigits(year)}</div>
+          <div className="mt-1 text-[0.62rem] text-muted-foreground">
+            {year === curYear ? "سال جاری" : year < curYear ? `${toPersianDigits(curYear - year)} سال قبل` : `${toPersianDigits(year - curYear)} سال بعد`}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setYear((y) => y + 1)}
+          aria-label="سال بعد"
+          className="grid size-10 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-card active:scale-95"
+        >
+          <ChevronLeft className="size-5" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {JALALI_MONTHS.map((name, i) => {
+          const key = `${year}-${String(i + 1).padStart(2, "0")}`
+          const selected = key === month
+          const isCurrent = key === cur
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                onPick(key)
+                onClose()
+              }}
+              className={cn(
+                "relative flex flex-col items-center gap-0.5 rounded-2xl border py-3 transition-all active:scale-95",
+                selected
+                  ? "border-primary bg-primary text-primary-foreground shadow-card"
+                  : "border-border bg-card hover:border-primary/40 hover:bg-accent/50"
+              )}
+            >
+              <span className="text-[0.82rem] font-extrabold">{name}</span>
+              <span className={cn("nums text-[0.62rem]", selected ? "opacity-80" : "text-muted-foreground")}>
+                {toPersianDigits(i + 1)}
+              </span>
+              {isCurrent && (
+                <span
+                  aria-label="ماه جاری"
+                  className={cn("absolute end-2 top-2 size-1.5 rounded-full", selected ? "bg-primary-foreground" : "bg-primary")}
+                />
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      <p className="mb-2 mt-4 text-[0.68rem] font-bold text-muted-foreground">پرش سریع از ماه انتخاب‌شده</p>
+      <div className="flex flex-wrap gap-1.5">
+        {jumps.map((j) => (
+          <button
+            key={j.n}
+            type="button"
+            onClick={() => {
+              onPick(shiftMonth(month, j.n))
+              onClose()
+            }}
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-[0.7rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground active:scale-95"
+          >
+            {j.label}
+          </button>
+        ))}
+      </div>
+    </BottomSheet>
+  )
+}
+
 // ───────────────────────── صفحه ─────────────────────────
 
 export default function CalendarPage() {
@@ -223,6 +360,7 @@ export default function CalendarPage() {
 
   const [month, setMonth] = useState<string>(() => currentMonthKey())
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
   // جهت تغییر ماه برای انیمیشن لغزشی (۱ = ماه بعد، −۱ = ماه قبل)
   const [dir, setDir] = useState(0)
   const draggedRef = useRef(false)
@@ -320,6 +458,11 @@ export default function CalendarPage() {
     }
     return m
   }, [data])
+  const jumpTo = (key: string) => {
+    if (key === month) return
+    setDir(key > month ? 1 : -1)
+    setMonth(key)
+  }
   const goToday = () => {
     const cur = currentMonthKey()
     if (month === cur) {
@@ -343,8 +486,16 @@ export default function CalendarPage() {
         >
           <ChevronRight className="size-4" />
         </Button>
-        <h1 className="flex-1 truncate text-center text-lg font-extrabold sm:text-xl" aria-live="polite">
-          {monthKeyLabel(month)}
+        <h1 className="min-w-0 flex-1 text-center text-lg font-extrabold sm:text-xl" aria-live="polite">
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            aria-label="انتخاب ماه یا سال"
+            className="mx-auto flex max-w-full items-center justify-center gap-1.5 rounded-2xl px-3 py-1.5 transition-colors hover:bg-accent active:scale-[0.98]"
+          >
+            <span className="truncate">{monthKeyLabel(month)}</span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          </button>
         </h1>
         <Button
           variant="outline"
@@ -684,6 +835,7 @@ export default function CalendarPage() {
           </div>
         )}
       </BottomSheet>
+      <MonthPickerSheet open={pickerOpen} onClose={() => setPickerOpen(false)} month={month} onPick={jumpTo} />
     </div>
   )
 }

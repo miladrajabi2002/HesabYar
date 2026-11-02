@@ -12,13 +12,14 @@ import { formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatUnit } from "@/lib/units"
 import {
   JALALI_MONTHS,
+  jalaliDayKey,
   jalaliOf,
   nowTehran,
   parseMonthKey,
 } from "@/lib/jalali"
 import { cn } from "@/lib/utils"
 import { Segmented } from "@/components/ui/segmented"
-import { TrendChart, CollectionDonut, type Collection } from "@/components/charts/finance-charts"
+import { TrendChart, CollectionDonut, Sparkline, type Collection } from "@/components/charts/finance-charts"
 
 interface PeriodSum {
   sales: number
@@ -91,11 +92,14 @@ export default function ReportsPage() {
 
   const profitMargin =
     data && data.summary.sales > 0 ? Math.round((data.summary.profit / data.summary.sales) * 100) : 0
+  // مینی‌ترند کارت‌ها: فقط روزهای سپری‌شده (روزهای آیندهٔ ماه خطِ صفر نسازند)
+  const todayK = jalaliDayKey(nowTehran())
+  const elapsedSeries = (data?.series ?? []).filter((d) => d.day <= todayK)
   const prevLabel = period === "day" ? "دیروز" : period === "week" ? "هفتهٔ قبل" : "ماه قبل"
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-extrabold sm:text-xl">گزارش‌ها</h1>
+      <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">گزارش‌ها</h1>
 
       {/* انتخاب دوره */}
       <Segmented
@@ -152,6 +156,7 @@ export default function ReportsPage() {
               tone="var(--sale)"
               icon={<TrendingUp className="size-3.5" />}
               foot={`${toPersianDigits(data.summary.saleCount)} فاکتور`}
+              spark={elapsedSeries.map((d) => d.sales)}
             />
             <ReportKpi
               i={1}
@@ -162,6 +167,7 @@ export default function ReportsPage() {
               tone="var(--warning)"
               icon={<BarChart3 className="size-3.5" />}
               foot={`حاشیه سود ${toPersianDigits(profitMargin)}٪`}
+              spark={elapsedSeries.map((d) => d.profit)}
             />
             <ReportKpi
               i={2}
@@ -172,6 +178,7 @@ export default function ReportsPage() {
               tone="var(--purchase)"
               icon={<ShoppingBag className="size-3.5" />}
               foot={`${toPersianDigits(data.summary.purchaseCount)} فاکتور`}
+              spark={elapsedSeries.map((d) => d.purchases)}
               invert
             />
             <motion.div
@@ -207,7 +214,7 @@ export default function ReportsPage() {
                 روند روزانهٔ {label}
               </div>
               {data.series.length > 1 ? (
-                <TrendChart series={data.series} height={240} />
+                <TrendChart series={data.series} height={240} mode="period" />
               ) : (
                 <p className="py-8 text-center text-xs text-muted-foreground">
                   برای «{label}» نمودار روزانه معنا ندارد؛ «این هفته» یا «این ماه» را ببینید
@@ -338,6 +345,7 @@ function ReportKpi({
   tone,
   icon,
   foot,
+  spark,
   invert = false,
 }: {
   i: number
@@ -348,6 +356,8 @@ function ReportKpi({
   tone: string
   icon: React.ReactNode
   foot: string
+  /** مینی‌ترند روزانهٔ دوره */
+  spark?: number[]
   /** برای خرید، افزایش «بد» نیست ولی رنگ خنثی‌تر می‌گیرد */
   invert?: boolean
 }) {
@@ -362,7 +372,6 @@ function ReportKpi({
       style={{ ["--tile" as string]: tone }}
       className="relative overflow-hidden rounded-3xl border border-border/70 bg-card p-4 shadow-card"
     >
-      <span className="pointer-events-none absolute -end-6 -top-6 size-20 rounded-full bg-[color:var(--tile)] opacity-10 blur-xl" />
       <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-muted-foreground">
         <span className="icon-soft grid size-6 place-items-center rounded-lg">{icon}</span>
         {label}
@@ -384,6 +393,7 @@ function ReportKpi({
           </span>
         )}
       </div>
+      {spark && <Sparkline values={spark} color={tone} className="mt-2.5" />}
     </motion.div>
   )
 }

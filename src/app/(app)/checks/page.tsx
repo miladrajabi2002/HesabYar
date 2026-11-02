@@ -402,7 +402,7 @@ export default function ChecksPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-extrabold sm:text-xl">چک‌ها</h1>
+      <h1 className="mb-4 hidden text-lg font-extrabold lg:block lg:text-xl">چک‌ها</h1>
 
       {/* خلاصه — دو کارت در جریان با نوار نسبت */}
       {summary && (
@@ -430,8 +430,8 @@ export default function ChecksPage() {
                     : "border-border/70"
                 )}
               >
-                <div className="flex items-center gap-2 text-[0.68rem] font-bold text-muted-foreground">
-                  <CheckDirectionBadge direction={c.key} size="sm" />
+                <div className="flex items-center gap-2 text-[0.72rem] font-bold text-muted-foreground">
+                  <CheckDirectionBadge direction={c.key} iconOnly />
                   {c.label}
                 </div>
                 <p className="nums mt-2 text-base font-extrabold text-[color:var(--tile)] sm:text-lg">

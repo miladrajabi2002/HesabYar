@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, formatTomanParts, toPersianDigits } from "@/lib/money"
-import { formatJalaliShort, JALALI_MONTHS, jalaliOf, nowTehran } from "@/lib/jalali"
+import { formatJalaliShort, JALALI_MONTHS, jalaliDayKey, jalaliOf, nowTehran } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { DashboardSkeleton } from "@/components/ui/page-skeletons"
@@ -30,7 +30,7 @@ import { ErrorState } from "@/components/ui/error-state"
 import { RoleAvatar } from "@/components/ui/role-avatar"
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
-import { TrendChart, CollectionDonut, type Collection } from "@/components/charts/finance-charts"
+import { TrendChart, CollectionDonut, Sparkline, type Collection } from "@/components/charts/finance-charts"
 import { useUIStore } from "@/lib/ui-store"
 
 interface DashboardData {
@@ -137,6 +137,7 @@ function KpiTile({
   icon,
   delta,
   invertDelta,
+  spark,
 }: {
   href: string
   label: string
@@ -145,6 +146,8 @@ function KpiTile({
   icon: React.ReactNode
   delta?: number | null
   invertDelta?: boolean
+  /** مینی‌ترند روزانه (از اول ماه تا امروز) */
+  spark?: number[]
 }) {
   return (
     <Link
@@ -152,7 +155,6 @@ function KpiTile({
       style={{ ["--tile" as string]: hue }}
       className="group relative flex flex-col gap-3 overflow-hidden rounded-3xl border border-border/70 bg-card p-3.5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-card-hover active:scale-[0.98] sm:p-4"
     >
-      <span className="pointer-events-none absolute -end-8 -top-8 size-24 rounded-full bg-[color-mix(in_srgb,var(--tile)_9%,transparent)] transition-transform duration-500 group-hover:scale-125" />
       <div className="relative flex items-center justify-between gap-1">
         <span className="icon-soft grid size-9 place-items-center rounded-2xl">{icon}</span>
         {delta !== undefined && <DeltaBadge pct={delta} invert={invertDelta} />}
@@ -161,6 +163,7 @@ function KpiTile({
         <p className="truncate text-[0.7rem] font-medium text-muted-foreground">{label}</p>
         <Amt v={value} className="mt-0.5 text-lg font-black tracking-tight text-[color:var(--tile)] sm:text-xl" />
       </div>
+      {spark && <Sparkline values={spark} color={hue} className="relative -mb-0.5 mt-auto" />}
     </Link>
   )
 }
@@ -221,6 +224,10 @@ export default function DashboardPage() {
 
   const now = nowTehran()
   const j = jalaliOf(now)
+  // مینی‌ترند کارت‌های ماه: روزهای ماه جاری تا امروز
+  const monthPrefix = jalaliDayKey(now).slice(0, 7)
+  const todayK = jalaliDayKey(now)
+  const monthDays = data.series.filter((s) => s.day.startsWith(monthPrefix) && s.day <= todayK)
   const monthLabel = `${JALALI_MONTHS[j.jm - 1]} ${toPersianDigits(j.jy)}`
 
   return (
@@ -295,6 +302,7 @@ export default function DashboardPage() {
           hue="var(--primary)"
           icon={<TrendingUp className="size-[1.1rem]" strokeWidth={2.2} />}
           delta={data.monthComparison.profit}
+          spark={monthDays.map((d) => d.profit)}
         />
         <KpiTile
           href="/reports"
@@ -303,6 +311,7 @@ export default function DashboardPage() {
           hue="var(--hue-invoices)"
           icon={<ReceiptText className="size-[1.1rem]" strokeWidth={2.2} />}
           delta={data.monthComparison.sales}
+          spark={monthDays.map((d) => d.sales)}
         />
         <KpiTile
           href="/people?filter=debtors"
@@ -326,7 +335,7 @@ export default function DashboardPage() {
           {/* نمودار */}
           <motion.div custom={2} variants={stagger} initial="hidden" animate="visible">
             <SectionCard
-              title="روند ۳۰ روز اخیر"
+              title="روند فروش و سود"
               icon={<TrendingUp className="size-4 text-primary" />}
             >
               <TrendChart series={data.series} height={210} />

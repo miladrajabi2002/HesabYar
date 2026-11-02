@@ -40,6 +40,7 @@ import {
   formatJalaliWithWeekday,
   jalaliDayKey,
   jalaliOf,
+  nowTehran,
   startOfJalaliMonth,
 } from "@/lib/jalali"
 import { BANKS, getBank } from "@/lib/banks"
@@ -51,7 +52,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
-import { RoleAvatar, RoleBadge } from "@/components/ui/role-avatar"
+import { BalanceAvatar, RoleBadge } from "@/components/ui/role-avatar"
+import { Sparkline } from "@/components/charts/finance-charts"
 import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfirm } from "@/components/ui/confirm"
@@ -338,6 +340,22 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
 
   const p = data.person
   const balance = data.balance
+  // آمار کارت شخص: فروش/خرید کل، چک‌های در جریان و گردش ۶ ماه اخیر (برای مینی‌ترند)
+  const totalSales = data.invoices.filter((i) => i.type === "SALE").reduce((a, i) => a + i.total, 0)
+  const totalPurchases = data.invoices.filter((i) => i.type === "PURCHASE").reduce((a, i) => a + i.total, 0)
+  const pendingChecks = data.checks.filter((c) => c.status === "PENDING")
+  const monthlyVolume = (() => {
+    const base = jalaliOf(nowTehran())
+    const idx = (y: number, m: number) => y * 12 + (m - 1)
+    const cur = idx(base.jy, base.jm)
+    const sums = Array.from({ length: 6 }, () => 0)
+    for (const inv of data.invoices) {
+      const d = jalaliOf(new Date(inv.date))
+      const k = cur - idx(d.jy, d.jm)
+      if (k >= 0 && k < 6) sums[5 - k] += inv.total
+    }
+    return sums
+  })()
 
   const openEdit = () => {
     setName(p.name)
@@ -646,67 +664,96 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         </button>
       </div>
 
-      {/* کارت شخص */}
-      <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
-        <div className="flex items-center gap-3">
-          <RoleAvatar role={p.role} name={p.name} size={60} />
+      <div className="grid items-start gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
+      {/* کارت شخص — در دسکتاپ ستون ثابت کنار فهرست‌ها */}
+      <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-card lg:sticky lg:top-6">
+        <div className="flex items-center gap-3.5">
+          <BalanceAvatar role={p.role} balance={balance} maxAbs={Math.max(Math.abs(balance), 1)} size={64} />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-extrabold sm:text-lg">{p.name}</h1>
-            <div className="mt-1 flex flex-wrap gap-1.5 text-[0.65rem] text-muted-foreground">
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[0.65rem] text-muted-foreground">
               <RoleBadge role={p.role} />
+              {p.company && <span className="truncate">{p.company}</span>}
             </div>
           </div>
         </div>
 
-        <div className="mt-4 space-y-2 text-xs">
-          {p.phone && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Phone className="size-3.5" />
-              <span className="nums">{p.phone}</span>
-            </div>
-          )}
-          {p.company && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Building2 className="size-3.5" />
-              {p.company}
-            </div>
-          )}
-          {p.shopAddress && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <MapPin className="size-3.5" />
-              {p.shopAddress}
-            </div>
-          )}
-        </div>
+        {/* تماس سریع */}
+        {(p.phone || p.shopAddress) && (
+          <div className="mt-4 flex flex-wrap gap-1.5 text-xs">
+            {p.phone && (
+              <a
+                href={`tel:${toLatinDigits(p.phone)}`}
+                className="flex items-center gap-1.5 rounded-xl bg-muted/60 px-3 py-2 font-bold transition-colors hover:bg-accent"
+              >
+                <Phone className="size-3.5 text-[color:var(--sale)]" />
+                <span className="nums">{toPersianDigits(p.phone)}</span>
+              </a>
+            )}
+            {p.shopAddress && (
+              <span className="flex min-w-0 items-center gap-1.5 rounded-xl bg-muted/60 px-3 py-2 text-muted-foreground">
+                <MapPin className="size-3.5 shrink-0" />
+                <span className="truncate">{p.shopAddress}</span>
+              </span>
+            )}
+          </div>
+        )}
 
         {/* تراز */}
         <div
           className={cn(
-            "mt-4 flex items-center justify-between rounded-2xl px-4 py-3",
-            balance > 0
-              ? "bg-warning/10"
-              : balance < 0
-                ? "bg-destructive/10"
-                : "bg-income/10"
+            "mt-4 rounded-2xl px-4 py-3.5",
+            balance > 0 ? "bg-warning/10" : balance < 0 ? "bg-destructive/10" : "bg-income/10"
           )}
         >
-          <span
+          <div
             className={cn(
-              "text-xs font-bold",
+              "text-[0.7rem] font-bold",
               balance > 0 ? "text-warning" : balance < 0 ? "text-destructive" : "text-income"
             )}
           >
             {balance > 0 ? "طلب ما از این شخص" : balance < 0 ? "بدهی ما به این شخص" : "تسویه کامل ✓"}
-          </span>
-          <span
+          </div>
+          <div
             className={cn(
-              "nums text-base font-extrabold",
+              "nums mt-0.5 text-2xl font-black leading-tight",
               balance > 0 ? "text-warning" : balance < 0 ? "text-destructive" : "text-income"
             )}
           >
             {balance !== 0 ? formatToman(Math.abs(balance), false) : "—"}
-          </span>
+            {balance !== 0 && <span className="ms-1 text-xs font-semibold opacity-70">تومان</span>}
+          </div>
+          {monthlyVolume.some((v) => v > 0) && (
+            <div className="mt-2">
+              <Sparkline
+                values={monthlyVolume}
+                color={balance > 0 ? "var(--warning)" : balance < 0 ? "var(--role-supplier)" : "var(--income)"}
+                height={30}
+              />
+              <div className="mt-0.5 text-[0.58rem] text-muted-foreground">گردش مبادلات ۶ ماه اخیر</div>
+            </div>
+          )}
         </div>
+
+        {/* آمار سریع */}
+        <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+          {[
+            { label: "فروش به او", value: formatTomanCompact(totalSales), tone: "var(--sale)" },
+            { label: "خرید از او", value: formatTomanCompact(totalPurchases), tone: "var(--purchase)" },
+            { label: "چک در جریان", value: `${toPersianDigits(pendingChecks.length)} فقره`, tone: "var(--hue-checks)" },
+          ].map((st) => (
+            <div key={st.label} className="rounded-xl bg-muted/50 px-1 py-2">
+              <div className="truncate text-[0.58rem] text-muted-foreground">{st.label}</div>
+              <div
+                className="nums mt-0.5 truncate text-[0.74rem] font-extrabold"
+                style={{ color: `color-mix(in srgb, ${st.tone} 85%, black)` }}
+              >
+                {st.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* مانده اولیه (حساب قدیمی) — جزء تراز بالا لحاظ شده */}
         {(p.openingBalance ?? 0) !== 0 && (
           <div className="mt-2 flex items-center justify-between rounded-2xl bg-muted/60 px-4 py-2.5">
@@ -759,6 +806,8 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
 
+
+      <div className="min-w-0 space-y-4">
       {/* فاکتورها */}
       <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
         <div className="mb-3 flex items-center gap-2 text-sm font-bold">
@@ -797,7 +846,9 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
 
-      {/* چک‌ها */}
+      {/* چک‌ها — فقط وقتی دارد */}
+      {data.checks.length > 0 && (
+      <>
       <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
         <div className="mb-3 flex items-center gap-2 text-sm font-bold">
           <CheckSquare2 className="size-4 text-primary" />
@@ -837,8 +888,12 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           )}
         </div>
       </div>
+      </>
+      )}
 
-      {/* تسویه‌ها */}
+      {/* تسویه‌ها — فقط وقتی دارد */}
+      {data.settlements.length > 0 && (
+      <>
       <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
         <div className="mb-3 flex items-center gap-2 text-sm font-bold">
           <CheckCheck className="size-4 text-primary" />
@@ -866,6 +921,8 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* تصاویر شخص (ADV-04) */}
       <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
@@ -953,6 +1010,9 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           tabIndex={-1}
         />
       </section>
+
+      </div>
+      </div>
 
       {/* ───────── شیت ویرایش ───────── */}
       <BottomSheet

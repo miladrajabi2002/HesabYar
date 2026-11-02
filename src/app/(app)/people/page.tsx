@@ -27,7 +27,7 @@ import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AmountInput } from "@/components/ui/amount-input"
-import { RoleAvatar, RoleBadge } from "@/components/ui/role-avatar"
+import { BalanceAvatar, RoleBadge } from "@/components/ui/role-avatar"
 import { Segmented } from "@/components/ui/segmented"
 import { SwipeRow } from "@/components/ui/swipe-row"
 import { cn } from "@/lib/utils"
@@ -96,6 +96,7 @@ function PeoplePageInner() {
   let people = data?.people ?? []
   if (balanceFilter === "debtors") people = people.filter((p) => p.balance > 0)
   if (balanceFilter === "creditors") people = people.filter((p) => p.balance < 0)
+  const maxAbsBalance = Math.max(0, ...(data?.people ?? []).map((p) => Math.abs(p.balance)))
 
   const totalReceivable = people.reduce((s, p) => s + Math.max(0, p.balance), 0)
   const totalPayable = -people.reduce((s, p) => s + Math.min(0, p.balance), 0)
@@ -103,7 +104,7 @@ function PeoplePageInner() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-lg font-extrabold sm:text-xl">اشخاص</h1>
+        <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">اشخاص</h1>
         <div className="flex items-center gap-2">
           <Button
             onClick={() => downloadCsv("people")}
@@ -145,7 +146,6 @@ function PeoplePageInner() {
                 : "border-border/70"
             )}
           >
-            <span className="pointer-events-none absolute -end-6 -top-6 size-20 rounded-full bg-[color:var(--tile)] opacity-10 blur-xl" />
             <div className="flex items-center gap-2 text-[0.68rem] font-bold text-muted-foreground">
               <span className="icon-soft grid size-6 place-items-center rounded-lg">
                 <c.icon className="size-3.5" />
@@ -259,7 +259,7 @@ function PeoplePageInner() {
                   className="group block rounded-3xl border border-border/70 bg-card p-3.5 shadow-card transition-shadow hover:shadow-card-hover active:bg-accent/30"
                 >
                   <div className="flex items-center gap-3">
-                    <RoleAvatar role={p.role} name={p.name} size={46} />
+                    <BalanceAvatar role={p.role} balance={p.balance} maxAbs={maxAbsBalance} size={48} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-extrabold">{p.name}</div>
                       <div className="mt-1 flex items-center gap-1.5 text-[0.65rem] text-muted-foreground">

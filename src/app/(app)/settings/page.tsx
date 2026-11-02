@@ -429,7 +429,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-extrabold sm:text-xl">تنظیمات</h1>
+      <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">تنظیمات</h1>
 
       {/* ربات تلگرام */}
       <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">

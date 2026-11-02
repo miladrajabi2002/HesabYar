@@ -40,6 +40,7 @@ import { Input } from "@/components/ui/input"
 import { Attachment, postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
+import { Segmented } from "@/components/ui/segmented"
 
 interface Product {
   id: string
@@ -728,6 +729,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null)
   const [detail, setDetail] = useState<Product | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all")
 
   // ADV-02: دانلود مطمئن CSV — window.location.href داخل مینی‌اپ تلگرام کوکی نشست ندارد
   // (احراز هویت فقط با هدر x-telegram-init-data)؛ پس با fetch + blob دانلود می‌کنیم.
@@ -766,11 +768,16 @@ export default function ProductsPage() {
     queryFn: () => apiGet<{ products: Product[] }>(`/api/products?${params}`),
   })
 
-  const products = data?.products ?? []
+  const allProducts = data?.products ?? []
+  const outCount = allProducts.filter((p) => p.stock <= 0).length
+  const maxStock = Math.max(1, ...allProducts.map((p) => p.stock))
+  const products = allProducts.filter((p) =>
+    stockFilter === "all" ? true : stockFilter === "in" ? p.stock > 0 : p.stock <= 0
+  )
   // بندانگشتی عکس اجناس (ADV-05) — فقط اجناسی که عکس دارند
   const photoIds = products.map((p) => p.photoId).filter((x): x is string => !!x)
   const photoUrls = useAttachmentUrls(photoIds)
-  const totalValue = products.reduce(
+  const totalValue = allProducts.reduce(
     (s, p) => s + p.stock * (p.avgCostPrice || p.lastPurchasePrice || 0),
     0
   )
@@ -778,7 +785,7 @@ export default function ProductsPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-lg font-extrabold sm:text-xl">اجناس</h1>
+        <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">اجناس</h1>
         <div className="flex items-center gap-2">
           <Button
             onClick={() => downloadCsv("products")}
@@ -804,23 +811,42 @@ export default function ProductsPage() {
       </div>
 
       {/* خلاصه */}
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-border/70 bg-card p-3.5 shadow-card">
-          <div className="flex items-center gap-1.5 text-[0.7rem] text-muted-foreground">
-            <Boxes className="size-3.5" />
-            تعداد اجناس
+      <div className="mb-4 grid grid-cols-3 gap-2.5 sm:gap-3">
+        <div className="rounded-3xl border border-border/70 bg-card p-3.5 shadow-card">
+          <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-muted-foreground">
+            <span className="icon-soft grid size-6 place-items-center rounded-lg" style={{ ["--tile" as string]: "var(--hue-products)" }}>
+              <Boxes className="size-3.5" />
+            </span>
+            <span className="truncate">تعداد اجناس</span>
           </div>
-          <p className="nums mt-1 text-base font-extrabold sm:text-lg">{toPersianDigits(products.length)}</p>
+          <p className="nums mt-2 text-base font-extrabold sm:text-lg">{toPersianDigits(allProducts.length)}</p>
         </div>
-        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3.5">
-          <div className="flex items-center gap-1.5 text-[0.7rem] text-primary">
-            <Banknote className="size-3.5" />
-            ارزش موجودی
+        <div className="rounded-3xl border border-primary/25 bg-primary/10 p-3.5">
+          <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-primary">
+            <Banknote className="size-3.5 shrink-0" />
+            <span className="truncate">ارزش موجودی</span>
           </div>
-          <p className="nums mt-1 text-base font-extrabold text-primary sm:text-lg">
+          <p className="nums mt-2 truncate text-base font-extrabold text-primary sm:text-lg">
             {formatTomanCompact(totalValue)}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setStockFilter(stockFilter === "out" ? "all" : "out")}
+          className={cn(
+            "rounded-3xl border p-3.5 text-start transition-all active:scale-[0.98]",
+            outCount > 0 ? "border-destructive/25 bg-destructive/5" : "border-border/70 bg-card",
+            stockFilter === "out" && "ring-2 ring-destructive/25"
+          )}
+        >
+          <div className={cn("flex items-center gap-1.5 text-[0.68rem] font-bold", outCount > 0 ? "text-destructive" : "text-muted-foreground")}>
+            <Package className="size-3.5 shrink-0" />
+            <span className="truncate">تمام‌شده</span>
+          </div>
+          <p className={cn("nums mt-2 text-base font-extrabold sm:text-lg", outCount > 0 && "text-destructive")}>
+            {toPersianDigits(outCount)}
+          </p>
+        </button>
       </div>
 
       {/* جستجو */}
@@ -834,6 +860,16 @@ export default function ProductsPage() {
             className="field ps-10"
           />
         </div>
+        <Segmented
+          value={stockFilter}
+          onChange={setStockFilter}
+          options={[
+            { key: "all", label: "همه" },
+            { key: "in", label: "موجود", tone: "var(--income)" },
+            { key: "out", label: "تمام‌شده", tone: "var(--destructive)" },
+          ]}
+          className="mt-2 sm:max-w-sm"
+        />
       </div>
 
       {/* لیست */}
@@ -850,7 +886,7 @@ export default function ProductsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="grid gap-2.5 lg:grid-cols-2">
           {products.map((p) => (
             <div
               key={p.id}
@@ -884,8 +920,8 @@ export default function ProductsPage() {
                   </div>
                 </div>
                 <div className="shrink-0 text-end">
-                  <div className="nums text-sm font-extrabold text-primary">
-                    {toPersianDigits(p.stock)} {formatUnit(p.unit)}
+                  <div className={cn("nums text-sm font-extrabold", p.stock <= 0 ? "text-destructive" : "text-primary")}>
+                    {p.stock <= 0 ? "تمام شد" : `${toPersianDigits(p.stock)} ${formatUnit(p.unit)}`}
                   </div>
                   <div className="text-[0.6rem] text-muted-foreground">موجودی</div>
                 </div>
@@ -901,6 +937,13 @@ export default function ProductsPage() {
                 >
                   <Pencil className="size-4" />
                 </button>
+              </div>
+              {/* نوار موجودی نسبت به پرموجودترین جنس */}
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                <div
+                  className={cn("h-full rounded-full", p.stock <= 0 ? "bg-destructive/60" : "bg-primary")}
+                  style={{ width: `${p.stock <= 0 ? 4 : Math.max(6, Math.min(100, (p.stock / maxStock) * 100))}%` }}
+                />
               </div>
               {(p.lastPurchasePrice > 0 || p.lastSalePrice > 0) && (
                 <div className="mt-2.5 flex gap-2 border-t border-dashed pt-2.5 text-[0.62rem]">

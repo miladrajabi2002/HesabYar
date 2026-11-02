@@ -178,7 +178,7 @@ function InvoicesPageInner() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-lg font-extrabold sm:text-xl">
+        <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">
           فاکتورها
           {total > 0 && (
             <span className="nums ms-2 text-xs font-medium text-muted-foreground">
@@ -444,17 +444,17 @@ function InvoicesPageInner() {
                       {(inv.items.length > 0 || inv.type === "SALE") && (
                         <div className="mt-2.5 flex items-center gap-2 border-t border-dashed border-border/80 pt-2.5">
                           <div className="flex min-w-0 flex-1 gap-1 overflow-hidden">
-                            {inv.items.slice(0, 2).map((it) => (
+                            {inv.items.slice(0, 1).map((it) => (
                               <span
                                 key={it.id}
-                                className="nums max-w-[48%] truncate rounded-lg bg-muted px-2 py-1 text-[0.6rem] text-muted-foreground"
+                                className="nums max-w-[80%] truncate rounded-lg bg-muted px-2 py-1 text-[0.6rem] text-muted-foreground"
                               >
                                 {toPersianDigits(it.quantity)} {formatUnit(it.unit)} {it.productName}
                               </span>
                             ))}
-                            {inv.items.length > 2 && (
+                            {inv.items.length > 1 && (
                               <span className="nums shrink-0 rounded-lg bg-muted px-2 py-1 text-[0.6rem] text-muted-foreground">
-                                +{toPersianDigits(inv.items.length - 2)}
+                                +{toPersianDigits(inv.items.length - 1)}
                               </span>
                             )}
                           </div>

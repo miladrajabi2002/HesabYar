@@ -56,6 +56,7 @@ import {
   X,
   ArrowRight,
   Clock3,
+  ChevronDown,
 } from "lucide-react"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
@@ -77,6 +78,7 @@ import { SuccessCelebration } from "@/components/ui/success-celebration"
 import { useConfirm } from "@/components/ui/confirm"
 import { Segmented } from "@/components/ui/segmented"
 import { InvoiceTypeMark, InvoiceTypePill } from "@/components/ui/type-mark"
+import { BalanceAvatar, ROLE_LABELS } from "@/components/ui/role-avatar"
 
 // ───────── تایپ‌ها ─────────
 interface Person {
@@ -85,6 +87,8 @@ interface Person {
   phone: string | null
   company: string | null
   role: string
+  /** مانده حساب: مثبت = طلب ما، منفی = بدهی ما */
+  balance?: number
 }
 interface Product {
   id: string
@@ -1256,6 +1260,7 @@ function PersonPickerSheet({
   const filtered = people.filter(
     (p) => !q || matches(p.name) || matches(p.company) || matches(p.phone)
   )
+  const maxAbs = Math.max(0, ...people.map((p) => Math.abs(p.balance ?? 0)))
   return (
     <BottomSheet
       open={open}
@@ -1269,27 +1274,53 @@ function PersonPickerSheet({
         </Button>
       }
     >
-      <div className="relative mb-3">
-        <Search className="absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="جستجوی نام یا موبایل…"
-          className="field ps-10"
-        />
-      </div>
-      <div className="max-h-[55vh] space-y-2 overflow-y-auto pe-1">
-        {filtered.map((p) => (
-          <SheetOption
-            key={p.id}
-            icon={<Users className="size-5" />}
-            title={p.name}
-            subtitle={[p.company, p.phone].filter(Boolean).join(" • ") || undefined}
-            onClick={() => onPick(p)}
+      <div className="sticky -top-4 z-10 -mx-4 -mt-4 mb-2 bg-card px-4 pb-2 pt-4">
+        <div className="relative">
+          <Search className="absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
+          <input
+            autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="جستجوی نام، شرکت یا موبایل…"
+            className="field ps-10"
           />
-        ))}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {filtered.map((p) => {
+          const bal = p.balance ?? 0
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onPick(p)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-2.5 text-start transition-all hover:border-primary/40 hover:bg-accent/50 active:scale-[0.99]"
+            >
+              <BalanceAvatar role={p.role} balance={p.balance ?? 0} maxAbs={maxAbs} size={44} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold">{p.name}</span>
+                <span className="nums mt-0.5 block truncate text-[0.7rem] text-muted-foreground">
+                  {[p.company, p.phone ? toPersianDigits(p.phone) : null].filter(Boolean).join(" • ") ||
+                    ROLE_LABELS[p.role]}
+                </span>
+              </span>
+              {bal !== 0 && (
+                <span
+                  className={cn(
+                    "nums shrink-0 rounded-full px-2 py-0.5 text-[0.62rem] font-bold",
+                    bal > 0 ? "bg-warning/12 text-warning" : "bg-destructive/10 text-destructive"
+                  )}
+                >
+                  {bal > 0 ? "طلب" : "بدهی"} {formatToman(Math.abs(bal), false)}
+                </span>
+              )}
+            </button>
+          )
+        })}
         {filtered.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted-foreground">شخصی پیدا نشد</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            شخصی پیدا نشد — با دکمهٔ پایین بسازید
+          </p>
         )}
       </div>
     </BottomSheet>
@@ -1316,6 +1347,7 @@ function QuickPersonSheet({
   const [openingKind, setOpeningKind] = useState<"none" | "receivable" | "payable">("none")
   const [openingAmount, setOpeningAmount] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [more, setMore] = useState(false)
 
   const submit = async () => {
     if (name.trim().length < 2) return toast.error("نام را وارد کنید")
@@ -1379,6 +1411,17 @@ function QuickPersonSheet({
             className="nums text-end"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => setMore((v) => !v)}
+          aria-expanded={more}
+          className="flex w-full items-center justify-between rounded-xl border border-dashed border-border px-3 py-2 text-[0.72rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+        >
+          شرکت، آدرس و مانده اولیه
+          <ChevronDown className={cn("size-4 transition-transform", more && "rotate-180")} />
+        </button>
+        {more && (
+          <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
         <div>
           <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
             اسم شرکت / کارگاه (اختیاری)
@@ -1438,6 +1481,8 @@ function QuickPersonSheet({
             </div>
           )}
         </div>
+          </div>
+        )}
       </div>
     </BottomSheet>
   )
@@ -1578,14 +1623,66 @@ function ItemPickerSheet({
       title="افزودن جنس به فاکتور"
       size="tall"
       footer={
-        <Button
-          onClick={addItem}
-          disabled={mode === "pick" ? !selected : name.trim().length < 2}
-          className="h-12 w-full rounded-2xl font-bold"
-        >
-          <Plus className="size-4" />
-          افزودن به فاکتور
-        </Button>
+        <>
+            {(mode === "new" || selected) && (
+        <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-2">
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              {activeUnit === "عدد" ? "تعداد *" : `تعداد (${formatUnit(activeUnit)}) *`}
+            </label>
+            <NumberInput value={quantity} onChange={setQuantity} placeholder="۱" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              قیمت واحد (تومان) *
+            </label>
+            <AmountInput value={unitPrice} onChange={setUnitPrice} showWords={false} />
+          </div>
+          {/* موجودی انبار جنس انتخابی + هشدار کمبود در فاکتور فروش */}
+          {mode === "pick" && selected && (
+            <div className="col-span-2">
+              <div className="flex items-center justify-between rounded-xl bg-muted/60 px-3 py-1.5 text-[0.7rem]">
+                <span className="text-muted-foreground">موجودی فعلی انبار:</span>
+                <span
+                  className={cn(
+                    "nums font-bold",
+                    invoiceType === "SALE" && (selected.stock ?? 0) <= 0
+                      ? "text-destructive"
+                      : "text-foreground"
+                  )}
+                >
+                  {Number.isInteger(selected.stock ?? 0)
+                    ? toPersianDigits(String(selected.stock ?? 0))
+                    : toPersianDigits((selected.stock ?? 0).toFixed(1))}{" "}
+                  {formatUnit(selected.unit)}
+                </span>
+              </div>
+              {invoiceType === "SALE" && quantity > (selected.stock ?? 0) && (
+                <p className="mt-1.5 rounded-xl bg-warning/10 px-3 py-1.5 text-[0.65rem] font-bold text-warning">
+                  ⚠ تعداد واردشده بیشتر از موجودی انبار است — با ثبت این فاکتور موجودی منفی می‌شود
+                </p>
+              )}
+            </div>
+          )}
+          <div className="col-span-2 flex items-center justify-between rounded-xl bg-muted/60 px-3 py-2 text-[0.7rem] text-muted-foreground">
+            <span className="nums">
+              {toPersianDigits(String(quantity))} {formatUnit(activeUnit)} × {formatToman(unitPrice, false)}
+            </span>
+            <span className="nums text-sm font-black text-foreground">
+              {formatToman(Math.round(quantity * unitPrice), false)} <span className="text-[0.62rem] font-medium">تومان</span>
+            </span>
+          </div>
+        </div>
+      )}
+          <Button
+            onClick={addItem}
+            disabled={mode === "pick" ? !selected : name.trim().length < 2}
+            className="h-12 w-full rounded-2xl font-bold"
+          >
+            <Plus className="size-4" />
+            افزودن به فاکتور
+          </Button>
+        </>
       }
     >
       {/* تب انتخاب/جدید */}
@@ -1621,13 +1718,14 @@ function ItemPickerSheet({
           <div className="relative mb-3">
             <Search className="absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
             <input
+              autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="جستجوی نام جنس یا برند…"
+              placeholder="جستجوی نام جنس، برند یا کد…"
               className="field ps-10"
             />
           </div>
-          <div className="mb-3 max-h-56 space-y-2 overflow-y-auto pe-1">
+          <div className="space-y-1.5">
             {filtered.map((p) => {
               // نمایش موجودی زندهٔ انبار کنار هر جنس — در فروش مهم‌تر است
               const stockNum = p.stock ?? 0
@@ -1790,56 +1888,6 @@ function ItemPickerSheet({
         </div>
       )}
 
-      {/* تعداد و قیمت — برچسب تعداد بر اساس واحد جنس (مثلاً kg) */}
-      {(mode === "new" || selected) && (
-        <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-muted/50 p-3">
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-              {activeUnit === "عدد" ? "تعداد *" : `تعداد (${formatUnit(activeUnit)}) *`}
-            </label>
-            <NumberInput value={quantity} onChange={setQuantity} placeholder="۱" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-              قیمت واحد (تومان) *
-            </label>
-            <AmountInput value={unitPrice} onChange={setUnitPrice} showWords={false} />
-          </div>
-          {/* موجودی انبار جنس انتخابی + هشدار کمبود در فاکتور فروش */}
-          {mode === "pick" && selected && (
-            <div className="col-span-2">
-              <div className="flex items-center justify-between rounded-xl bg-card px-3 py-2 text-[0.7rem]">
-                <span className="text-muted-foreground">موجودی فعلی انبار:</span>
-                <span
-                  className={cn(
-                    "nums font-bold",
-                    invoiceType === "SALE" && (selected.stock ?? 0) <= 0
-                      ? "text-destructive"
-                      : "text-foreground"
-                  )}
-                >
-                  {Number.isInteger(selected.stock ?? 0)
-                    ? toPersianDigits(String(selected.stock ?? 0))
-                    : toPersianDigits((selected.stock ?? 0).toFixed(1))}{" "}
-                  {formatUnit(selected.unit)}
-                </span>
-              </div>
-              {invoiceType === "SALE" && quantity > (selected.stock ?? 0) && (
-                <p className="mt-1.5 rounded-xl bg-warning/10 px-3 py-1.5 text-[0.65rem] font-bold text-warning">
-                  ⚠ تعداد واردشده بیشتر از موجودی انبار است — با ثبت این فاکتور موجودی منفی می‌شود
-                </p>
-              )}
-            </div>
-          )}
-          <div className="col-span-2 text-center text-[0.7rem] text-muted-foreground">
-            {toPersianDigits(String(quantity))} {formatUnit(activeUnit)} × {formatToman(unitPrice, false)} ={" "}
-            <span className="nums font-bold text-foreground">
-              {formatToman(Math.round(quantity * unitPrice), false)}
-            </span>{" "}
-            تومان
-          </div>
-        </div>
-      )}
     </BottomSheet>
   )
 }

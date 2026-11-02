@@ -7,7 +7,7 @@
  *    (جمع، میانگین روزانه، روند) و راهنمای فارسی کامل
  *  • CollectionDonut: از فروش این دوره چقدر نقد/چک/بعداً تسویه/هنوز نسیه است
  */
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   Bar,
@@ -23,7 +23,7 @@ import {
   YAxis,
 } from "recharts"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
-import { dayKeyToDate, formatJalaliShort, weekdayName } from "@/lib/jalali"
+import { dayKeyToDate, formatJalaliShort, jalaliDayKey, jalaliMonthKey, nowTehran, weekdayName } from "@/lib/jalali"
 import { Segmented } from "@/components/ui/segmented"
 import { cn } from "@/lib/utils"
 
@@ -52,47 +52,74 @@ function axisMoney(v: number): string {
   return toPersianDigits(`${sign}${a}`)
 }
 
+type Range = "7" | "30" | "month"
+
+/**
+ * mode="rolling" (داشبورد): کلید ۷ روز / ۳۰ روز (پیش‌فرض) / این ماه
+ * mode="period" (گزارش‌ها): دقیقاً همان بازهٔ انتخاب‌شده (مثلاً کل آبان)، بدون کلید بازه
+ * روزهای آینده خالی نمایش داده می‌شوند و در میانگین نمی‌آیند.
+ */
 export function TrendChart({
   series,
   height = 220,
   defaultMetric = "sales",
+  mode = "rolling",
   className,
 }: {
   series: SeriesPoint[]
   height?: number
   defaultMetric?: Metric
+  mode?: "rolling" | "period"
   className?: string
 }) {
   const [metric, setMetric] = useState<Metric>(defaultMetric)
-  const [range, setRange] = useState<"7" | "all">("all")
+  const [range, setRange] = useState<Range>("30")
   const m = METRICS[metric]
+  const todayK = useMemo(() => jalaliDayKey(nowTehran()), [])
 
   const points = useMemo(() => {
-    const src = range === "7" ? series.slice(-7) : series
+    let src = series
+    if (mode === "rolling") {
+      const upToToday = series.filter((s) => s.day <= todayK)
+      if (range === "7") src = upToToday.slice(-7)
+      else if (range === "30") src = upToToday.slice(-30)
+      else {
+        const mk = jalaliMonthKey(nowTehran())
+        src = series.filter((s) => s.day.startsWith(mk))
+      }
+    }
     return src.map((s) => {
       const date = dayKeyToDate(s.day)
-      return { ...s, date, label: formatJalaliShort(date), value: s[metric] }
+      return { ...s, date, label: formatJalaliShort(date), value: s[metric], future: s.day > todayK }
     })
-  }, [series, metric, range])
+  }, [series, metric, range, mode, todayK])
 
   const stats = useMemo(() => {
-    const vals = points.map((p) => p.value)
+    const elapsed = points.filter((p) => !p.future)
+    const vals = elapsed.map((p) => p.value)
     const total = vals.reduce((a, b) => a + b, 0)
     const active = vals.filter((v) => v !== 0).length
-    const avg = points.length ? total / points.length : 0
+    const avg = elapsed.length ? total / elapsed.length : 0
     let best = -1
-    points.forEach((p, i) => {
-      if (best < 0 || p.value > points[best].value) best = i
+    elapsed.forEach((p, i) => {
+      if (best < 0 || p.value > elapsed[best].value) best = i
     })
     // نیمهٔ دوم بازه نسبت به نیمهٔ اول (روند)
-    const half = Math.floor(points.length / 2)
+    const half = Math.floor(elapsed.length / 2)
     const first = vals.slice(0, half).reduce((a, b) => a + b, 0)
-    const second = vals.slice(points.length - half).reduce((a, b) => a + b, 0)
+    const second = vals.slice(elapsed.length - half).reduce((a, b) => a + b, 0)
     const trend = half >= 2 && first > 0 ? ((second - first) / first) * 100 : null
-    return { total, avg, best: best >= 0 && points[best].value > 0 ? points[best] : null, active, trend }
+    return {
+      total,
+      avg,
+      best: best >= 0 && elapsed[best].value > 0 ? elapsed[best] : null,
+      active,
+      elapsed: elapsed.length,
+      trend,
+    }
   }, [points])
 
-  const todayIdx = points.length - 1
+  const todayIdx = points.findIndex((p) => p.day === todayK)
   const empty = stats.total === 0
 
   return (
@@ -109,14 +136,15 @@ export function TrendChart({
           }))}
           className="min-w-0 flex-1 sm:max-w-xs"
         />
-        {series.length > 7 && (
+        {mode === "rolling" && (
           <Segmented
             size="sm"
             value={range}
             onChange={setRange}
             options={[
               { key: "7", label: "۷ روز" },
-              { key: "all", label: `${toPersianDigits(series.length)} روز` },
+              { key: "30", label: "۳۰ روز" },
+              { key: "month", label: "این ماه" },
             ]}
           />
         )}
@@ -138,7 +166,7 @@ export function TrendChart({
             label={stats.trend === null ? "روزهای فعال" : "روند نیمهٔ دوم"}
             value={
               stats.trend === null
-                ? `${toPersianDigits(stats.active)} از ${toPersianDigits(points.length)}`
+                ? `${toPersianDigits(stats.active)} از ${toPersianDigits(stats.elapsed)}`
                 : `${stats.trend >= 0 ? "▲" : "▼"} ${toPersianDigits(Math.abs(Math.round(stats.trend)))}٪`
             }
             tone={stats.trend === null ? undefined : stats.trend >= 0 ? "var(--income)" : "var(--destructive)"}
@@ -220,7 +248,7 @@ export function TrendChart({
                 <Cell
                   key={p.day}
                   fill={(stats.best && p.day === stats.best.day) || i === todayIdx ? m.color : m.soft}
-                  fillOpacity={p.value < 0 ? 0.5 : 1}
+                  fillOpacity={p.value < 0 || p.future ? 0.5 : 1}
                 />
               ))}
             </Bar>
@@ -348,5 +376,61 @@ export function CollectionDonut({ data, className }: { data: Collection; classNa
         })}
       </div>
     </div>
+  )
+}
+
+// ───────────────────────── مینی‌ترند ─────────────────────────
+
+/** نمودار مینیاتوری خط+سطح برای کارت‌ها — بدون محور؛ آخرین نقطه برجسته */
+export function Sparkline({
+  values,
+  color = "var(--primary)",
+  height = 28,
+  className,
+}: {
+  values: number[]
+  color?: string
+  height?: number
+  className?: string
+}) {
+  const id = useId().replace(/:/g, "")
+  if (values.length < 2 || values.every((v) => v === 0)) return null
+  const W = 100
+  const H = 30
+  const max = Math.max(...values)
+  const min = Math.min(0, ...values)
+  const span = max - min || 1
+  const x = (i: number) => (i / (values.length - 1)) * W
+  const y = (v: number) => H - 3 - ((v - min) / span) * (H - 8)
+  const line = values.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ")
+  const last = values.length - 1
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      width="100%"
+      height={height}
+      className={className}
+      aria-hidden
+      style={{ overflow: "visible", direction: "ltr" }}
+    >
+      <defs>
+        <linearGradient id={id} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={color} stopOpacity="0.28" />
+          <stop offset="1" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={`${line} L${W} ${H} L0 ${H} Z`} fill={`url(#${id})`} />
+      <path
+        d={line}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx={x(last)} cy={y(values[last])} r={2.2} fill={color} vectorEffect="non-scaling-stroke" />
+    </svg>
   )
 }

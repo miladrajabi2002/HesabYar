@@ -98,9 +98,12 @@ export async function GET(req: NextRequest) {
     const pendingReceivedTotal = pendingTotals.find((g) => g.direction === "RECEIVED")?._sum.amount ?? 0
     const pendingIssuedTotal = pendingTotals.find((g) => g.direction === "ISSUED")?._sum.amount ?? 0
 
-    // سری ۳۰ روز اخیر برای نمودار
-    const chartStart = new Date(startOfJalaliDay(now).getTime() - 29 * 86_400_000)
-    const series = await dailySeries(chartStart, dayEnd)
+    // سری نمودار: از «۳۰ روز اخیر» یا اول ماه (هرکدام زودتر) تا آخر ماه جاری؛
+    // کلید ۷ / ۳۰ روز / این ماه سمت کلاینت برش می‌زند
+    const last30 = new Date(startOfJalaliDay(now).getTime() - 29 * 86_400_000)
+    const monthStartD = startOfJalaliMonth(now)
+    const chartStart = last30 < monthStartD ? last30 : monthStartD
+    const series = await dailySeries(chartStart, endOfJalaliMonth(now))
 
     // آخرین فاکتورها
     const recentInvoices = await db.invoice.findMany({

@@ -2,7 +2,7 @@
 
 /**
  * پوستهٔ اصلی حساب‌یار (نسخهٔ ۴)
- *  • دسکتاپ: سایدبار گروه‌بندی‌شده با نشانگر فعال لغزان + آیکون‌های رنگی متحرک
+ *  • دسکتاپ: سایدبار تخت (بدون گروه و بدون اسکرول) با نشانگر فعال لغزان + آیکون‌های رنگی متحرک
  *  • موبایل: هدر شیشه‌ای با عنوان صفحه + نوار پایین شناور که با اسکرول به پایین
  *    کنار می‌رود و با اسکرول به بالا برمی‌گردد؛ در صفحات فرم (فاکتور جدید) پنهان است
  *  • شیت «بیشتر» با کاشی‌های رنگی + شیت «فاکتور جدید»
@@ -30,34 +30,19 @@ import {
 
 type NavItem = { href: SectionHref; label: string; short?: string }
 
-const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
-  {
-    title: "کار روزانه",
-    items: [
-      { href: "/", label: "داشبورد" },
-      { href: "/invoices", label: "فاکتورها" },
-      { href: "/calendar", label: "تقویم مالی", short: "تقویم" },
-      { href: "/checks", label: "چک‌ها" },
-    ],
-  },
-  {
-    title: "دفاتر",
-    items: [
-      { href: "/people", label: "اشخاص" },
-      { href: "/products", label: "اجناس و انبار", short: "اجناس" },
-      { href: "/accounts", label: "حساب‌های بانکی", short: "حساب‌ها" },
-    ],
-  },
-  {
-    title: "تحلیل و تنظیم",
-    items: [
-      { href: "/reports", label: "گزارش‌ها" },
-      { href: "/settings", label: "تنظیمات" },
-    ],
-  },
+const NAV_LIST: NavItem[] = [
+  { href: "/", label: "داشبورد" },
+  { href: "/invoices", label: "فاکتورها" },
+  { href: "/calendar", label: "تقویم مالی", short: "تقویم" },
+  { href: "/checks", label: "چک‌ها" },
+  { href: "/people", label: "اشخاص" },
+  { href: "/products", label: "اجناس و انبار", short: "اجناس" },
+  { href: "/accounts", label: "حساب‌های بانکی", short: "حساب‌ها" },
+  { href: "/reports", label: "گزارش‌ها" },
+  { href: "/settings", label: "تنظیمات" },
 ]
 
-export const NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items)
+export const NAV_ITEMS = NAV_LIST
 
 /** آیتم‌های منوی «بیشتر» موبایل (داشبورد/فاکتورها/تقویم در نوار پایین هستند) */
 const MORE_ITEMS = NAV_ITEMS.filter((i) => !["/", "/invoices", "/calendar"].includes(i.href))
@@ -98,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { isTelegram, haptic } = useTelegram()
   const { moreSheetOpen, setMoreSheetOpen, addSheetOpen, openAddSheet, closeAddSheet } =
     useUIStore()
-  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false) // جستجو فقط در موبایل
   const scrolledAway = useHideOnScroll()
   const reduceMotion = useReducedMotion()
 
@@ -132,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div className="space-y-2 px-3 pb-3">
+          <div className="px-3 pb-3">
             <button
               type="button"
               onClick={openAddSheet}
@@ -141,31 +126,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               <IconPlus active={addSheetOpen} className="size-[1.1rem]" strokeWidth={2.4} />
               فاکتور جدید
             </button>
-            <button
-              type="button"
-              onClick={() => setSearchOpen(true)}
-              className="group flex w-full items-center gap-2.5 rounded-2xl border border-border bg-background px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-            >
-              <IconSearch className="size-4" />
-              <span className="flex-1 text-start">جستجو…</span>
-              <kbd className="pointer-events-none select-none rounded-md border border-border bg-muted px-1.5 py-px font-sans text-[0.6rem] font-semibold">
-                Ctrl K
-              </kbd>
-            </button>
           </div>
 
-          <nav className="flex-1 overflow-y-auto px-3 pb-4">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.title} className="mt-3 first:mt-1">
-                <div className="px-3 pb-1.5 text-[0.65rem] font-bold tracking-wide text-muted-foreground/70">
-                  {group.title}
-                </div>
-                <div className="space-y-0.5">
-                  {group.items.map((item) => (
-                    <SidebarItem key={item.href} item={item} active={isActive(item.href)} />
-                  ))}
-                </div>
-              </div>
+          <nav className="flex flex-1 flex-col justify-start gap-0.5 px-3 pb-4 pt-1">
+            {NAV_LIST.map((item) => (
+              <SidebarItem key={item.href} item={item} active={isActive(item.href)} />
             ))}
           </nav>
 
@@ -187,7 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ───────── محتوا ───────── */}
       <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-[17rem]")}>
         {/* هدر موبایل — شیشه‌ای */}
-        <header className="glass sticky top-0 z-30 flex items-center justify-between border-b px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] lg:hidden">
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-background px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] lg:hidden">
           <div className="flex min-w-0 items-center gap-2.5">
             <BrandLogo size={34} />
             <div className="min-w-0">
@@ -289,8 +254,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </motion.nav>
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <SearchShortcut onOpen={() => setSearchOpen(true)} />
-
+      
       {/* ───────── شیت «فاکتور جدید» ───────── */}
       <BottomSheet
         open={addSheetOpen}
@@ -334,7 +298,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="group relative flex flex-col items-start overflow-hidden rounded-[1.6rem] border border-[color:color-mix(in_srgb,var(--tile)_22%,transparent)] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--tile)_9%,white),color-mix(in_srgb,var(--tile)_3%,white))] p-4 text-start shadow-card transition-shadow hover:shadow-card-hover"
             >
               {/* هالهٔ رنگی پشت */}
-              <span className="pointer-events-none absolute -end-8 -top-8 size-28 rounded-full bg-[color:var(--tile)] opacity-[0.12] blur-2xl transition-transform duration-500 group-hover:scale-125" />
               <InvoiceTypeMark type={o.type} size={52} className="relative" />
               <span className="relative mt-3.5 block text-[1.05rem] font-black">فاکتور {o.title}</span>
               <span className="relative mt-0.5 block text-[0.7rem] text-muted-foreground">{o.sub}</span>
@@ -472,19 +435,4 @@ function BottomNavItem({ href, label, active }: { href: SectionHref; label: stri
       </span>
     </Link>
   )
-}
-
-/** میانبر Ctrl+K / Cmd+K — همیشه فعال (موبایل و دسکتاپ) */
-function SearchShortcut({ onOpen }: { onOpen: () => void }) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault()
-        onOpen()
-      }
-    }
-    window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
-  }, [onOpen])
-  return null
 }

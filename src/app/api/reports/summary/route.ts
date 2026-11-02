@@ -70,8 +70,8 @@ export async function GET(req: NextRequest) {
 
     const [summary, series, prev, collection] = await Promise.all([
       periodSummary(start, end),
-      // نمودار روزانه بازه (حداکثر ۶۰ روز)
-      dailySeries(start, end),
+      // نمودار روزانه: برای ماه، کل ماه (روزهای آینده خالی)؛ برای هفته/روز تا امروز
+      dailySeries(start, q.month || q.period === "month" ? endOfJalaliMonth(start) : end),
       periodSummary(prevStart, prevEnd),
       salesCollection(start, end),
     ])

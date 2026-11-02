@@ -516,7 +516,6 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               : "bg-[linear-gradient(125deg,#7480ee,#4f5bd5_55%,#343c9c)] shadow-[0_20px_40px_-18px_rgba(52,60,156,0.6)]"
           )}
         >
-          <span className="pointer-events-none absolute -end-16 -top-16 size-48 rounded-full bg-white/10 blur-2xl" />
           <div className="relative flex items-start gap-3.5">
             <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/20 ring-1 ring-white/25 backdrop-blur">
               <InvoiceTypeMark type={inv.type} size={34} className="!bg-white !shadow-none" />

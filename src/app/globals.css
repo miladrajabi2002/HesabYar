@@ -53,7 +53,7 @@
 
 /* ═══════════════════════════════════════════════════════════════
    سیستم طراحی حساب‌یار — نسخهٔ ۴
-   رنگ برند: سبز زمردی (اعتماد + پول)؛ هر بخش یک رنگ امضا دارد (--hue-*)
+   رنگ برند: سبز زمردی (اعتماد + پول)؛ پالت یکدست: سبز = ورودی/فروش/مشتری، نیلی = خروجی/خرید/فروشنده، کهربایی = طلب و چک در جریان، قرمز = خطا
    سطح‌ها با کنتراست نرم، سایه‌های دولایه و حرکت فنری یکدست
    ═══════════════════════════════════════════════════════════════ */
 :root {
@@ -100,20 +100,20 @@
 
   /* رنگ امضای بخش‌ها — کاشی‌ها و آیکون‌های رنگی */
   --hue-dashboard: #0b7a62;
-  --hue-invoices: #0ea5a4;
-  --hue-calendar: #7c5cff;
-  --hue-checks: #f08c00;
-  --hue-people: #2f80ed;
-  --hue-products: #e8590c;
-  --hue-accounts: #4c6ef5;
-  --hue-reports: #d6336c;
-  --hue-settings: #5f6b7a;
+  --hue-invoices: #0b7a62;
+  --hue-calendar: #0b7a62;
+  --hue-checks: #e08a00; /* تنها بخشی که رنگ معنایی دارد: در جریان / سررسید */
+  --hue-people: #0b7a62;
+  --hue-products: #0b7a62;
+  --hue-accounts: #0b7a62;
+  --hue-reports: #0b7a62;
+  --hue-settings: #0b7a62;
 
   /* نوع فاکتور و نقش اشخاص (نسخهٔ ۵) — فروش زمردی، خرید نیلی (نه قرمز خطا) */
   --sale: #0f9f6e;
   --purchase: #4f5bd5;
-  --role-customer: #2f80ed;
-  --role-supplier: #8b5cf6;
+  --role-customer: #0f9f6e;
+  --role-supplier: #4f5bd5;
 
   /* حرکت — یک زبان مشترک برای همهٔ انیمیشن‌ها */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -398,12 +398,14 @@
 }
 .cn-toast [data-close-button] { display: none !important; }
 
-/* موبایل: زیر ناحیهٔ امن بالای صفحه؛ دسکتاپ: بالا با فاصلهٔ کم */
-.toaster {
-  top: max(0.6rem, env(safe-area-inset-top)) !important;
+/* آیکون دقیقاً وسط دایره (iOS استندالون: ویژگی‌های پیش‌فرض sonner روی svg حاشیه می‌دادند) */
+.cn-toast [data-icon] > * {
+  display: block;
+  margin: 0 !important;
+  flex: none;
 }
-@media (min-width: 1024px) {
-  .toaster { top: 1.1rem !important; }
+.cn-toast [data-icon] svg {
+  overflow: visible;
 }
 
 /* ── آیکون‌های متحرک اعلان (CSS خالص؛ با mount اجرا می‌شوند) ── */

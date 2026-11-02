@@ -69,6 +69,9 @@ const Toaster = (props: ToasterProps) => {
       className="toaster group font-sans"
       dir="rtl"
       position="top-center"
+      // زیر جزیرهٔ دینامیک/ناچ آیفون (وب‌اپ نصب‌شده)؛ بدون جمع‌شدن با جابه‌جایی پیش‌فرض sonner
+      offset={{ top: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}
+      mobileOffset={{ top: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}
       visibleToasts={2}
       gap={8}
       duration={2200}
