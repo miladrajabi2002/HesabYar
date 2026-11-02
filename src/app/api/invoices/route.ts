@@ -4,10 +4,13 @@ import { ok, fail, parseBody, parseQuery, requireApiAuth, serverError } from "@/
 import { invoiceCreateSchema, invoiceFilterSchema } from "@/lib/validation"
 import { dayKeyToDate } from "@/lib/jalali"
 import { getAveragePurchasePrice, nextInvoiceNumber } from "@/lib/finance"
-import { invoiceTotal, itemsGrossProfit, itemsSubtotal, paymentSplit } from "@/lib/finance-math"
+import { invoiceTotal, itemsSubtotal, paymentSplit } from "@/lib/finance-math"
 import { invoiceInclude } from "@/lib/includes"
 
 export const dynamic = "force-dynamic"
+
+/** چند روز نسیه «معوق» حساب می‌شود */
+const OVERDUE_DAYS = 30
 
 /**
  * GET /api/invoices — لیست فاکتورها با فیلتر نوع/شخص/ماه/جستجو + صفحه‌بندی
@@ -21,9 +24,13 @@ export async function GET(req: NextRequest) {
 
     // IMP-01: جستجوی سروری — روی شماره فاکتور، نام شخص و نام جنس اقلام
     const numberQuery = Number((f.q || "").replace(/[^\d]/g, ""))
+    // نسیهٔ معوق: مانده‌دار و قدیمی‌تر از ۳۰ روز
+    const overdueBefore = new Date(Date.now() - OVERDUE_DAYS * 86_400_000)
+    const overdueWhere = { credit: { gt: 0 }, date: { lt: overdueBefore } }
     const where = {
       ...(f.type ? { type: f.type } : {}),
       ...(f.personId ? { personId: f.personId } : {}),
+      ...(f.overdue ? overdueWhere : {}),
       ...(f.q
         ? {
             OR: [
@@ -61,21 +68,20 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    // جمع سود ناخالص فاکتورهای فروشِ همین فیلتر (چیپ سود بالای لیست)
-    const profitRows = await db.invoiceItem.findMany({
-      where: { invoice: { ...where, type: "SALE" } },
-      select: { quantity: true, unitPrice: true, costPrice: true },
+    // خلاصهٔ نسیهٔ معوق (بنر بالای لیست) — مستقل از جستجو، با رعایت فیلتر شخص
+    const overdueGroups = await db.invoice.groupBy({
+      by: ["type"],
+      where: { ...overdueWhere, ...(f.personId ? { personId: f.personId } : {}) },
+      _count: true,
+      _sum: { credit: true },
     })
-    // تخفیف فاکتور از سود کم می‌شود (هماهنگ با صفحهٔ فاکتور و گزارش‌ها)
-    const saleDiscounts = await db.invoice.aggregate({
-      where: { ...where, type: "SALE" },
-      _sum: { discount: true },
-    })
-    const totalProfit =
-      Math.round(itemsGrossProfit(profitRows)) -
-      (saleDiscounts._sum.discount ?? 0)
+    const pick = (t: string) => {
+      const g = overdueGroups.find((x) => x.type === t)
+      return { count: g?._count ?? 0, total: g?._sum.credit ?? 0 }
+    }
+    const overdue = { days: OVERDUE_DAYS, sale: pick("SALE"), purchase: pick("PURCHASE") }
 
-    return ok({ invoices, total, totalProfit, page: f.page, pageSize: f.pageSize })
+    return ok({ invoices, total, overdue, page: f.page, pageSize: f.pageSize })
   } catch (e) {
     return serverError(e)
   }

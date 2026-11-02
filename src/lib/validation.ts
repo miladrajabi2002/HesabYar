@@ -278,6 +278,8 @@ export const invoiceFilterSchema = z.object({
   personId: z.string().optional(),
   month: z.string().regex(/^\d{3,4}-\d{1,2}$/, "قالب ماه شمسی نامعتبر است").optional(),
   q: z.string().trim().max(100).optional(),
+  /** فقط نسیه‌های بیش از ۳۰ روز */
+  overdue: z.enum(["1"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 })

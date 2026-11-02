@@ -8,7 +8,7 @@ import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
 import {
   Plus,
@@ -25,7 +25,7 @@ import {
 } from "lucide-react"
 import { apiDelete, apiGet } from "@/lib/api-client"
 import { invoiceProfit } from "@/lib/finance-math"
-import { formatToman, toPersianDigits } from "@/lib/money"
+import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort } from "@/lib/jalali"
 import { formatUnit } from "@/lib/units"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
@@ -85,6 +85,8 @@ function InvoicesPageInner() {
   // IMP-01: جستجوی debounce شده سمت سرور + صفحه‌بندی
   const [debouncedQ, setDebouncedQ] = useState("")
   const [page, setPage] = useState(1)
+  // فقط نسیه‌های بیش از ۳۰ روز (از بنر هشدار)
+  const [overdueOnly, setOverdueOnly] = useState(false)
   // ADV-02: وضعیت ساخت خروجی اکسل
   const [exporting, setExporting] = useState(false)
 
@@ -99,14 +101,15 @@ function InvoicesPageInner() {
   const params = new URLSearchParams()
   if (type !== "ALL") params.set("type", type)
   if (personId) params.set("personId", personId)
+  if (overdueOnly) params.set("overdue", "1")
   if (debouncedQ) params.set("q", debouncedQ)
   params.set("pageSize", String(PAGE_SIZE))
   if (page > 1) params.set("page", String(page))
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ["invoices", type, personId, debouncedQ, page],
+    queryKey: ["invoices", type, personId, debouncedQ, page, overdueOnly],
     queryFn: () =>
-      apiGet<{ invoices: Invoice[]; total: number; totalProfit: number }>(`/api/invoices?${params}`),
+      apiGet<{ invoices: Invoice[]; total: number; overdue: OverdueSummary }>(`/api/invoices?${params}`),
     placeholderData: (prev) => prev,
   })
 
@@ -118,7 +121,7 @@ function InvoicesPageInner() {
 
   const invoices = data?.invoices ?? []
   const total = data?.total ?? 0
-  const totalProfit = data?.totalProfit ?? 0
+  const overdue = data?.overdue
   const hasMore = page * PAGE_SIZE < total
   const isEmpty = !isLoading && invoices.length === 0
 
@@ -261,24 +264,17 @@ function InvoicesPageInner() {
         </div>
       </div>
 
-      {/* جمع سود ناخالص فروشِ همین فیلتر — فقط نمایش داخلی (حساب کتاب) */}
-      {totalProfit > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-3 flex items-center justify-between rounded-2xl bg-gradient-to-l from-income/12 to-income/4 px-4 py-2.5 ring-1 ring-income/15"
-        >
-          <span className="flex items-center gap-2 text-[0.7rem] font-bold text-income">
-            <span className="grid size-6 place-items-center rounded-lg bg-income text-white">
-              <TrendingUp className="size-3.5" />
-            </span>
-            سود ناخالص فروش{type === "SALE" ? "" : " (فقط فروش‌ها)"}
-          </span>
-          <span className="nums text-sm font-extrabold text-income">
-            {formatToman(totalProfit, false)} <span className="text-[0.62rem] font-medium opacity-70">تومان</span>
-          </span>
-        </motion.div>
-      )}
+      {/* هشدار نسیهٔ معوق (بیش از ۳۰ روز) — لمس = فقط همین‌ها */}
+      <OverdueBanner
+        summary={overdue}
+        type={type}
+        active={overdueOnly}
+        onToggle={() => {
+          haptic.tap()
+          setOverdueOnly((v) => !v)
+          setPage(1)
+        }}
+      />
 
       {/* لیست — موبایل کارت / دسکتاپ جدول (UI-09) */}
       {isLoading ? (
@@ -288,7 +284,7 @@ function InvoicesPageInner() {
       ) : isEmpty ? (
         <EmptyState
           icon={FileText}
-          title={debouncedQ || personId || type !== "ALL" ? "فاکتوری با این فیلترها نیست" : "هنوز فاکتوری ثبت نشده"}
+          title={debouncedQ || personId || type !== "ALL" || overdueOnly ? "فاکتوری با این فیلترها نیست" : "هنوز فاکتوری ثبت نشده"}
           description={
             debouncedQ || personId || type !== "ALL"
               ? "فیلترها را تغییر دهید یا عبارت دیگری جستجو کنید"
@@ -537,6 +533,94 @@ function InvoicesPageInner() {
         </div>
       </BottomSheet>
     </div>
+  )
+}
+
+interface OverdueSummary {
+  days: number
+  sale: { count: number; total: number }
+  purchase: { count: number; total: number }
+}
+
+/** بنر «N فاکتور بیش از ۳۰ روز نسیه مانده — جمع X» */
+function OverdueBanner({
+  summary,
+  type,
+  active,
+  onToggle,
+}: {
+  summary?: OverdueSummary
+  type: "ALL" | "SALE" | "PURCHASE"
+  active: boolean
+  onToggle: () => void
+}) {
+  if (!summary) return null
+  const lines: { key: string; text: string; total: number }[] = []
+  if (type !== "PURCHASE" && summary.sale.count > 0)
+    lines.push({
+      key: "s",
+      text: `${toPersianDigits(summary.sale.count)} فاکتور فروش بیش از ${toPersianDigits(summary.days)} روز نسیه مانده`,
+      total: summary.sale.total,
+    })
+  if (type !== "SALE" && summary.purchase.count > 0)
+    lines.push({
+      key: "p",
+      text: `${toPersianDigits(summary.purchase.count)} فاکتور خرید بیش از ${toPersianDigits(summary.days)} روز پرداخت نشده`,
+      total: summary.purchase.total,
+    })
+  return (
+    <AnimatePresence initial={false}>
+      {(lines.length > 0 || active) && (
+        <motion.button
+          type="button"
+          onClick={onToggle}
+          initial={{ opacity: 0, y: -8, height: 0 }}
+          animate={{ opacity: 1, y: 0, height: "auto" }}
+          exit={{ opacity: 0, y: -6, height: 0 }}
+          transition={{ type: "spring", stiffness: 380, damping: 34 }}
+          className="mb-3 block w-full overflow-hidden text-start"
+        >
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-2xl px-3.5 py-3 ring-1 transition-colors",
+              active ? "bg-warning text-white ring-warning" : "bg-warning/10 ring-warning/25 hover:bg-warning/15"
+            )}
+          >
+            <span
+              className={cn(
+                "relative grid size-9 shrink-0 place-items-center rounded-xl font-black",
+                active ? "bg-white/25 text-white" : "bg-warning text-white"
+              )}
+            >
+              {!active && <span className="hy-ping absolute -end-0.5 -top-0.5 size-2.5 rounded-full bg-destructive ring-2 ring-card" />}
+              !
+            </span>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              {lines.length > 0 ? (
+                lines.map((l) => (
+                  <div key={l.key} className="text-[0.74rem] leading-5">
+                    <b>{l.text}</b>
+                    <span className={cn("nums", active ? "text-white/85" : "text-muted-foreground")}>
+                      {" "}— جمع {formatTomanCompact(l.total)}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-[0.74rem] font-bold">نسیهٔ معوقی نمانده</div>
+              )}
+            </div>
+            <span
+              className={cn(
+                "shrink-0 rounded-xl px-3 py-1.5 text-[0.7rem] font-extrabold",
+                active ? "bg-white text-[color:color-mix(in_srgb,var(--warning)_70%,black)]" : "bg-card text-[color:color-mix(in_srgb,var(--warning)_75%,black)] shadow-sm"
+              )}
+            >
+              {active ? "نمایش همه" : "ببین"}
+            </span>
+          </div>
+        </motion.button>
+      )}
+    </AnimatePresence>
   )
 }
 

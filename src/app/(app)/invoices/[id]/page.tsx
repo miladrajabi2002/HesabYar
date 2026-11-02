@@ -10,8 +10,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
   ArrowRight,
-  ArrowDownLeft,
-  ArrowUpRight,
   Printer,
   Trash2,
   HandCoins,
@@ -24,10 +22,15 @@ import {
   Pencil,
   TrendingUp,
   X,
+  Clock3,
+  CheckCheck,
+  PackagePlus,
 } from "lucide-react"
+import { motion } from "framer-motion"
+import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import { apiDelete, apiGet, apiPost } from "@/lib/api-client"
 import { formatToman, toPersianDigits } from "@/lib/money"
-import { formatJalaliWithWeekday } from "@/lib/jalali"
+import { diffJalaliDays, formatJalaliShort, formatJalaliWithWeekday } from "@/lib/jalali"
 import { formatUnit } from "@/lib/units"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
@@ -39,7 +42,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfirm } from "@/components/ui/confirm"
 import { cn } from "@/lib/utils"
-import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
+import { itemsGrossProfit } from "@/lib/finance-math"
 
 interface Invoice {
   id: string
@@ -240,9 +243,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   // ── سود این فاکتور (فقط داخلی — در چاپ/فاکتور مشتری نمایش داده نمی‌شود) ──
   // فرمول هماهنگ با گزارش‌ها: Σ (فی فروش − قیمت تمام‌شده) × تعداد
-  const grossProfit = isSale
-    ? Math.round(inv.items.reduce((s, it) => s + (it.unitPrice - (it.costPrice || 0)) * it.quantity, 0))
-    : 0
+  const grossProfit = isSale ? Math.round(itemsGrossProfit(inv.items)) : 0
   const netProfit = grossProfit - inv.discount
   const marginPct = inv.subtotal > 0 ? Math.round((grossProfit / inv.subtotal) * 100) : 0
 
@@ -391,37 +392,111 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  const tone = isSale ? "var(--sale)" : "var(--purchase)"
+  const paidAtInvoice = Math.min(inv.total, inv.paidCash + inv.paidChecks)
+  const settledLater = inv.settlements.reduce((s, x) => s + x.amount, 0)
+  const pct = (v: number) => (inv.total > 0 ? Math.min(100, (v / inv.total) * 100) : 0)
+  const cashPct = pct(Math.min(inv.paidCash, inv.total))
+  const checkPct = pct(Math.min(inv.paidChecks, Math.max(0, inv.total - inv.paidCash)))
+  const laterPct = pct(Math.min(settledLater, Math.max(0, inv.total - paidAtInvoice)))
+  const daysOpen = Math.max(0, diffJalaliDays(new Date(inv.date), new Date()))
+  const openSettle = () => {
+    setSettleAmount(inv.credit)
+    setCheckAmount(inv.credit)
+    setSettleSheet(true)
+  }
+
+  // خط زمانی پرداخت‌ها: نقد هنگام فاکتور → چک‌ها → تسویه‌های بعدی
+  const timeline: {
+    key: string
+    title: string
+    sub: string
+    amount: number
+    icon: React.ReactNode
+    color: string
+    muted?: boolean
+    badge?: { text: string; cls: string }
+  }[] = [
+    ...(inv.paidCash > 0
+      ? [
+          {
+            key: "cash",
+            title: isSale ? "نقد دریافت شد" : "نقد پرداخت شد",
+            sub: `${formatJalaliShort(new Date(inv.date))}${inv.account ? ` • ${inv.account.name}` : ""}`,
+            amount: inv.paidCash,
+            icon: <Banknote className="size-4" />,
+            color: "var(--sale)",
+          },
+        ]
+      : []),
+    ...inv.checks.map((c) => ({
+      key: c.id,
+      title: `چک ${getBank(c.bankKey).name}${c.serial ? ` • ${toPersianDigits(c.serial)}` : ""}`,
+      sub: `سررسید ${formatJalaliShort(new Date(c.dueDate))}${
+        c.isRegistered ? (c.registeredName ? ` • به نام ${c.registeredName}` : " • ثبت‌شده") : " • ثبت‌نشده"
+      }`,
+      amount: c.amount,
+      icon: <BankLogo bankKey={c.bankKey} size={26} showBg={false} />,
+      color: "var(--hue-checks)",
+      muted: c.status === "BOUNCED" || c.status === "CANCELED",
+      badge:
+        c.status === "CASHED"
+          ? { text: "پاس ✓", cls: "bg-income/10 text-income" }
+          : c.status === "PENDING"
+            ? { text: "در جریان", cls: "bg-[color:color-mix(in_srgb,var(--hue-checks)_12%,transparent)] text-[color:color-mix(in_srgb,var(--hue-checks)_80%,black)]" }
+            : c.status === "BOUNCED"
+              ? { text: "برگشتی", cls: "bg-destructive/10 text-destructive" }
+              : { text: "لغو", cls: "bg-muted text-muted-foreground" },
+    })),
+    ...inv.settlements.map((st) => ({
+      key: st.id,
+      title: `تسویهٔ ${st.method === "CASH" ? "نقدی" : "چکی"}`,
+      sub: formatJalaliShort(new Date(st.date)),
+      amount: st.amount,
+      icon: <HandCoins className="size-4" />,
+      color: "var(--role-customer)",
+    })),
+  ]
+
   return (
     <>
-      <div className="space-y-4 ">
-        {/* هدر */}
-        <div className="flex items-center justify-between gap-3 ">
+      <div className="space-y-4">
+        {/* ───────── سربرگ ───────── */}
+        <div className="flex items-center gap-2.5">
           <Link
             href="/invoices"
-            className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
+            aria-label="بازگشت به فاکتورها"
+            className="grid size-11 shrink-0 place-items-center rounded-2xl border border-border bg-card text-muted-foreground shadow-card transition-colors hover:text-foreground"
           >
-            <ArrowRight className="size-4" />
+            <ArrowRight className="size-[1.15rem]" />
           </Link>
-          <div className="flex gap-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-extrabold leading-tight sm:text-xl">
+              فاکتور {isSale ? "فروش" : "خرید"} <span className="nums">{toPersianDigits(inv.number)}</span>
+            </h1>
+            <p className="nums text-[0.68rem] text-muted-foreground">{formatJalaliWithWeekday(new Date(inv.date))}</p>
+          </div>
+          <div className="flex gap-1.5">
             <Link
               href={`/invoices/new?edit=${inv.id}`}
-              className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
+              className="flex h-11 items-center gap-1.5 rounded-2xl border border-border bg-card px-3 text-xs font-bold text-muted-foreground shadow-card transition-colors hover:text-foreground"
               aria-label="ویرایش فاکتور"
             >
               <Pencil className="size-4" />
+              <span className="hidden sm:inline">ویرایش</span>
             </Link>
             <button
               onClick={printInvoice}
               disabled={printing}
-              className="flex size-10 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
-              aria-label="چاپ فاکتور"
-              title="چاپ / ذخیره PDF"
+              className="flex h-11 items-center gap-1.5 rounded-2xl border border-border bg-card px-3 text-xs font-bold text-muted-foreground shadow-card transition-colors hover:text-foreground"
+              aria-label="چاپ یا PDF"
             >
               {printing ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
+              <span className="hidden sm:inline">چاپ / PDF</span>
             </button>
             <button
               onClick={remove}
-              className="flex size-10 items-center justify-center rounded-2xl border border-destructive/30 bg-card text-destructive/80 transition-colors hover:bg-destructive/10"
+              className="grid size-11 place-items-center rounded-2xl border border-destructive/25 bg-card text-destructive/80 shadow-card transition-colors hover:bg-destructive/10"
               aria-label="حذف فاکتور"
             >
               <Trash2 className="size-4" />
@@ -429,75 +504,171 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
-        {/* کارت اصلی */}
-        <div
+        {/* ───────── کارت قهرمان ───────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 340, damping: 30 }}
           className={cn(
-            "overflow-hidden rounded-3xl border shadow-card ",
-            isSale ? "border-income/25" : "border-destructive/25"
+            "relative overflow-hidden rounded-[1.75rem] p-5 text-white sm:p-6",
+            isSale
+              ? "bg-[linear-gradient(125deg,#14b886,#0b7a62_55%,#064e3f)] shadow-[0_20px_40px_-18px_rgba(7,74,61,0.6)]"
+              : "bg-[linear-gradient(125deg,#7480ee,#4f5bd5_55%,#343c9c)] shadow-[0_20px_40px_-18px_rgba(52,60,156,0.6)]"
           )}
         >
-          <div
-            className={cn(
-              "flex items-center gap-3 p-4 text-white sm:p-5",
-              isSale
-                ? "bg-[linear-gradient(120deg,#12b07c,#0b7a62_55%,#075543)]"
-                : "bg-[linear-gradient(120deg,#6b74e8,#4f5bd5_55%,#3a43a8)]"
-            )}
-          >
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/25 backdrop-blur">
-              {isSale ? (
-                <ArrowUpRight className="size-6" strokeWidth={2.4} />
-              ) : (
-                <ArrowDownLeft className="size-6" strokeWidth={2.4} />
-              )}
+          <span className="pointer-events-none absolute -end-16 -top-16 size-48 rounded-full bg-white/10 blur-2xl" />
+          <div className="relative flex items-start gap-3.5">
+            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/20 ring-1 ring-white/25 backdrop-blur">
+              <InvoiceTypeMark type={inv.type} size={34} className="!bg-white !shadow-none" />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[0.7rem] opacity-85">
-                {isSale ? "فاکتور فروش" : "فاکتور خرید"} — شماره {toPersianDigits(inv.number)}
-              </div>
-              <p className="truncate text-base font-extrabold sm:text-lg">{inv.person.name}</p>
-              <p className="nums text-[0.68rem] opacity-85">{formatJalaliWithWeekday(new Date(inv.date))}</p>
+              <div className="text-[0.7rem] opacity-80">{isSale ? "فروخته شد به" : "خریداری شد از"}</div>
+              <Link
+                href={`/people/${inv.person.id}`}
+                className="block truncate text-lg font-black underline-offset-4 hover:underline sm:text-xl"
+              >
+                {inv.person.name}
+              </Link>
+              {(inv.person.company || inv.person.phone) && (
+                <div className="nums truncate text-[0.7rem] opacity-80">
+                  {[inv.person.company, inv.person.phone && toPersianDigits(inv.person.phone)].filter(Boolean).join(" • ")}
+                </div>
+              )}
             </div>
-            <div className="shrink-0 text-end">
-              <div className="nums text-lg font-extrabold sm:text-xl">{formatToman(inv.total, false)}</div>
-              <div className="text-[0.65rem] opacity-85">تومان</div>
-            </div>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2.5 py-1 text-[0.66rem] font-extrabold",
+                inv.credit > 0 ? "bg-[#ffd86b] text-[#5c3a00]" : "bg-white text-[color:var(--sale)]"
+              )}
+            >
+              {inv.credit > 0 ? "مانده‌دار" : "تسویه ✓"}
+            </span>
           </div>
 
-          {/* اقلام */}
-          <div className="bg-card p-4 sm:p-5">
-            <div className="mb-2 flex items-center gap-2 text-sm font-bold">
-              <FileText className="size-4 text-primary" />
-              اقلام ({toPersianDigits(inv.items.length)})
+          <div className="relative mt-5 flex items-end justify-between gap-3">
+            <div>
+              <div className="text-[0.68rem] opacity-80">مبلغ نهایی</div>
+              <div className="nums text-[1.9rem] font-black leading-none tracking-tight sm:text-[2.3rem]">
+                <AnimatedAmount value={inv.total} />
+                <span className="ms-1.5 text-xs font-semibold opacity-70">تومان</span>
+              </div>
             </div>
-            <div className="space-y-2">
-              {inv.items.map((it) => (
-                <div key={it.id} className="rounded-2xl border border-border/60 bg-muted/40 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-xs font-bold">
-                        {it.productName}
-                        {it.brand ? <span className="text-muted-foreground"> — {it.brand}</span> : null}
+            {inv.credit > 0 && (
+              <div className="text-end">
+                <div className="text-[0.68rem] opacity-80">مانده</div>
+                <div className="nums text-base font-extrabold text-[#ffd86b]">{formatToman(inv.credit, false)}</div>
+              </div>
+            )}
+          </div>
+
+          {/* نوار پرداخت */}
+          <div className="relative mt-4">
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-white/20">
+              <motion.span className="h-full bg-white" initial={{ width: 0 }} animate={{ width: `${cashPct}%` }} transition={{ delay: 0.2, type: "spring", stiffness: 120, damping: 20 }} />
+              <motion.span className="h-full bg-[#ffc14d]" initial={{ width: 0 }} animate={{ width: `${checkPct}%` }} transition={{ delay: 0.3, type: "spring", stiffness: 120, damping: 20 }} />
+              <motion.span className="h-full bg-[#9cc8ff]" initial={{ width: 0 }} animate={{ width: `${laterPct}%` }} transition={{ delay: 0.4, type: "spring", stiffness: 120, damping: 20 }} />
+            </div>
+            <div className="nums mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.64rem] opacity-90">
+              <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-white" />نقد {formatToman(inv.paidCash, false)}</span>
+              <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-[#ffc14d]" />چک {formatToman(inv.paidChecks, false)}</span>
+              {settledLater > 0 && (
+                <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-[#9cc8ff]" />تسویهٔ بعدی {formatToman(settledLater, false)}</span>
+              )}
+              {inv.credit > 0 && (
+                <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-white/30" />{daysOpen > 0 ? `${toPersianDigits(daysOpen)} روز است باز مانده` : "باز"}</span>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* دکمهٔ اصلی تسویه */}
+        {inv.credit > 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <Button
+              onClick={openSettle}
+              style={{ ["--tile" as string]: tone }}
+              className="h-14 w-full rounded-2xl bg-[color:var(--tile)] text-sm font-extrabold shadow-fab hover:bg-[color:var(--tile)]/90"
+            >
+              <HandCoins className="size-5" />
+              {isSale ? "دریافت مانده از" : "پرداخت مانده به"} {inv.person.name}
+              <span className="nums rounded-lg bg-white/20 px-2 py-0.5 text-xs">{formatToman(inv.credit, false)}</span>
+            </Button>
+          </motion.div>
+        )}
+
+        <div className="grid items-start gap-4 lg:grid-cols-5">
+          {/* ───────── اقلام ───────── */}
+          <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 lg:col-span-3">
+            <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+              <span className="grid size-7 place-items-center rounded-xl bg-primary/10 text-primary">
+                <FileText className="size-4" />
+              </span>
+              اقلام
+              <span className="nums rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-bold text-muted-foreground">
+                {toPersianDigits(inv.items.length)}
+              </span>
+            </div>
+
+            {/* دسکتاپ: جدول */}
+            <table className="hidden w-full text-xs sm:table">
+              <thead>
+                <tr className="text-[0.66rem] text-muted-foreground">
+                  <th className="w-8 pb-2 text-start font-medium">#</th>
+                  <th className="pb-2 text-start font-medium">جنس</th>
+                  <th className="pb-2 text-start font-medium">تعداد</th>
+                  <th className="pb-2 text-end font-medium">فی</th>
+                  <th className="pb-2 text-end font-medium">مبلغ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inv.items.map((it, i) => (
+                  <tr key={it.id} style={{ ["--i" as string]: i }} className="hy-rise border-t border-border/60">
+                    <td className="nums py-3 text-muted-foreground">{toPersianDigits(i + 1)}</td>
+                    <td className="py-3">
+                      <div className="font-bold">{it.productName}</div>
+                      <div className="text-[0.62rem] text-muted-foreground">
+                        {[it.brand, it.code && `کد ${it.code}`].filter(Boolean).join(" • ")}
+                        {isSale && (it.costPrice || 0) > 0 && (
+                          <span className="nums ms-1 font-bold text-income">
+                            {it.brand || it.code ? " • " : ""}سود {formatToman(Math.round((it.unitPrice - it.costPrice) * it.quantity), false)}
+                          </span>
+                        )}
                       </div>
-                      <div className="nums mt-0.5 text-[0.65rem] text-muted-foreground">
-                        {toPersianDigits(it.quantity)} {formatUnit(it.unit)} × {formatToman(it.unitPrice, false)}
-                        {it.code ? ` • کد ${it.code}` : ""}
-                      </div>
-                      {/* سود این قلم — فقط در فاکتور فروش و برای خودمان */}
+                    </td>
+                    <td className="nums py-3">{toPersianDigits(it.quantity)} {formatUnit(it.unit)}</td>
+                    <td className="nums py-3 text-end text-muted-foreground">{formatToman(it.unitPrice, false)}</td>
+                    <td className="nums py-3 text-end font-extrabold">{formatToman(it.total, false)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* موبایل: ردیف‌ها */}
+            <div className="space-y-2 sm:hidden">
+              {inv.items.map((it, i) => (
+                <div key={it.id} style={{ ["--i" as string]: i }} className="hy-rise flex items-center gap-3 rounded-2xl bg-muted/45 px-3 py-2.5">
+                  <span className="nums grid size-7 shrink-0 place-items-center rounded-lg bg-card text-[0.66rem] font-extrabold text-muted-foreground">
+                    {toPersianDigits(i + 1)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-bold">
+                      {it.productName}
+                      {it.brand ? <span className="font-medium text-muted-foreground"> — {it.brand}</span> : null}
+                    </div>
+                    <div className="nums mt-0.5 text-[0.64rem] text-muted-foreground">
+                      {toPersianDigits(it.quantity)} {formatUnit(it.unit)} × {formatToman(it.unitPrice, false)}
                       {isSale && (it.costPrice || 0) > 0 && (
-                        <div className="nums mt-0.5 text-[0.65rem] font-bold text-income">
-                          سود قلم: {formatToman(Math.round((it.unitPrice - it.costPrice) * it.quantity), false)}
-                        </div>
+                        <span className="font-bold text-income"> • سود {formatToman(Math.round((it.unitPrice - it.costPrice) * it.quantity), false)}</span>
                       )}
                     </div>
-                    <div className="nums shrink-0 text-xs font-extrabold">{formatToman(it.total, false)}</div>
                   </div>
+                  <div className="nums shrink-0 text-xs font-extrabold">{formatToman(it.total, false)}</div>
                 </div>
               ))}
             </div>
 
             {/* جمع‌ها */}
-            <div className="mt-3 space-y-1.5 border-t border-dashed pt-3 text-xs">
+            <div className="mt-3 space-y-1.5 rounded-2xl bg-muted/45 p-3 text-xs">
               <div className="flex justify-between text-muted-foreground">
                 <span>جمع اقلام</span>
                 <span className="nums">{formatToman(inv.subtotal, false)}</span>
@@ -508,183 +679,145 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   <span className="nums text-destructive">−{formatToman(inv.discount, false)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm font-extrabold">
+              <div className="flex justify-between border-t border-dashed border-border pt-1.5 text-sm font-extrabold">
                 <span>مبلغ نهایی</span>
-                <span className="nums">{formatToman(inv.total, false)}</span>
+                <span className="nums">{formatToman(inv.total, false)} <span className="text-[0.62rem] font-medium text-muted-foreground">تومان</span></span>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* سود فاکتور — فقط برای خودمان؛ در فاکتور چاپی نمی‌آید */}
-        {isSale && (
-          <div className="rounded-3xl border border-income/25 bg-income/5 p-4 shadow-card sm:p-5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-sm font-bold text-income">
-                <TrendingUp className="size-4" />
-                سود این فاکتور
-              </div>
-              <span className="rounded-md bg-income/10 px-1.5 py-px text-[0.6rem] font-bold text-income">
-                فقط نمایش داخلی
-              </span>
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-2xl bg-card p-3">
-                <p className="text-[0.62rem] text-muted-foreground">سود ناخالص</p>
-                <p className="nums mt-0.5 text-sm font-extrabold text-income">
-                  {formatToman(grossProfit, false)}
-                </p>
-              </div>
-              <div className="rounded-2xl bg-card p-3">
-                <p className="text-[0.62rem] text-muted-foreground">حاشیه سود</p>
-                <p className="nums mt-0.5 text-sm font-extrabold text-income">
-                  {toPersianDigits(String(marginPct))}٪
-                </p>
-              </div>
-              <div className="rounded-2xl bg-card p-3">
-                <p className="text-[0.62rem] text-muted-foreground">
-                  {inv.discount > 0 ? "سود پس از تخفیف" : "پس از تخفیف"}
-                </p>
-                <p
-                  className={cn(
-                    "nums mt-0.5 text-sm font-extrabold",
-                    netProfit >= 0 ? "text-income" : "text-destructive"
-                  )}
-                >
-                  {formatToman(netProfit, false)}
-                </p>
-              </div>
-            </div>
-            <p className="mt-2 text-center text-[0.62rem] text-muted-foreground">
-              سود = (فی فروش − قیمت تمام‌شده) × تعداد اقلام — در فاکتور چاپی نمایش داده نمی‌شود
-            </p>
-          </div>
-        )}
+            {inv.note && (
+              <p className="mt-3 rounded-2xl border border-dashed border-border px-3 py-2.5 text-[0.72rem] leading-6 text-muted-foreground">
+                <span className="font-bold text-foreground">یادداشت: </span>
+                {inv.note}
+              </p>
+            )}
+          </section>
 
-        {/* پرداخت‌ها */}
-        <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 ">
-          <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-            <Banknote className="size-4 text-primary" />
-            پرداخت‌ها
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl bg-muted/60 p-3">
-              <p className="text-[0.62rem] text-muted-foreground">نقدی</p>
-              <p className="nums mt-0.5 text-xs font-bold">{formatToman(inv.paidCash, false)}</p>
-            </div>
-            <div className="rounded-2xl bg-muted/60 p-3">
-              <p className="text-[0.62rem] text-muted-foreground">چک</p>
-              <p className="nums mt-0.5 text-xs font-bold">{formatToman(inv.paidChecks, false)}</p>
-            </div>
-            <div
-              className={cn(
-                "rounded-2xl p-3",
-                inv.credit > 0 ? "bg-warning/10" : "bg-income/10"
+          <div className="space-y-4 lg:col-span-2">
+            {/* ───────── خط زمانی پرداخت‌ها ───────── */}
+            <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+                <span className="grid size-7 place-items-center rounded-xl bg-primary/10 text-primary">
+                  <Banknote className="size-4" />
+                </span>
+                {isSale ? "دریافت‌ها" : "پرداخت‌ها"}
+              </div>
+              {timeline.length === 0 ? (
+                <p className="rounded-2xl bg-muted/45 px-3 py-4 text-center text-[0.72rem] text-muted-foreground">
+                  هنوز {isSale ? "پولی دریافت نشده" : "پولی پرداخت نشده"} — کل مبلغ نسیه است
+                </p>
+              ) : (
+                <ol className="relative space-y-3 before:absolute before:inset-y-3 before:start-[1.05rem] before:w-px before:bg-border">
+                  {timeline.map((t, i) => (
+                    <motion.li
+                      key={t.key}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.05 + i * 0.05 }}
+                      className={cn("relative flex items-center gap-3", t.muted && "opacity-55")}
+                    >
+                      <span
+                        style={{ ["--tile" as string]: t.color }}
+                        className="relative z-10 grid size-[2.15rem] shrink-0 place-items-center rounded-full bg-card text-[color:var(--tile)] ring-2 ring-[color:color-mix(in_srgb,var(--tile)_30%,transparent)]"
+                      >
+                        {t.icon}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 text-xs font-bold">
+                          <span className="truncate">{t.title}</span>
+                          {t.badge && (
+                            <span className={cn("shrink-0 rounded-md px-1.5 py-px text-[0.56rem] font-bold", t.badge.cls)}>
+                              {t.badge.text}
+                            </span>
+                          )}
+                        </div>
+                        <div className="nums truncate text-[0.62rem] text-muted-foreground">{t.sub}</div>
+                      </div>
+                      <span className={cn("nums shrink-0 text-xs font-extrabold", t.muted && "line-through")}>
+                        {formatToman(t.amount, false)}
+                      </span>
+                    </motion.li>
+                  ))}
+                  <li className="relative flex items-center gap-3">
+                    <span
+                      className={cn(
+                        "relative z-10 grid size-[2.15rem] shrink-0 place-items-center rounded-full text-white",
+                        inv.credit > 0 ? "bg-warning" : "bg-income"
+                      )}
+                    >
+                      {inv.credit > 0 ? <Clock3 className="size-4" /> : <CheckCheck className="size-4" />}
+                    </span>
+                    <div className="flex-1 text-xs font-extrabold">{inv.credit > 0 ? "مانده (نسیه)" : "کامل تسویه شد"}</div>
+                    {inv.credit > 0 && (
+                      <span className="nums text-xs font-extrabold text-[color:color-mix(in_srgb,var(--warning)_75%,black)]">
+                        {formatToman(inv.credit, false)}
+                      </span>
+                    )}
+                  </li>
+                </ol>
               )}
-            >
-              <p className={cn("text-[0.62rem]", inv.credit > 0 ? "text-warning" : "text-income")}>
-                {inv.credit > 0 ? "مانده نسیه" : "وضعیت"}
-              </p>
-              <p
-                className={cn(
-                  "nums mt-0.5 text-xs font-bold",
-                  inv.credit > 0 ? "text-warning" : "text-income"
-                )}
-              >
-                {inv.credit > 0 ? formatToman(inv.credit, false) : "تسویه ✓"}
-              </p>
-            </div>
-          </div>
+            </section>
 
-          {inv.account && (
-            <div className="mt-2.5 flex items-center gap-2.5 rounded-2xl border border-border/60 px-3 py-2 text-xs">
-              <BankLogo bankKey={inv.account.bankKey} size={28} />
-              <span className="text-muted-foreground">حساب نقدی:</span>
-              <span className="font-bold">{inv.account.name}</span>
-            </div>
-          )}
-
-          {/* چک‌ها */}
-          {inv.checks.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {inv.checks.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center gap-2.5 rounded-2xl border border-border/60 px-3 py-2.5"
-                >
-                  <BankLogo bankKey={c.bankKey} size={32} />
-                  <div className="min-w-0 flex-1">
-                    <div className="nums text-xs font-bold">{formatToman(c.amount, false)}</div>
-                    <div className="nums text-[0.62rem] text-muted-foreground">
-                      {getBank(c.bankKey).name} • سررسید{" "}
-                      {new Date(c.dueDate).toLocaleDateString("fa-IR")}
-                      {c.isRegistered
-                        ? c.registeredName
-                          ? ` • ثبت به نام ${c.registeredName}`
-                          : " • ثبت‌شده"
-                        : " • ثبت‌نشده"}
+            {/* ───────── سود (فروش) / اثر روی انبار (خرید) ───────── */}
+            {isSale ? (
+              <section className="rounded-3xl border border-income/20 bg-[linear-gradient(160deg,color-mix(in_srgb,var(--income)_7%,var(--card)),var(--card))] p-4 shadow-card sm:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-bold">
+                    <span className="grid size-7 place-items-center rounded-xl bg-income text-white">
+                      <TrendingUp className="size-4" />
+                    </span>
+                    سود این فاکتور
+                  </div>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[0.58rem] font-bold text-muted-foreground">فقط برای شما — چاپ نمی‌شود</span>
+                </div>
+                <div className="mt-3 flex items-center gap-4">
+                  <MarginRing pct={marginPct} />
+                  <div className="min-w-0 flex-1 space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">سود اقلام</span>
+                      <span className="nums font-bold">{formatToman(grossProfit, false)}</span>
+                    </div>
+                    {inv.discount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">منهای تخفیف</span>
+                        <span className="nums font-bold text-destructive">−{formatToman(inv.discount, false)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t border-dashed border-border pt-1.5 text-sm">
+                      <span className="font-bold">سود خالص</span>
+                      <span className={cn("nums font-extrabold", netProfit >= 0 ? "text-income" : "text-destructive")}>
+                        {formatToman(netProfit, false)}
+                      </span>
                     </div>
                   </div>
-                  <CheckDirectionBadge direction={c.direction} size="sm" />
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-md px-1.5 py-px text-[0.6rem] font-bold",
-                      c.status === "CASHED"
-                        ? "bg-income/10 text-income"
-                        : c.status === "PENDING"
-                          ? "bg-primary/10 text-primary"
-                          : c.status === "BOUNCED"
-                            ? "bg-destructive/10 text-destructive"
-                            : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {c.status === "CASHED"
-                      ? "پاس ✓"
-                      : c.status === "PENDING"
-                        ? "در جریان"
-                        : c.status === "BOUNCED"
-                          ? "برگشت خورده"
-                          : "لغو"}
-                  </span>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* تسویه‌های بابت فاکتور */}
-          {inv.settlements.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              {inv.settlements.map((s) => (
-                <div key={s.id} className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2 text-[0.7rem]">
-                  <span className="text-muted-foreground">
-                    تسویه {s.method === "CASH" ? "نقدی" : "چکی"} —{" "}
-                    {new Date(s.date).toLocaleDateString("fa-IR")}
+              </section>
+            ) : (
+              <section className="rounded-3xl border border-[color:color-mix(in_srgb,var(--purchase)_20%,transparent)] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--purchase)_7%,var(--card)),var(--card))] p-4 shadow-card sm:p-5">
+                <div className="mb-2.5 flex items-center gap-2 text-sm font-bold">
+                  <span className="grid size-7 place-items-center rounded-xl bg-[color:var(--purchase)] text-white">
+                    <PackagePlus className="size-4" />
                   </span>
-                  <span className="nums font-bold">{formatToman(s.amount, false)}</span>
+                  به انبار اضافه شد
                 </div>
-              ))}
-            </div>
-          )}
-
-          {inv.credit > 0 && (
-            <Button
-              onClick={() => {
-                setSettleAmount(inv.credit)
-                setCheckAmount(inv.credit)
-                setSettleSheet(true)
-              }}
-              className="mt-4 h-12 w-full rounded-2xl font-bold shadow-fab"
-            >
-              <HandCoins className="size-4" />
-              تسویه مانده ({formatToman(inv.credit, false)} تومان)
-            </Button>
-          )}
-
-          {inv.note && (
-            <p className="mt-3 rounded-2xl bg-muted/40 px-3 py-2.5 text-[0.7rem] text-muted-foreground">
-              📝 {inv.note}
-            </p>
-          )}
+                <div className="flex flex-wrap gap-1.5">
+                  {inv.items.map((it) => (
+                    <Link
+                      key={it.id}
+                      href="/products"
+                      className="nums rounded-xl bg-card px-2.5 py-1.5 text-[0.66rem] font-bold ring-1 ring-border transition-colors hover:ring-[color:var(--purchase)]"
+                    >
+                      <span className="text-[color:var(--purchase)]">+{toPersianDigits(it.quantity)} {formatUnit(it.unit)}</span>{" "}
+                      {it.productName}
+                    </Link>
+                  ))}
+                </div>
+                <p className="nums mt-2.5 text-[0.62rem] text-muted-foreground">
+                  میانگین قیمت هر واحد: {formatToman(Math.round(inv.subtotal / Math.max(1, inv.items.reduce((s, it) => s + it.quantity, 0))), false)} تومان
+                </p>
+              </section>
+            )}
+          </div>
         </div>
 
         {/* پیوست‌ها (تصاویر) — ADV-04 */}
@@ -940,4 +1073,52 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       </Dialog>
     </>
   )
+}
+
+/** حلقهٔ حاشیهٔ سود */
+function MarginRing({ pct }: { pct: number }) {
+  const r = 26
+  const c = 2 * Math.PI * r
+  const v = Math.max(0, Math.min(100, pct))
+  return (
+    <div className="relative grid size-[4.2rem] shrink-0 place-items-center">
+      <svg viewBox="0 0 64 64" className="absolute inset-0 -rotate-90" aria-hidden>
+        <circle cx="32" cy="32" r={r} fill="none" stroke="var(--muted)" strokeWidth="7" />
+        <motion.circle
+          cx="32"
+          cy="32"
+          r={r}
+          fill="none"
+          stroke="var(--income)"
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          initial={{ strokeDashoffset: c }}
+          animate={{ strokeDashoffset: c - (c * v) / 100 }}
+          transition={{ delay: 0.25, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        />
+      </svg>
+      <div className="text-center leading-none">
+        <div className="nums text-sm font-black text-income">{toPersianDigits(Math.round(pct))}٪</div>
+        <div className="mt-0.5 text-[0.5rem] text-muted-foreground">حاشیه</div>
+      </div>
+    </div>
+  )
+}
+
+/** مبلغ با شمارش نرم از صفر هنگام باز شدن صفحه */
+function AnimatedAmount({ value }: { value: number }) {
+  const [shown, setShown] = useState(0)
+  useEffect(() => {
+    let raf = 0
+    const start = performance.now()
+    const step = (t: number) => {
+      const p = Math.min(1, (t - start) / 650)
+      setShown(Math.round(value * (1 - Math.pow(1 - p, 3))))
+      if (p < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [value])
+  return <>{formatToman(shown, false)}</>
 }
