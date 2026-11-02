@@ -33,6 +33,8 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // نسخهٔ آزمایشی کنار پروداکشن خروجی بیلدش را جدا نگه می‌دارد تا .next اصلی دست نخورد
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   typescript: {
     ignoreBuildErrors: false,
   },

@@ -87,12 +87,14 @@ export async function GET(req: NextRequest) {
       .map((c) => ({ ...c, daysLeft: diffJalaliDays(now, c.dueDate) }))
       .sort((a, b) => a.daysLeft - b.daysLeft)
     const upcomingChecks = checksWithDays.slice(0, 8)
-    const pendingReceivedTotal = pendingChecks
-      .filter((c) => c.direction === "RECEIVED")
-      .reduce((s, c) => s + c.amount, 0)
-    const pendingIssuedTotal = pendingChecks
-      .filter((c) => c.direction === "ISSUED")
-      .reduce((s, c) => s + c.amount, 0)
+    // جمع‌ها از کل چک‌های در جریان (نه فقط ۵۰ تای نمایش‌داده‌شده)
+    const pendingTotals = await db.checkPaper.groupBy({
+      by: ["direction"],
+      where: { status: "PENDING" },
+      _sum: { amount: true },
+    })
+    const pendingReceivedTotal = pendingTotals.find((g) => g.direction === "RECEIVED")?._sum.amount ?? 0
+    const pendingIssuedTotal = pendingTotals.find((g) => g.direction === "ISSUED")?._sum.amount ?? 0
 
     // سری ۳۰ روز اخیر برای نمودار
     const chartStart = new Date(startOfJalaliDay(now).getTime() - 29 * 86_400_000)

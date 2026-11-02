@@ -269,7 +269,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             : undefined,
         note: `تسویه مانده فاکتور ${inv.number}`,
       })
-      toast.success("تسویه ثبت شد ✅")
+      toast.success("تسویه ثبت شد")
       setSettleSheet(false)
       await queryClient.invalidateQueries()
     } catch (e) {
@@ -357,7 +357,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       setUploading(false)
     }
     if (okCount > 0) {
-      toast.success(okCount > 1 ? `${toPersianDigits(okCount)} تصویر پیوست شد ✅` : "تصویر پیوست شد ✅")
+      toast.success(okCount > 1 ? `${toPersianDigits(okCount)} تصویر پیوست شد` : "تصویر پیوست شد")
       await queryClient.invalidateQueries({ queryKey: ["attachments", "INVOICE", id] })
     }
   }

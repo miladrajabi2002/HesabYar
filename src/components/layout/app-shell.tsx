@@ -1,352 +1,460 @@
 "use client"
 
-import { useEffect, ReactNode, useState } from "react"
+/**
+ * پوستهٔ اصلی حساب‌یار (نسخهٔ ۴)
+ *  • دسکتاپ: سایدبار گروه‌بندی‌شده با نشانگر فعال لغزان + آیکون‌های رنگی متحرک
+ *  • موبایل: هدر شیشه‌ای با عنوان صفحه + نوار پایین شناور که با اسکرول به پایین
+ *    کنار می‌رود و با اسکرول به بالا برمی‌گردد؛ در صفحات فرم (فاکتور جدید) پنهان است
+ *  • شیت «بیشتر» با کاشی‌های رنگی + شیت «فاکتور جدید»
+ */
+import { useEffect, ReactNode, useState, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { AnimatePresence, motion } from "framer-motion"
-import {
-  LayoutDashboard,
-  FileText,
-  Users,
-  Settings,
-  Plus,
-  Ellipsis,
-  CheckSquare,
-  Package,
-  Landmark,
-  BarChart3,
-  LogOut,
-  Search,
-  ArrowDownLeft,
-  ArrowUpRight,
-  CalendarDays,
-} from "lucide-react"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { useTelegram } from "@/hooks/use-telegram"
 import { useUIStore } from "@/lib/ui-store"
 import { formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
-import { SheetOption } from "@/components/ui/bottom-sheet"
 import { GlobalSearch } from "@/components/search/global-search"
 import { BrandLogo } from "@/components/ui/brand-logo"
+import { ThemeToggle } from "@/components/layout/theme-toggle"
+import {
+  IconApps,
+  IconLogout,
+  IconPlus,
+  IconPurchase,
+  IconSale,
+  IconSearch,
+  SECTION_META,
+  type SectionHref,
+} from "@/components/icons/app-icons"
 
-export const NAV_ITEMS = [
-  { href: "/", label: "داشبورد", icon: LayoutDashboard },
-  { href: "/invoices", label: "فاکتورها", icon: FileText },
-  { href: "/calendar", label: "تقویم مالی", icon: CalendarDays },
-  { href: "/checks", label: "چک‌ها", icon: CheckSquare },
-  { href: "/people", label: "اشخاص", icon: Users },
-  { href: "/products", label: "اجناس", icon: Package },
-  { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark },
-  { href: "/reports", label: "گزارش‌ها", icon: BarChart3 },
-  { href: "/settings", label: "تنظیمات", icon: Settings },
-] as const
+type NavItem = { href: SectionHref; label: string; short?: string }
 
-/** آیتم‌های منوی «بیشتر» موبایل — تقویم مالی در نوار اصلی است، اشخاص اینجاست */
-const MORE_ITEMS = [
-  { href: "/people", label: "اشخاص", icon: Users },
-  { href: "/checks", label: "چک‌ها", icon: CheckSquare },
-  { href: "/products", label: "اجناس", icon: Package },
-  { href: "/accounts", label: "حساب‌های بانکی", icon: Landmark },
-  { href: "/reports", label: "گزارش‌ها", icon: BarChart3 },
-  { href: "/settings", label: "تنظیمات", icon: Settings },
-] as const
+const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "کار روزانه",
+    items: [
+      { href: "/", label: "داشبورد" },
+      { href: "/invoices", label: "فاکتورها" },
+      { href: "/calendar", label: "تقویم مالی", short: "تقویم" },
+      { href: "/checks", label: "چک‌ها" },
+    ],
+  },
+  {
+    title: "دفاتر",
+    items: [
+      { href: "/people", label: "اشخاص" },
+      { href: "/products", label: "اجناس و انبار", short: "اجناس" },
+      { href: "/accounts", label: "حساب‌های بانکی", short: "حساب‌ها" },
+    ],
+  },
+  {
+    title: "تحلیل و تنظیم",
+    items: [
+      { href: "/reports", label: "گزارش‌ها" },
+      { href: "/settings", label: "تنظیمات" },
+    ],
+  },
+]
 
-function SidebarItem({
-  href,
-  label,
-  icon: Icon,
-  active,
-  onClick,
-}: {
-  href: string
-  label: string
-  icon: typeof LayoutDashboard
-  active: boolean
-  onClick?: () => void
-}) {
-  return (
-    <Link
-      href={href}
-      onClick={onClick}
-      className={cn(
-        "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
-        active
-          ? "bg-primary/10 text-primary"
-          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground active:scale-[0.98]"
-      )}
-    >
-      <Icon
-        className={cn(
-          "size-[18px] shrink-0 transition-transform duration-200",
-          !active && "group-hover:scale-110"
-        )}
-      />
-      <span>{label}</span>
-      {active ? <span className="ms-auto h-1.5 w-1.5 rounded-full bg-primary" /> : null}
-    </Link>
-  )
+export const NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items)
+
+/** آیتم‌های منوی «بیشتر» موبایل (داشبورد/فاکتورها/تقویم در نوار پایین هستند) */
+const MORE_ITEMS = NAV_ITEMS.filter((i) => !["/", "/invoices", "/calendar"].includes(i.href))
+
+/** صفحاتی که فرم تمام‌صفحه دارند — نوار پایین پنهان می‌شود تا با دکمهٔ ثبت تداخل نکند */
+const FORM_ROUTES = ["/invoices/new"]
+
+function titleFor(pathname: string): string {
+  if (pathname === "/") return "داشبورد"
+  if (pathname.startsWith("/invoices/new")) return "فاکتور"
+  const hit = NAV_ITEMS.filter((i) => i.href !== "/").find((i) => pathname.startsWith(i.href))
+  return hit?.label ?? "حساب‌یار"
 }
 
-/** پوسته اصلی: سایدبار دسکتاپ + منوی شناور موبایل (ایده vignet) + شیت فاکتور جدید */
+/** نوار پایین با اسکرول به پایین پنهان و با اسکرول به بالا ظاهر می‌شود */
+function useHideOnScroll() {
+  const [hidden, setHidden] = useState(false)
+  const last = useRef(0)
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY
+      const dy = y - last.current
+      if (Math.abs(dy) < 8) return
+      // نزدیک انتهای صفحه همیشه دیده شود (دکمه‌های پایین صفحه پوشانده نشوند ولی منو هم گم نشود)
+      const nearBottom = window.innerHeight + y >= document.documentElement.scrollHeight - 40
+      setHidden(dy > 0 && y > 120 && !nearBottom)
+      last.current = y
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+  return hidden
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { isTelegram } = useTelegram()
+  const { isTelegram, haptic } = useTelegram()
   const { moreSheetOpen, setMoreSheetOpen, addSheetOpen, openAddSheet, closeAddSheet } =
     useUIStore()
   const [searchOpen, setSearchOpen] = useState(false)
+  const scrolledAway = useHideOnScroll()
+  const reduceMotion = useReducedMotion()
 
   const showSidebar = !isTelegram
   const today = formatJalaliWithWeekday(nowTehran())
-  const isMainNav = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href)
-
-  const bottomNav = [
-    { href: "/", label: "داشبورد", icon: LayoutDashboard, active: pathname === "/" },
-    { href: "/invoices", label: "فاکتورها", icon: FileText, active: isMainNav("/invoices") },
-    { href: "/calendar", label: "تقویم", icon: CalendarDays, active: isMainNav("/calendar") },
-  ]
-  const moreActive = MORE_ITEMS.some((m) => isMainNav(m.href)) || moreSheetOpen
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href))
+  const isFormRoute = FORM_ROUTES.some((r) => pathname.startsWith(r))
+  const navHidden = isFormRoute || (scrolledAway && !moreSheetOpen && !addSheetOpen)
+  const moreActive = MORE_ITEMS.some((m) => isActive(m.href)) || moreSheetOpen
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => null)
     window.location.href = "/login"
   }
 
+  const go = (href: string) => {
+    haptic.tap()
+    router.push(href)
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* سایدبار دسکتاپ */}
+      {/* ───────── سایدبار دسکتاپ ───────── */}
       {showSidebar ? (
-        <aside className="fixed inset-y-0 start-0 z-40 hidden w-64 flex-col border-e border-sidebar-border bg-sidebar lg:flex">
-          <div className="flex items-center gap-3 px-5 py-6">
-            <BrandLogo size={44} className="shadow-fab rounded-2xl" />
-            <div>
-              <div className="text-base font-extrabold">حساب‌یار</div>
-              <div className="text-xs text-muted-foreground">حسابداری فروشگاهی</div>
+        <aside className="fixed inset-y-0 start-0 z-40 hidden w-[17rem] flex-col border-e border-sidebar-border bg-sidebar lg:flex">
+          <div className="flex items-center gap-3 px-5 pb-4 pt-6">
+            <BrandLogo size={42} />
+            <div className="min-w-0">
+              <div className="text-[1.05rem] font-black tracking-tight">حساب‌یار</div>
+              <div className="text-[0.7rem] text-muted-foreground">حسابداری فروشگاهی</div>
             </div>
           </div>
 
-          {/* جستجوی سراسری — دسکتاپ (همراه میانبر Ctrl+K) */}
-          <div className="px-3 pb-2">
+          <div className="space-y-2 px-3 pb-3">
+            <button
+              type="button"
+              onClick={openAddSheet}
+              className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-fab transition-transform hover:brightness-110 active:scale-[0.98]"
+            >
+              <IconPlus active={addSheetOpen} className="size-[1.1rem]" strokeWidth={2.4} />
+              فاکتور جدید
+            </button>
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-border/80 bg-background px-3 py-2.5 text-sm text-muted-foreground transition-all hover:border-primary/40 hover:text-foreground"
+              className="group flex w-full items-center gap-2.5 rounded-2xl border border-border bg-background px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
             >
-              <Search className="size-4 shrink-0" />
-              <span className="flex-1 text-start">جستجوی سراسری…</span>
-              <kbd className="pointer-events-none hidden select-none rounded-md border border-border bg-muted px-1.5 py-px text-[0.62rem] font-medium text-muted-foreground xl:block">
+              <IconSearch className="size-4" />
+              <span className="flex-1 text-start">جستجو…</span>
+              <kbd className="pointer-events-none select-none rounded-md border border-border bg-muted px-1.5 py-px font-sans text-[0.6rem] font-semibold">
                 Ctrl K
               </kbd>
             </button>
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-            {NAV_ITEMS.map((item) => (
-              <SidebarItem
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                icon={item.icon}
-                active={isMainNav(item.href)}
-              />
+          <nav className="flex-1 overflow-y-auto px-3 pb-4">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.title} className="mt-3 first:mt-1">
+                <div className="px-3 pb-1.5 text-[0.65rem] font-bold tracking-wide text-muted-foreground/70">
+                  {group.title}
+                </div>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => (
+                    <SidebarItem key={item.href} item={item} active={isActive(item.href)} />
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
-          <div className="border-t border-sidebar-border p-4">
-            <button
-              onClick={logout}
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
-            >
-              <LogOut className="size-4" />
-              خروج از حساب
-            </button>
-            <div className="mt-2 rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-              <div className="nums">{today}</div>
+
+          <div className="space-y-2 border-t border-sidebar-border p-3">
+            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <div className="nums flex-1 truncate rounded-xl px-2 text-[0.7rem] text-muted-foreground">{today}</div>
+              <button
+                onClick={logout}
+                className="group flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                <IconLogout className="size-4" />
+                خروج
+              </button>
             </div>
           </div>
         </aside>
       ) : null}
 
-      {/* محتوا */}
-      <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-64")}>
-        {/* هدر موبایل */}
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-background/85 px-4 py-3 backdrop-blur-md lg:hidden">
-          <div className="flex items-center gap-2.5">
-            <BrandLogo size={36} />
-            <div>
-              <div className="text-sm font-bold leading-tight">حساب‌یار فروشگاهی</div>
-              <div className="nums text-[0.68rem] leading-tight text-muted-foreground">{today}</div>
+      {/* ───────── محتوا ───────── */}
+      <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-[17rem]")}>
+        {/* هدر موبایل — شیشه‌ای */}
+        <header className="glass sticky top-0 z-30 flex items-center justify-between border-b px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] lg:hidden">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <BrandLogo size={34} />
+            <div className="min-w-0">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div
+                  key={titleFor(pathname)}
+                  initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.2 }}
+                  className="truncate text-[0.95rem] font-extrabold leading-tight"
+                >
+                  {titleFor(pathname)}
+                </motion.div>
+              </AnimatePresence>
+              <div className="nums truncate text-[0.66rem] leading-tight text-muted-foreground">{today}</div>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center">
+            <ThemeToggle compact />
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
               aria-label="جستجوی سراسری"
-              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="group grid size-10 place-items-center rounded-2xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-95"
             >
-              <Search className="size-[1.1rem]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setMoreSheetOpen(true)}
-              aria-label="بیشتر"
-              className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent"
-            >
-              <Ellipsis className="size-5" />
+              <IconSearch className="size-[1.2rem]" />
             </button>
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-44 pt-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={pathname}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
+        <main
+          className={cn(
+            "mx-auto w-full max-w-6xl flex-1 px-4 pt-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-8",
+            isFormRoute ? "pb-32" : "pb-36"
+          )}
+        >
+          {children}
         </main>
       </div>
 
-      {/* منوی پایین شناور موبایل — ایده vignet */}
-      <nav
+      {/* ───────── نوار پایین شناور موبایل ───────── */}
+      <motion.nav
         aria-label="منوی اصلی"
-        className="fixed inset-x-3 z-40 mx-auto grid h-[4.9rem] max-w-md grid-cols-5 items-end gap-0.5 rounded-[1.65rem] border border-black/[0.08] bg-background/95 p-1.5 shadow-[0_16px_40px_-8px_rgba(16,24,40,0.22)] backdrop-blur-2xl [bottom:max(0.9rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden"
+        initial={false}
+        animate={{ y: navHidden ? 140 : 0, opacity: navHidden ? 0 : 1 }}
+        transition={{ type: "spring", stiffness: 420, damping: 38 }}
+        className="glass fixed inset-x-3 z-40 mx-auto grid h-[4.6rem] max-w-md grid-cols-5 items-center rounded-[1.75rem] border px-1.5 shadow-float [bottom:max(0.75rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden"
       >
-        {bottomNav.slice(0, 2).map((item) => (
-          <BottomNavItem key={item.href} {...item} />
-        ))}
+        <BottomNavItem href="/" label="خانه" active={isActive("/")} />
+        <BottomNavItem href="/invoices" label="فاکتورها" active={isActive("/invoices")} />
 
-        {/* دکمه + وسط */}
+        {/* دکمهٔ + مرکزی */}
+        <div className="relative flex justify-center">
+          <motion.button
+            type="button"
+            onClick={() => {
+              haptic.medium()
+              if (addSheetOpen) closeAddSheet()
+              else openAddSheet()
+            }}
+            aria-label="فاکتور جدید"
+            whileTap={{ scale: 0.88 }}
+            className="relative -mt-7 grid size-[3.6rem] place-items-center rounded-[1.35rem] bg-primary text-primary-foreground shadow-fab ring-[5px] ring-background"
+          >
+            <motion.span
+              animate={{ rotate: addSheetOpen ? 135 : 0 }}
+              transition={{ type: "spring", stiffness: 380, damping: 20 }}
+              className="grid place-items-center"
+            >
+              <IconPlus className="size-7" strokeWidth={2.5} />
+            </motion.span>
+          </motion.button>
+        </div>
+
+        <BottomNavItem href="/calendar" label="تقویم" active={isActive("/calendar")} />
+
         <button
           type="button"
-          onClick={openAddSheet}
-          aria-label="فاکتور جدید"
-          className="group relative z-20 flex min-h-[3.75rem] min-w-0 flex-col items-center justify-end rounded-2xl focus-visible:outline-none"
-        >
-          <span className="absolute -top-5 left-1/2 -translate-x-1/2">
-            <span className="grid size-[3.4rem] place-items-center rounded-[1.4rem] border-[5px] border-background bg-primary text-white shadow-fab transition-transform duration-200 group-hover:bg-primary/95 group-active:scale-90">
-              <Plus className="size-6" strokeWidth={2.4} />
-            </span>
-          </span>
-          <span className="text-[0.62rem] font-bold leading-4 text-primary">فاکتور</span>
-        </button>
-
-        <BottomNavItem {...bottomNav[2]} />
-
-        <button
-          type="button"
-          onClick={() => setMoreSheetOpen(true)}
+          onClick={() => {
+            haptic.tap()
+            setMoreSheetOpen(true)
+          }}
           aria-label="بیشتر"
-          className={cn(
-            "group relative z-10 flex min-h-[3.75rem] flex-col items-center justify-center gap-0.5 rounded-2xl text-[0.62rem] font-medium transition-colors duration-200 focus-visible:outline-none",
-            moreActive ? "text-primary" : "text-muted-foreground/80"
-          )}
+          className="group relative flex h-full flex-col items-center justify-center gap-1"
         >
+          {moreActive && <NavPill hue="var(--hue-settings)" />}
+          <span className={cn("relative z-10 transition-colors", moreActive ? "text-foreground" : "text-muted-foreground")}>
+            <IconApps active={moreActive} className="size-[1.4rem]" />
+          </span>
           <span
             className={cn(
-              "grid size-8 place-items-center rounded-xl transition-all duration-200 group-active:scale-[0.92]",
-              moreActive ? "bg-primary text-white shadow-fab" : "group-hover:bg-foreground/[0.05]"
+              "relative z-10 text-[0.62rem] leading-none transition-colors",
+              moreActive ? "font-extrabold text-foreground" : "font-medium text-muted-foreground"
             )}
           >
-            <Ellipsis className="size-[1.05rem]" strokeWidth={moreActive ? 2.2 : 1.8} />
+            بیشتر
           </span>
-          <span className="leading-4">بیشتر</span>
         </button>
-      </nav>
+      </motion.nav>
 
-      {/* جستجوی سراسری (ADV-01) — موبایل و دسکتاپ */}
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
       <SearchShortcut onOpen={() => setSearchOpen(true)} />
 
-      {/* شیت «فاکتور جدید» — انتخاب نوع */}
+      {/* ───────── شیت «فاکتور جدید» ───────── */}
       <BottomSheet
         open={addSheetOpen}
         onClose={closeAddSheet}
-        title="ثبت فاکتور جدید"
-        description="نوع فاکتور را انتخاب کنید"
+        title="فاکتور جدید"
+        description="چه چیزی ثبت می‌کنید؟"
         desktopMode="dialog"
       >
-        <div className="space-y-2.5">
-          <SheetOption
-            icon={<ArrowUpRight className="size-5" strokeWidth={2.4} />}
-            title="فاکتور فروش"
-            subtitle="جنس فروختم — به مشتری"
-            tone="primary"
-            onClick={() => {
-              closeAddSheet()
-              router.push("/invoices/new?type=SALE")
-            }}
-          />
-          <SheetOption
-            icon={<ArrowDownLeft className="size-5" strokeWidth={2.4} />}
-            title="فاکتور خرید"
-            subtitle="جنس خریدم — از فروشنده"
-            onClick={() => {
-              closeAddSheet()
-              router.push("/invoices/new?type=PURCHASE")
-            }}
-          />
+        <div className="grid grid-cols-2 gap-3">
+          {(
+            [
+              { type: "SALE", title: "فروش", sub: "جنس فروختم", Icon: IconSale, hue: "var(--income)" },
+              { type: "PURCHASE", title: "خرید", sub: "جنس خریدم", Icon: IconPurchase, hue: "var(--expense)" },
+            ] as const
+          ).map((o, i) => (
+            <motion.button
+              key={o.type}
+              type="button"
+              initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 + i * 0.06, type: "spring", stiffness: 420, damping: 30 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => {
+                closeAddSheet()
+                go(`/invoices/new?type=${o.type}`)
+              }}
+              style={{ ["--tile" as string]: o.hue }}
+              className="group flex flex-col items-start gap-3 rounded-3xl border border-border bg-card p-4 text-start transition-colors hover:border-[color:var(--tile)]"
+            >
+              <span className="icon-tile grid size-12 place-items-center rounded-2xl">
+                <o.Icon active className="size-6" strokeWidth={2.4} />
+              </span>
+              <span>
+                <span className="block text-base font-extrabold">فاکتور {o.title}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{o.sub}</span>
+              </span>
+            </motion.button>
+          ))}
         </div>
       </BottomSheet>
 
-      {/* شیت «بیشتر» — گرید کاشی‌های آیکونی، بدون نیاز به اسکرول */}
-      <BottomSheet
-        open={moreSheetOpen}
-        onClose={() => setMoreSheetOpen(false)}
-        title="بیشتر"
-        desktopMode="dialog"
-      >
-        <div className="grid grid-cols-3 gap-2.5">
-          {MORE_ITEMS.map((item) => {
-            const active = isMainNav(item.href)
+      {/* ───────── شیت «بیشتر» ───────── */}
+      <BottomSheet open={moreSheetOpen} onClose={() => setMoreSheetOpen(false)} title="همهٔ بخش‌ها" desktopMode="dialog">
+        <div className="grid grid-cols-3 gap-x-2 gap-y-4 pt-1">
+          {MORE_ITEMS.map((item, i) => {
+            const { icon: Icon, hue } = SECTION_META[item.href]
+            const active = isActive(item.href)
             return (
-              <button
+              <motion.button
                 key={item.href}
                 type="button"
+                initial={reduceMotion ? false : { opacity: 0, scale: 0.8, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: 0.04 + i * 0.035, type: "spring", stiffness: 460, damping: 28 }}
+                whileTap={{ scale: 0.92 }}
                 onClick={() => {
                   setMoreSheetOpen(false)
-                  router.push(item.href)
+                  go(item.href)
                 }}
-                className={cn(
-                  "group flex flex-col items-center gap-2 rounded-2xl border p-3.5 text-center transition-all active:scale-[0.96]",
-                  active
-                    ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
-                    : "border-border bg-card hover:border-primary/30 hover:bg-accent/50"
-                )}
+                style={{ ["--tile" as string]: hue }}
+                className="group flex flex-col items-center gap-2 rounded-2xl py-1 text-center"
               >
                 <span
                   className={cn(
-                    "grid size-11 place-items-center rounded-2xl transition-colors",
-                    active ? "bg-primary text-white shadow-fab" : "bg-primary/10 text-primary"
+                    "icon-tile relative grid size-[3.6rem] place-items-center rounded-[1.25rem] transition-transform",
+                    active && "ring-2 ring-[color:var(--tile)] ring-offset-2 ring-offset-card"
                   )}
                 >
-                  <item.icon className="size-[1.35rem]" strokeWidth={2.1} />
+                  <Icon active duotone className="size-7" strokeWidth={2} />
                 </span>
-                <span className="text-[0.72rem] font-bold leading-tight">{item.label}</span>
-              </button>
+                <span className={cn("text-[0.72rem] leading-tight", active ? "font-extrabold" : "font-semibold")}>
+                  {item.short ?? item.label}
+                </span>
+              </motion.button>
             )
           })}
         </div>
+        <ThemeToggle className="mt-5" />
         <button
           type="button"
           onClick={() => {
             setMoreSheetOpen(false)
             logout()
           }}
-          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 py-3 text-xs font-bold text-destructive transition-colors hover:bg-destructive/10 active:scale-[0.98]"
+          className="group mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl bg-destructive/8 py-3 text-xs font-bold text-destructive transition-colors hover:bg-destructive/12 active:scale-[0.98]"
         >
-          <LogOut className="size-4" />
+          <IconLogout className="size-4" />
           خروج از حساب
         </button>
       </BottomSheet>
     </div>
+  )
+}
+
+function SidebarItem({ item, active }: { item: NavItem; active: boolean }) {
+  const { icon: Icon, hue } = SECTION_META[item.href]
+  return (
+    <Link
+      href={item.href}
+      style={{ ["--tile" as string]: hue }}
+      className={cn(
+        "group relative flex items-center gap-3 rounded-2xl px-2.5 py-2 text-sm transition-colors",
+        active ? "font-bold text-foreground" : "font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+      )}
+    >
+      {active && (
+        <motion.span
+          layoutId="sidebar-active"
+          className="absolute inset-0 rounded-2xl bg-sidebar-accent"
+          transition={{ type: "spring", stiffness: 500, damping: 40 }}
+        />
+      )}
+      <span
+        className={cn(
+          "relative grid size-8 place-items-center rounded-xl transition-all duration-300",
+          active ? "icon-tile" : "icon-soft"
+        )}
+      >
+        <Icon active={active} className="size-[1.05rem]" />
+      </span>
+      <span className="relative">{item.label}</span>
+    </Link>
+  )
+}
+
+/** نشانگر فعال نوار پایین — بین آیتم‌ها لیز می‌خورد */
+function NavPill({ hue }: { hue: string }) {
+  return (
+    <motion.span
+      layoutId="bottom-nav-pill"
+      style={{ ["--tile" as string]: hue }}
+      className="absolute inset-x-1.5 inset-y-1.5 rounded-[1.2rem] bg-[color-mix(in_srgb,var(--tile)_13%,transparent)]"
+      transition={{ type: "spring", stiffness: 480, damping: 36 }}
+    />
+  )
+}
+
+function BottomNavItem({ href, label, active }: { href: SectionHref; label: string; active: boolean }) {
+  const { icon: Icon, hue } = SECTION_META[href]
+  const { haptic } = useTelegram()
+  return (
+    <Link
+      href={href}
+      onClick={() => haptic.tap()}
+      style={{ ["--tile" as string]: hue }}
+      className="group relative flex h-full flex-col items-center justify-center gap-1"
+    >
+      {active && <NavPill hue={hue} />}
+      <span className={cn("relative z-10 transition-colors", active ? "text-[color:var(--tile)]" : "text-muted-foreground")}>
+        <Icon active={active} className="size-[1.4rem]" />
+      </span>
+      <span
+        className={cn(
+          "relative z-10 text-[0.62rem] leading-none transition-colors",
+          active ? "font-extrabold text-foreground" : "font-medium text-muted-foreground"
+        )}
+      >
+        {label}
+      </span>
+    </Link>
   )
 }
 
@@ -363,36 +471,4 @@ function SearchShortcut({ onOpen }: { onOpen: () => void }) {
     return () => window.removeEventListener("keydown", handler)
   }, [onOpen])
   return null
-}
-
-function BottomNavItem({
-  href,
-  label,
-  icon: Icon,
-  active,
-}: {
-  href: string
-  label: string
-  icon: typeof LayoutDashboard
-  active: boolean
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "group flex min-h-[3.75rem] flex-col items-center justify-center gap-0.5 rounded-2xl text-[0.62rem] font-medium transition-colors duration-200",
-        active ? "text-primary" : "text-muted-foreground/80"
-      )}
-    >
-      <span
-        className={cn(
-          "grid size-8 place-items-center rounded-xl transition-all duration-200 group-active:scale-[0.92]",
-          active ? "bg-primary text-white shadow-fab" : "group-hover:bg-foreground/[0.05]"
-        )}
-      >
-        <Icon className="size-[1.05rem]" strokeWidth={active ? 2.2 : 1.8} />
-      </span>
-      <span className="leading-4">{label}</span>
-    </Link>
-  )
 }

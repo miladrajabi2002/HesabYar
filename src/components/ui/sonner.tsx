@@ -1,52 +1,95 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { Toaster as Sonner, type ToasterProps } from "sonner"
-import {
-  CircleCheckIcon,
-  InfoIcon,
-  TriangleAlertIcon,
-  OctagonXIcon,
-  Loader2Icon,
-} from "lucide-react"
+import { Toaster as Sonner, toast, type ToasterProps } from "sonner"
 
 /**
- * توست حساب‌یار (نسخهٔ ۳) — طراحی سفارشی:
- *  • آیکون در دایرهٔ رنگی + نوار رنگی کنار توست
- *  • شیشه‌ای (backdrop-blur) با سایهٔ نرم
- *  • موبایل: زیر هدر چسبان • دسکتاپ: بالای صفحه (در globals.css)
+ * اعلان حساب‌یار (نسخهٔ ۴) — «جزیرهٔ پویا»
+ *  • یک قرص کوچک بالای صفحه، بدون دکمهٔ بستن؛ با کشیدن یا خودکار بسته می‌شود
+ *  • موفقیت کوتاه (۱٫۸ ثانیه)، خطا بلندتر (۴٫۵ ثانیه) — همیشه حداکثر ۲ اعلان روی هم
+ *  • آیکون‌ها با CSS «کشیده» می‌شوند (globals.css → .hy-toast-icon)
  */
-const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+// مدت نمایش بر اساس نوع — یک‌جا، بدون دست زدن به ۱۵۰ محل فراخوانی
+const g = globalThis as unknown as { __hyToastPatched?: boolean }
+if (!g.__hyToastPatched) {
+  g.__hyToastPatched = true
+  const { success, error, warning } = toast
+  toast.success = (m, d) => success(m, { duration: 1800, ...d })
+  toast.error = (m, d) => error(m, { duration: 4500, ...d })
+  toast.warning = (m, d) => warning(m, { duration: 3500, ...d })
+}
+
+function ToastGlyph({ kind }: { kind: "success" | "error" | "warning" | "info" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="hy-toast-icon"
+      aria-hidden
+    >
+      {kind === "success" && <path pathLength={1} d="M6 12.5l4 4 8-9" />}
+      {kind === "error" && (
+        <>
+          <path pathLength={1} d="M7 7l10 10" />
+          <path pathLength={1} className="hy-d2" d="M17 7L7 17" />
+        </>
+      )}
+      {kind === "warning" && (
+        <>
+          <path pathLength={1} d="M12 6v7" />
+          <path pathLength={1} className="hy-d2" d="M12 17.5v.01" />
+        </>
+      )}
+      {kind === "info" && (
+        <>
+          <path pathLength={1} d="M12 11v6.5" />
+          <path pathLength={1} className="hy-d2" d="M12 7v.01" />
+        </>
+      )}
+    </svg>
+  )
+}
+
+function Spinner() {
+  return (
+    <svg viewBox="0 0 24 24" className="animate-spin" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeOpacity={0.25} strokeWidth={2.6} />
+      <path d="M20.5 12a8.5 8.5 0 0 0-8.5-8.5" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+const Toaster = (props: ToasterProps) => {
+  const { resolvedTheme } = useTheme()
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={(resolvedTheme as ToasterProps["theme"]) ?? "light"}
       className="toaster group font-sans"
       dir="rtl"
+      position="top-center"
+      visibleToasts={2}
+      gap={8}
+      duration={2200}
       icons={{
-        success: <CircleCheckIcon className="size-4" />,
-        info: <InfoIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
+        success: <ToastGlyph kind="success" />,
+        info: <ToastGlyph kind="info" />,
+        warning: <ToastGlyph kind="warning" />,
+        error: <ToastGlyph kind="error" />,
+        loading: <Spinner />,
       }}
-      style={
-        {
-          "--normal-bg": "var(--card)",
-          "--normal-text": "var(--foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "1.15rem",
-        } as React.CSSProperties
-      }
       toastOptions={{
+        unstyled: false,
         classNames: {
           toast: "cn-toast font-sans text-start",
           title: "font-sans text-start",
           description: "font-sans text-start",
           actionButton: "cn-toast-action",
           cancelButton: "cn-toast-cancel",
-          closeButton: "cn-toast-x",
         },
       }}
       {...props}

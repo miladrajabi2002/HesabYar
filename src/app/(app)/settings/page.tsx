@@ -36,6 +36,7 @@ import { Switch } from "@/components/ui/switch"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useConfirm } from "@/components/ui/confirm"
 import { useTelegram } from "@/hooks/use-telegram"
+import { ThemeToggle } from "@/components/layout/theme-toggle"
 import { cn } from "@/lib/utils"
 
 interface Settings {
@@ -141,7 +142,7 @@ export default function SettingsPage() {
         credential: attestation,
         deviceName: device || undefined,
       })
-      toast.success(r.message || "کلید با موفقیت ثبت شد ✅")
+      toast.success(r.message || "کلید با موفقیت ثبت شد")
       setDeviceName("")
       await queryClient.invalidateQueries({ queryKey: ["passkeys"] })
     } catch (err) {
@@ -254,7 +255,7 @@ export default function SettingsPage() {
       })
       window.localStorage.setItem("hesabyar:push", "1")
       setPushOn(true)
-      toast.success("اعلان‌ها فعال شد ✅")
+      toast.success("اعلان‌ها فعال شد")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "فعال‌سازی اعلان ناموفق بود")
     } finally {
@@ -292,7 +293,7 @@ export default function SettingsPage() {
     setTestingPush(true)
     try {
       const r = await apiPut<{ message?: string }>("/api/push")
-      toast.success(r.message || "اعلان آزمایشی ارسال شد ✅")
+      toast.success(r.message || "اعلان آزمایشی ارسال شد")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ارسال ناموفق")
     } finally {
@@ -337,7 +338,7 @@ export default function SettingsPage() {
       a.click()
       a.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 5000)
-      toast.success(pw ? "بکاپ رمزگذاری‌شده دانلود شد 🔒" : "فایل بکاپ دانلود شد ✅")
+      toast.success(pw ? "بکاپ رمزگذاری‌شده دانلود شد" : "فایل بکاپ دانلود شد")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "دانلود بکاپ ناموفق بود")
     } finally {
@@ -384,7 +385,7 @@ export default function SettingsPage() {
         miniAppUrl: miniAppUrl || undefined,
         checkDueDaysBefore: dueDays,
       })
-      toast.success("تنظیمات ذخیره شد ✅")
+      toast.success("تنظیمات ذخیره شد")
       setToken("")
       await refetch()
     } catch (e) {
@@ -398,7 +399,7 @@ export default function SettingsPage() {
     setTesting(true)
     try {
       const r = await apiPost<{ message?: string }>("/api/telegram/test")
-      toast.success(r.message || "پیام آزمایشی ارسال شد ✅")
+      toast.success(r.message || "پیام آزمایشی ارسال شد")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ارسال ناموفق")
     } finally {
@@ -426,6 +427,13 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-extrabold sm:text-xl">تنظیمات</h1>
+
+      {/* ظاهر */}
+      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+        <div className="mb-1 text-sm font-bold">ظاهر برنامه</div>
+        <p className="mb-3 text-[0.7rem] text-muted-foreground">پوستهٔ تیره شب‌ها چشم را کمتر خسته می‌کند و باتری گوشی را هم کمتر مصرف می‌کند.</p>
+        <ThemeToggle className="max-w-xs" />
+      </section>
 
       {/* ربات تلگرام */}
       <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">

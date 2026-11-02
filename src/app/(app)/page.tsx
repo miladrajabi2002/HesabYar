@@ -31,7 +31,7 @@ import {
   Minus,
 } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
-import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
+import { formatToman, formatTomanCompact, formatTomanParts, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort, dayKeyToDate, JALALI_MONTHS, jalaliOf, nowTehran } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
@@ -124,6 +124,54 @@ function DeltaBadge({ pct, invert = false }: { pct: number | null; invert?: bool
   )
 }
 
+/** مبلغ فشرده: عدد پررنگ + واحد کوچک کم‌رنگ (هیچ‌وقت دو خطی نمی‌شود) */
+function Amt({ v, className, unitClassName }: { v: number; className?: string; unitClassName?: string }) {
+  const { value, unit } = formatTomanParts(v)
+  return (
+    <span className={cn("nums inline-flex items-baseline gap-1 whitespace-nowrap", className)}>
+      {value}
+      {unit && <span className={cn("text-[0.62em] font-semibold opacity-60", unitClassName)}>{unit}</span>}
+    </span>
+  )
+}
+
+/** کاشی KPI — آیکون رنگی + برچسب + مبلغ */
+function KpiTile({
+  href,
+  label,
+  value,
+  hue,
+  icon,
+  delta,
+  invertDelta,
+}: {
+  href: string
+  label: string
+  value: number
+  hue: string
+  icon: React.ReactNode
+  delta?: number | null
+  invertDelta?: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      style={{ ["--tile" as string]: hue }}
+      className="group relative flex flex-col gap-3 overflow-hidden rounded-3xl border border-border/70 bg-card p-3.5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-card-hover active:scale-[0.98] sm:p-4"
+    >
+      <span className="pointer-events-none absolute -end-8 -top-8 size-24 rounded-full bg-[color-mix(in_srgb,var(--tile)_9%,transparent)] transition-transform duration-500 group-hover:scale-125" />
+      <div className="relative flex items-center justify-between gap-1">
+        <span className="icon-soft grid size-9 place-items-center rounded-2xl">{icon}</span>
+        {delta !== undefined && <DeltaBadge pct={delta} invert={invertDelta} />}
+      </div>
+      <div className="relative min-w-0">
+        <p className="truncate text-[0.7rem] font-medium text-muted-foreground">{label}</p>
+        <Amt v={value} className="mt-0.5 text-lg font-black tracking-tight text-[color:var(--tile)] sm:text-xl" />
+      </div>
+    </Link>
+  )
+}
+
 function SectionCard({
   title,
   icon,
@@ -196,104 +244,93 @@ export default function DashboardPage() {
         variants={stagger}
         initial="hidden"
         animate="visible"
-        className="hero-gradient relative overflow-hidden rounded-3xl p-5 text-white shadow-card sm:p-6"
+        className="hero-gradient relative overflow-hidden rounded-[1.75rem] p-5 text-white shadow-[0_20px_40px_-18px_rgba(7,74,61,0.6)] sm:p-6"
       >
         <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs opacity-80">فروش امروز</p>
-            <p className="nums mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl">
-              {formatToman(data.today.sales, false)}
-              <span className="ms-1 text-sm font-medium opacity-75">تومان</span>
+          <div className="relative min-w-0">
+            <p className="flex items-center gap-1.5 text-xs font-medium opacity-85">
+              <span className="relative size-1.5 rounded-full bg-emerald-300 hy-ping" />
+              فروش امروز
             </p>
-            <p className="mt-2 text-xs opacity-80">
-              {data.today.saleCount > 0
-                ? `${toPersianDigits(data.today.saleCount)} فاکتور فروش • سود امروز: ${formatTomanCompact(data.today.profit)}`
-                : "هنوز فروشی برای امروز ثبت نشده"}
-            </p>
+            {data.today.saleCount > 0 ? (
+              <>
+                <p className="nums mt-1.5 text-[2rem] font-black leading-none tracking-tight sm:text-[2.5rem]">
+                  {formatToman(data.today.sales, false)}
+                  <span className="ms-1.5 text-sm font-semibold opacity-70">تومان</span>
+                </p>
+                <p className="mt-2.5 text-xs opacity-85">
+                  {toPersianDigits(data.today.saleCount)} فاکتور • سود {formatTomanCompact(data.today.profit)}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-1.5 text-xl font-black leading-tight sm:text-2xl">هنوز فروشی ثبت نشده</p>
+                <p className="mt-1.5 text-xs opacity-80">اولین فروش امروز را با دکمهٔ + ثبت کنید</p>
+              </>
+            )}
           </div>
           <button
             onClick={openAddSheet}
-            className="flex items-center gap-1.5 rounded-2xl bg-white/15 px-3.5 py-2.5 text-xs font-bold backdrop-blur transition-all hover:bg-white/25 active:scale-95"
+            className="relative flex shrink-0 items-center gap-1.5 rounded-2xl bg-white px-3.5 py-2.5 text-xs font-extrabold text-[#0a6b56] shadow-lg shadow-black/10 transition-all hover:bg-white/90 active:scale-95"
           >
-            <Plus className="size-4" />
-            فاکتور جدید
+            <Plus className="size-4" strokeWidth={2.6} />
+            فاکتور
           </button>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/15 pt-4 text-center">
-          <div>
-            <p className="text-[0.65rem] opacity-75">فروش این هفته</p>
-            <p className="nums mt-0.5 text-sm font-bold">{formatTomanCompact(data.week.sales)}</p>
-          </div>
-          <div className="border-x border-white/15">
-            <p className="text-[0.65rem] opacity-75">سود این هفته</p>
-            <p className="nums mt-0.5 text-sm font-bold">{formatTomanCompact(data.week.profit)}</p>
-          </div>
-          <div>
-            <p className="text-[0.65rem] opacity-75">خرید این هفته</p>
-            <p className="nums mt-0.5 text-sm font-bold">{formatTomanCompact(data.week.purchases)}</p>
-          </div>
+        <div className="relative mt-5 grid grid-cols-3 gap-1 rounded-2xl bg-black/10 p-1 text-center backdrop-blur-sm">
+          {(
+            [
+              ["فروش هفته", data.week.sales],
+              ["سود هفته", data.week.profit],
+              ["خرید هفته", data.week.purchases],
+            ] as const
+          ).map(([label, v]) => (
+            <div key={label} className="rounded-xl px-1 py-2">
+              <p className="text-[0.62rem] opacity-75">{label}</p>
+              <Amt v={v} className="mt-0.5 text-[0.82rem] font-extrabold" />
+            </div>
+          ))}
         </div>
       </motion.div>
 
-      {/* ───────── نوار KPI — یک کارت یکپارچه با جداکننده (ساده و حرفه‌ای) ───────── */}
+      {/* ───────── کاشی‌های KPI ───────── */}
       <motion.div
         custom={1}
         variants={stagger}
         initial="hidden"
         animate="visible"
-        className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-card"
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
       >
-        <div className="grid grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-x-reverse lg:divide-border/60">
-          <Link
-            href="/reports"
-            className="group flex flex-col gap-1.5 p-4 transition-colors hover:bg-accent/40 sm:p-5 lg:border-b-0"
-          >
-            <div className="flex items-center justify-between gap-1">
-              <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
-                <TrendingUp className="size-3.5 text-primary" />
-                سود {monthLabel}
-              </span>
-              <DeltaBadge pct={data.monthComparison.profit} />
-            </div>
-            <p className="nums text-xl font-extrabold text-primary">{formatTomanCompact(data.month.profit)}</p>
-          </Link>
-
-          <Link
-            href="/reports"
-            className="group flex flex-col gap-1.5 border-t border-border/60 p-4 transition-colors hover:bg-accent/40 sm:p-5 lg:border-t-0"
-          >
-            <div className="flex items-center justify-between gap-1">
-              <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
-                <ReceiptText className="size-3.5 text-income" />
-                فروش {monthLabel}
-              </span>
-              <DeltaBadge pct={data.monthComparison.sales} />
-            </div>
-            <p className="nums text-xl font-extrabold text-income">{formatTomanCompact(data.month.sales)}</p>
-          </Link>
-
-          <Link
-            href="/people?filter=debtors"
-            className="group flex flex-col gap-1.5 border-t border-border/60 p-4 transition-colors hover:bg-accent/40 sm:p-5 lg:border-t-0"
-          >
-            <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
-              <HandCoins className="size-3.5 text-warning" />
-              طلب از مشتریان
-            </span>
-            <p className="nums text-xl font-extrabold text-warning">{formatTomanCompact(data.totalReceivable)}</p>
-          </Link>
-
-          <Link
-            href="/people?filter=creditors"
-            className="group flex flex-col gap-1.5 border-t border-border/60 p-4 transition-colors hover:bg-accent/40 sm:p-5 lg:border-t-0"
-          >
-            <span className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
-              <Wallet className="size-3.5 text-destructive" />
-              بدهی به فروشنده‌ها
-            </span>
-            <p className="nums text-xl font-extrabold text-destructive">{formatTomanCompact(data.totalPayable)}</p>
-          </Link>
-        </div>
+        <KpiTile
+          href="/reports"
+          label={`سود ${monthLabel}`}
+          value={data.month.profit}
+          hue="var(--primary)"
+          icon={<TrendingUp className="size-[1.1rem]" strokeWidth={2.2} />}
+          delta={data.monthComparison.profit}
+        />
+        <KpiTile
+          href="/reports"
+          label={`فروش ${monthLabel}`}
+          value={data.month.sales}
+          hue="var(--hue-invoices)"
+          icon={<ReceiptText className="size-[1.1rem]" strokeWidth={2.2} />}
+          delta={data.monthComparison.sales}
+        />
+        <KpiTile
+          href="/people?filter=debtors"
+          label="طلب از مشتریان"
+          value={data.totalReceivable}
+          hue="var(--hue-checks)"
+          icon={<HandCoins className="size-[1.1rem]" strokeWidth={2.2} />}
+        />
+        <KpiTile
+          href="/people?filter=creditors"
+          label="بدهی به فروشنده‌ها"
+          value={data.totalPayable}
+          hue="var(--expense)"
+          icon={<Wallet className="size-[1.1rem]" strokeWidth={2.2} />}
+        />
       </motion.div>
 
       <div className="grid items-start gap-4 lg:grid-cols-5">
@@ -310,19 +347,19 @@ export default function DashboardPage() {
                   <AreaChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gSales" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0e7c66" stopOpacity={0.28} />
-                        <stop offset="100%" stopColor="#0e7c66" stopOpacity={0} />
+                        <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="gProfit" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+                        <stop offset="0%" stopColor="var(--chart-3)" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="var(--chart-3)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#eceef2" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                       reversed
                       dataKey="label"
-                      tick={{ fontSize: 10, fill: "#6b7280" }}
+                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
                       tickLine={false}
                       axisLine={false}
                       interval="preserveStartEnd"
@@ -330,12 +367,18 @@ export default function DashboardPage() {
                     />
                     <YAxis
                       orientation="right"
-                      tick={{ fontSize: 10, fill: "#9aa4b2" }}
+                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
                       tickLine={false}
                       axisLine={false}
                       width={44}
                       tickFormatter={(v: number) =>
-                        v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}م` : v >= 1000 ? `${Math.round(v / 1000)}ه` : String(v)
+                        toPersianDigits(
+                          v >= 1_000_000
+                            ? `${+(v / 1_000_000).toFixed(1)}م`
+                            : v >= 1000
+                              ? `${Math.round(v / 1000)}ه`
+                              : String(v)
+                        )
                       }
                     />
                     <Tooltip
@@ -351,8 +394,8 @@ export default function DashboardPage() {
                         direction: "rtl",
                       }}
                     />
-                    <Area type="monotone" dataKey="sales" stroke="#0e7c66" strokeWidth={2.2} fill="url(#gSales)" />
-                    <Area type="monotone" dataKey="profit" stroke="#f59e0b" strokeWidth={2} fill="url(#gProfit)" />
+                    <Area type="monotone" dataKey="sales" stroke="var(--chart-1)" strokeWidth={2.2} fill="url(#gSales)" />
+                    <Area type="monotone" dataKey="profit" stroke="var(--chart-3)" strokeWidth={2} fill="url(#gProfit)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

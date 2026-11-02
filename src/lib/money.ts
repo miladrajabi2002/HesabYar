@@ -39,6 +39,13 @@ export function formatTomanCompact(amount: number): string {
   return `${sign}${faInt.format(abs)} تومان`
 }
 
+/** مبلغ فشرده به دو تکه (عدد + واحد) تا واحد را کوچک‌تر و کم‌رنگ‌تر نمایش دهیم */
+export function formatTomanParts(amount: number): { value: string; unit: string } {
+  const full = formatTomanCompact(amount)
+  const i = full.search(/\s(میلیارد|میلیون|هزار)?\s?تومان$/)
+  return i < 0 ? { value: full, unit: "" } : { value: full.slice(0, i), unit: full.slice(i + 1) }
+}
+
 /** درصد با ارقام فارسی: «۸۰٪» */
 export function formatPercent(p: number): string {
   return `${faInt.format(Math.round(p))}٪`

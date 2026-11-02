@@ -10,7 +10,7 @@
  *  - push: نمایش نوتیفیکیشن با کلیک → باز کردن صفحه مرتبط
  */
 
-const VERSION = "hesabyar-v4"
+const VERSION = "hesabyar-v5"
 const STATIC_CACHE = `${VERSION}-static`
 const PAGE_CACHE = `${VERSION}-pages`
 const DB_NAME = "hesabyar-outbox"

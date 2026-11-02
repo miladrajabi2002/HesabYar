@@ -65,9 +65,14 @@ export async function GET(req: NextRequest) {
       where: { invoice: { ...where, type: "SALE" } },
       select: { quantity: true, unitPrice: true, costPrice: true },
     })
-    const totalProfit = Math.round(
-      profitRows.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0)
-    )
+    // تخفیف فاکتور از سود کم می‌شود (هماهنگ با صفحهٔ فاکتور و گزارش‌ها)
+    const saleDiscounts = await db.invoice.aggregate({
+      where: { ...where, type: "SALE" },
+      _sum: { discount: true },
+    })
+    const totalProfit =
+      Math.round(profitRows.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0)) -
+      (saleDiscounts._sum.discount ?? 0)
 
     return ok({ invoices, total, totalProfit, page: f.page, pageSize: f.pageSize })
   } catch (e) {

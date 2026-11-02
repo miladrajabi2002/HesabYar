@@ -10,6 +10,8 @@ export const runtime = "nodejs"
 
 /** آیا کلیدی ثبت شده؟ (برای نمایش دکمه ورود بیومتریک) */
 export async function GET(req: NextRequest) {
+  const rl = rateLimit(`passkey-options:${clientIp(req)}`, 30, 5 * 60_000)
+  if (!rl.ok) return fail("درخواست‌های زیاد؛ کمی بعد دوباره امتحان کنید", 429)
   try {
     const count = await db.passkey.count()
     const options = count > 0 ? await buildAuthenticationOptions(req) : null

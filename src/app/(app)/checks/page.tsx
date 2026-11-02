@@ -201,7 +201,7 @@ export default function ChecksPage() {
     setSaving(true)
     try {
       await apiPatch(`/api/checks/${check.id}`, { status: "CASHED", accountId })
-      toast.success("چک پاس شد ✅ گردش بانکی ثبت شد")
+      toast.success("چک پاس شد گردش بانکی ثبت شد")
       setActionSheet(null)
       setAccountSheet(false)
       await queryClient.invalidateQueries()
@@ -275,7 +275,7 @@ export default function ChecksPage() {
         registeredName: name,
         registeredNationalId: regNationalId.trim() || undefined,
       })
-      toast.success("چک ثبت شد ✅")
+      toast.success("چک ثبت شد")
       setRegisterSheet(false)
       setActionSheet(null)
       await queryClient.invalidateQueries()
@@ -325,7 +325,7 @@ export default function ChecksPage() {
       setUploading(false)
     }
     if (okCount > 0) {
-      toast.success(okCount > 1 ? `${toPersianDigits(okCount)} تصویر پیوست شد ✅` : "تصویر پیوست شد ✅")
+      toast.success(okCount > 1 ? `${toPersianDigits(okCount)} تصویر پیوست شد` : "تصویر پیوست شد")
       await queryClient.invalidateQueries({ queryKey: ["attachments", "CHECK", check.id] })
     }
   }
@@ -359,7 +359,7 @@ export default function ChecksPage() {
       setRegUploading(false)
     }
     if (okCount > 0) {
-      toast.success("تصویر چک پیوست شد ✅")
+      toast.success("تصویر چک پیوست شد")
       await queryClient.invalidateQueries({ queryKey: ["attachments", "CHECK", check.id] })
     }
   }

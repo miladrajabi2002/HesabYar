@@ -225,23 +225,29 @@ export default function ReportsPage() {
               <div className="h-72 w-full" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#eceef2" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                       reversed
                       dataKey="label"
-                      tick={{ fontSize: 10, fill: "#6b7280" }}
+                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
                       tickLine={false}
                       axisLine={false}
                       minTickGap={24}
                     />
                     <YAxis
                       orientation="right"
-                      tick={{ fontSize: 10, fill: "#9aa4b2" }}
+                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
                       tickLine={false}
                       axisLine={false}
                       width={44}
                       tickFormatter={(v: number) =>
-                        v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}م` : v >= 1000 ? `${Math.round(v / 1000)}ه` : String(v)
+                        toPersianDigits(
+                          v >= 1_000_000
+                            ? `${+(v / 1_000_000).toFixed(1)}م`
+                            : v >= 1000
+                              ? `${Math.round(v / 1000)}ه`
+                              : String(v)
+                        )
                       }
                     />
                     <Tooltip
@@ -260,9 +266,9 @@ export default function ReportsPage() {
                       formatter={(v) => (v === "sales" ? "فروش" : v === "purchases" ? "خرید" : "سود")}
                       wrapperStyle={{ fontSize: 12, direction: "rtl" }}
                     />
-                    <Bar dataKey="sales" fill="#16a34a" radius={[4, 4, 0, 0]} maxBarSize={22} />
-                    <Bar dataKey="purchases" fill="#e5484d" radius={[4, 4, 0, 0]} maxBarSize={22} />
-                    <Line type="monotone" dataKey="profit" stroke="#0e7c66" strokeWidth={2.5} dot={false} />
+                    <Bar dataKey="sales" fill="var(--income)" radius={[4, 4, 0, 0]} maxBarSize={22} />
+                    <Bar dataKey="purchases" fill="var(--expense)" radius={[4, 4, 0, 0]} maxBarSize={22} />
+                    <Line type="monotone" dataKey="profit" stroke="var(--chart-1)" strokeWidth={2.5} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>

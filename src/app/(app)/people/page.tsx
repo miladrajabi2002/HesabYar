@@ -322,7 +322,7 @@ export function AddPersonSheet({
         openingBalance:
           openingKind === "none" ? 0 : openingKind === "receivable" ? openingAmount : -openingAmount,
       })
-      toast.success("شخص ثبت شد ✅")
+      toast.success("شخص ثبت شد")
       setName("")
       setPhone("")
       setCompany("")

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { ThemeProvider } from "next-themes"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { TelegramProvider } from "@/hooks/use-telegram"
@@ -54,17 +55,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <TelegramProvider>
           <PWAProvider>
             <ConfirmProvider>
               {children}
-              <Toaster position="top-center" dir="rtl" richColors closeButton expand={false} gap={10} />
+              <Toaster />
             </ConfirmProvider>
           </PWAProvider>
         </TelegramProvider>
       </TooltipProvider>
     </QueryClientProvider>
+    </ThemeProvider>
   )
 }

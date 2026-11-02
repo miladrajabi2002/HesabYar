@@ -92,7 +92,7 @@ function AccountForm({
           cardNumber: cardNumber || null,
           initialBalance,
         })
-        toast.success("حساب ویرایش شد ✅")
+        toast.success("حساب ویرایش شد")
       } else {
         await apiPost("/api/accounts", {
           name: name.trim(),
@@ -101,7 +101,7 @@ function AccountForm({
           cardNumber: cardNumber || undefined,
           initialBalance,
         })
-        toast.success("حساب اضافه شد ✅")
+        toast.success("حساب اضافه شد")
       }
       onClose()
       await onSaved()
@@ -269,7 +269,7 @@ export default function AccountsPage() {
         toAccountId: toId,
         amount: transferAmount,
       })
-      toast.success("انتقال انجام شد ✅")
+      toast.success("انتقال انجام شد")
       setTransferSheet(false)
       setFromId("")
       setToId("")

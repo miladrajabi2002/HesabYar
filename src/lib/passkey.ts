@@ -11,8 +11,21 @@ import {
 } from "@simplewebauthn/server"
 import { db } from "./db"
 
-/** استخراج rpID و origin از هدر درخواست (پشتیبانی دامنه پروداکشن و لوکال) */
+/**
+ * استخراج rpID و origin
+ * امنیت: در پروداکشن اگر MINI_APP_URL تنظیم باشد، دامنه از همان خوانده می‌شود و نه از
+ * هدرهای Host / X-Forwarded-Host که از سمت کاربر قابل دستکاری‌اند.
+ */
 export function rpFromRequest(req: Request): { rpID: string; origin: string } {
+  const pinned = process.env.NODE_ENV === "production" ? process.env.MINI_APP_URL?.trim() : ""
+  if (pinned) {
+    try {
+      const u = new URL(pinned)
+      return { rpID: u.hostname, origin: u.origin }
+    } catch {
+      /* مقدار نامعتبر — به هدرها برمی‌گردیم */
+    }
+  }
   const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000"
   const proto = req.headers.get("x-forwarded-proto") || (forwardedHost.includes("localhost") ? "http" : "https")
   const rpID = forwardedHost.split(":")[0]
@@ -20,8 +33,10 @@ export function rpFromRequest(req: Request): { rpID: string; origin: string } {
 }
 
 /**
- * ذخیره موقت challenge — اپ تک‌کاربره و تک‌پروسه است؛
- * نگهداری در حافظه گلوبال کافی و امن است (challenge یک‌بار‌مصرف).
+ * ذخیره موقت challenge — اپ تک‌کاربره و تک‌پروسه است؛ نگهداری در حافظه گلوبال کافی است.
+ * کلید = خود challenge (نه یک کلید ثابت) تا باز شدن صفحهٔ ورود در یک تب/دستگاه دیگر
+ * challenge در جریان را باطل نکند؛ موقع تأیید، challenge از clientDataJSON پاسخ خوانده
+ * و فقط اگر صادرشده و منقضی‌نشده باشد یک‌بار مصرف می‌شود.
  */
 const challengeStore = (globalThis as unknown as {
   __hesabyarChallenges?: Map<string, { challenge: string; exp: number }>
@@ -29,18 +44,30 @@ const challengeStore = (globalThis as unknown as {
 ;(globalThis as unknown as { __hesabyarChallenges?: Map<string, { challenge: string; exp: number }> }).__hesabyarChallenges =
   challengeStore
 
-function saveChallenge(key: string, challenge: string): void {
-  // پاک‌سازی موارد منقضی
+function saveChallenge(kind: "register" | "login", challenge: string): void {
+  // پاک‌سازی موارد منقضی + سقف اندازه (جلوگیری از پر شدن حافظه با درخواست‌های بی‌پایان)
   const now = Date.now()
   for (const [k, v] of challengeStore) if (v.exp < now) challengeStore.delete(k)
-  challengeStore.set(key, { challenge, exp: now + 5 * 60_000 })
+  if (challengeStore.size > 200) challengeStore.delete(challengeStore.keys().next().value as string)
+  challengeStore.set(`${kind}:${challenge}`, { challenge, exp: now + 5 * 60_000 })
 }
 
-function consumeChallenge(key: string): string | null {
-  const entry = challengeStore.get(key)
-  if (!entry) return null
-  challengeStore.delete(key)
-  return entry.exp > Date.now() ? entry.challenge : null
+/** challenge داخل پاسخ مرورگر (clientDataJSON) را پیدا و یک‌بار مصرف می‌کند */
+function consumeChallenge(kind: "register" | "login", credential: Record<string, unknown>): string | null {
+  try {
+    const clientDataJSON = (credential as { response?: { clientDataJSON?: string } }).response?.clientDataJSON
+    if (!clientDataJSON) return null
+    const challenge = (JSON.parse(Buffer.from(clientDataJSON, "base64url").toString("utf8")) as { challenge?: string })
+      .challenge
+    if (!challenge) return null
+    const key = `${kind}:${challenge}`
+    const entry = challengeStore.get(key)
+    if (!entry) return null
+    challengeStore.delete(key)
+    return entry.exp > Date.now() ? entry.challenge : null
+  } catch {
+    return null
+  }
 }
 
 /** گزینه‌های ثبت passkey جدید (نیازمند نشست معتبر) */
@@ -57,7 +84,7 @@ export async function buildRegistrationOptions(req: Request, deviceName?: string
     excludeCredentials: existing.map((p) => ({ id: p.credentialId })),
     authenticatorSelection: {
       residentKey: "preferred", // discoverable credential — ورود بدون نام کاربری
-      userVerification: "preferred", // Face ID / Touch ID / پین
+      userVerification: "required", // حتماً اثر انگشت / چهره / پین دستگاه
     },
   })
   saveChallenge("register", options.challenge)
@@ -69,7 +96,8 @@ export async function buildAuthenticationOptions(req: Request) {
   const { rpID } = rpFromRequest(req)
   const options = await generateAuthenticationOptions({
     rpID,
-    userVerification: "preferred",
+    // «حتماً» تأیید بیومتریک — صرفِ در دست داشتن دستگاه کافی نیست
+    userVerification: "required",
   })
   saveChallenge("login", options.challenge)
   return options
@@ -81,14 +109,14 @@ export async function verifyRegistrationResponseWrapper(
   credential: Record<string, unknown>
 ) {
   const { rpID, origin } = rpFromRequest(req)
-  const challenge = consumeChallenge("register")
+  const challenge = consumeChallenge("register", credential)
   if (!challenge) throw new Error("درخواست ثبت منقضی شده — دوباره تلاش کنید")
   return verifyRegistrationResponse({
     response: credential as never,
     expectedChallenge: challenge,
     expectedOrigin: origin,
     expectedRPID: rpID,
-    requireUserVerification: false,
+    requireUserVerification: true,
   })
 }
 
@@ -98,7 +126,7 @@ export async function verifyAuthenticationResponseWrapper(
   credential: Record<string, unknown>
 ) {
   const { rpID, origin } = rpFromRequest(req)
-  const challenge = consumeChallenge("login")
+  const challenge = consumeChallenge("login", credential)
   if (!challenge) throw new Error("درخواست ورود منقضی شده — دوباره تلاش کنید")
   const credId = String((credential as { id?: string }).id ?? "")
   const passkey = credId
@@ -116,7 +144,7 @@ export async function verifyAuthenticationResponseWrapper(
       counter: passkey.counter,
       transports: (passkey.transports?.split(",").filter(Boolean) as never[]) || [],
     },
-    requireUserVerification: false,
+    requireUserVerification: true,
   })
   if (verification.verified) {
     await db.passkey.update({

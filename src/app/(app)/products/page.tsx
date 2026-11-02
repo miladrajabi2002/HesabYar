@@ -161,7 +161,7 @@ function ProductForm({
     }
     setUploading(false)
     if (okCount > 0) {
-      toast.success(`${toPersianDigits(okCount)} عکس پیوست شد 📎`)
+      toast.success(`${toPersianDigits(okCount)} عکس پیوست شد`)
       await refetchPhotos()
     }
     if (failCount > 0) toast.error("برخی فایل‌ها آپلود نشدند — فقط تصویر تا ۸ مگابایت")
@@ -212,7 +212,7 @@ function ProductForm({
           initialStock: initialStock.trim() === "" ? 0 : initialStock.trim(),
           initialStockCostPrice: initialStockCost,
         })
-        toast.success("جنس ویرایش شد ✅")
+        toast.success("جنس ویرایش شد")
       } else {
         const r = await apiPost<{ product: { id: string } }>("/api/products", {
           name: name.trim(),
@@ -222,7 +222,7 @@ function ProductForm({
           initialStock: initialStock.trim() === "" ? 0 : initialStock.trim(),
           initialStockCostPrice: initialStockCost,
         })
-        toast.success("جنس اضافه شد ✅")
+        toast.success("جنس اضافه شد")
         // آپلود عکس‌های انتخاب‌شده — بعد از ساخت جنس؛ خطای عکس مانع ثبت جنس نیست (ADV-05)
         if (pending.length > 0 && r?.product?.id) {
           let okCount = 0
@@ -238,7 +238,7 @@ function ProductForm({
               /* عکس این یکی آپلود نشد — بقیه ادامه می‌یابند */
             }
           }
-          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس جنس پیوست شد 📎`)
+          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس جنس پیوست شد`)
           if (okCount < pending.length) toast.error("برخی عکس‌ها آپلود نشدند")
           setPending([])
         }

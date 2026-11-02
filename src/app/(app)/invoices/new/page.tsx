@@ -166,6 +166,7 @@ function NewInvoicePageInner() {
   const queryClient = useQueryClient()
   const { haptic } = useTelegram()
   const [celebrate, setCelebrate] = useState(false)
+  const [celebration, setCelebration] = useState<{ title: string; subtitle?: string }>({ title: "ثبت شد" })
 
   const [type, setType] = useState<"SALE" | "PURCHASE">(
     searchParams.get("type") === "PURCHASE" ? "PURCHASE" : "SALE"
@@ -233,51 +234,64 @@ function NewInvoicePageInner() {
     editAccountIdRef.current = inv.account?.id ?? null
   }, [editData])
 
-  // IMP-08: ذخیره خودکار پیش‌نویس — اگر مینی‌اپ وسط کار بسته شود اقلام نیمه‌کاره از بین نمی‌روند
+  // IMP-08: ذخیره خودکار پیش‌نویس — اگر مینی‌اپ وسط کار بسته شود اقلام نیمه‌کاره از بین نمی‌روند.
+  // نسخهٔ ۴: پیش‌نویس قبلی خودکار روی فرم ریخته نمی‌شود؛ بنری می‌پرسد «ادامه بدهم یا از نو؟»
+  // و تا تصمیم کاربر، ذخیرهٔ خودکار روی پیش‌نویس قبلی نمی‌نویسد.
   const DRAFT_KEY = "hesabyar-invoice-draft-v1"
   const draftHydratedRef = useRef(false)
+  const [pendingDraft, setPendingDraft] = useState<SavedDraft | null>(null)
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null)
   useEffect(() => {
     if (editId || draftHydratedRef.current) return
     draftHydratedRef.current = true
     try {
       const raw = localStorage.getItem(DRAFT_KEY)
       if (!raw) return
-      const d = JSON.parse(raw) as {
-        type: "SALE" | "PURCHASE"
-        date: string
-        person: Person | null
-        items: DraftItem[]
-        discount: number
-        paidCash: number
-        accountId: string | null
-        checks: DraftCheck[]
-        note: string
-        savedAt: number
-      }
-      // فقط پیش‌نویس‌های تازه (۴۸ ساعت) و غیرخالی
+      const d = JSON.parse(raw) as SavedDraft
+      // فقط پیش‌نویس‌های تازه (۷ روز) و غیرخالی
       const isMeaningful = (d.items?.length ?? 0) > 0 || !!d.person
-      if (!isMeaningful || Date.now() - (d.savedAt ?? 0) > 48 * 3600_000) {
+      if (!isMeaningful || Date.now() - (d.savedAt ?? 0) > 7 * 24 * 3600_000) {
         localStorage.removeItem(DRAFT_KEY)
         return
       }
-      setType(d.type)
-      setDate(d.date || todayKey())
-      setPerson(d.person ?? null)
-      setItems((d.items ?? []).map((it) => ({ ...it, rowId: genRowId() })))
-      setDiscount(d.discount ?? 0)
-      setPaidCash(d.paidCash ?? 0)
-      setChecks(d.checks ?? [])
-      setNote(d.note ?? "")
-      editAccountIdRef.current = d.accountId
-      toast.info("پیش‌نویس ذخیره‌شده بازیابی شد 📝")
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- خواندن یک‌بارهٔ localStorage بعد از mount
+      setPendingDraft(d)
     } catch {
       /* ignore */
     }
   }, [editId])
 
-  // ذخیره‌ی خودکار با debounce
+  const restoreDraft = () => {
+    const d = pendingDraft
+    if (!d) return
+    setType(d.type)
+    setDate(d.date || todayKey())
+    setPerson(d.person ?? null)
+    setItems((d.items ?? []).map((it) => ({ ...it, rowId: genRowId() })))
+    setDiscount(d.discount ?? 0)
+    setPaidCash(d.paidCash ?? 0)
+    setChecks(d.checks ?? [])
+    setNote(d.note ?? "")
+    editAccountIdRef.current = d.accountId
+    const acc = accountsData?.accounts.find((a) => a.id === d.accountId)
+    if (acc) setAccount(acc)
+    setDraftSavedAt(d.savedAt)
+    setPendingDraft(null)
+    haptic.success()
+  }
+  const discardDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY)
+    } catch {
+      /* ignore */
+    }
+    setPendingDraft(null)
+    haptic.tap()
+  }
+
+  // ذخیره‌ی خودکار با debounce — تا وقتی بنر پیش‌نویس قبلی باز است چیزی نوشته نمی‌شود
   useEffect(() => {
-    if (editId) return
+    if (editId || pendingDraft) return
     const t = setTimeout(() => {
       try {
         const meaningful = items.length > 0 || !!person
@@ -298,15 +312,19 @@ function NewInvoicePageInner() {
               savedAt: Date.now(),
             })
           )
+          setDraftSavedAt(Date.now())
         } else {
           localStorage.removeItem(DRAFT_KEY)
+          setDraftSavedAt(null)
         }
       } catch {
         /* ignore */
       }
     }, 600)
     return () => clearTimeout(t)
-  }, [editId, type, date, person, items, discount, paidCash, account, checks, note])
+  }, [editId, pendingDraft, type, date, person, items, discount, paidCash, account, checks, note])
+
+  // حالت ویرایش: اگر تغییری ذخیره‌نشده هست، بستن تب/رفرش هشدار بدهد
 
   // شیت‌ها
   const [personSheet, setPersonSheet] = useState(false)
@@ -329,6 +347,27 @@ function NewInvoicePageInner() {
   })
 
   const accounts = accountsData?.accounts ?? []
+
+  // حالت ویرایش: اگر تغییری ذخیره‌نشده هست، بستن تب/رفرش هشدار بدهد.
+  // خط پایه وقتی گرفته می‌شود که فاکتور و حساب بانکی‌اش کامل روی فرم نشسته باشند.
+  const [editBaseline, setEditBaseline] = useState<string | null>(null)
+  const editSnapshot = JSON.stringify([date, person?.id, items.map((i) => [i.productId, i.quantity, i.unitPrice]), discount, paidCash, account?.id ?? null, checks.length, note])
+  const editInvoiceAccountId = editData?.invoice.account?.id ?? null
+  const editFormReady = !!editId && !!person && (!editInvoiceAccountId || account?.id === editInvoiceAccountId)
+  useEffect(() => {
+    if (editFormReady && editBaseline === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- یک‌بار، بعد از نشستن دادهٔ فاکتور روی فرم
+      setEditBaseline(editSnapshot)
+    }
+  }, [editFormReady, editBaseline, editSnapshot])
+  const editDirty = editBaseline !== null && editBaseline !== editSnapshot
+  const [leavingAfterSave, setLeavingAfterSave] = useState(false)
+  useEffect(() => {
+    if (!editDirty || leavingAfterSave) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [editDirty, leavingAfterSave])
 
   // حساب نقدی فاکتور ویرایشی — پس از لود شدن لیست حساب‌ها انتخاب می‌شود
   useEffect(() => {
@@ -464,24 +503,25 @@ function NewInvoicePageInner() {
         : await apiPost<{ invoice: { id: string; number: number }; excess: number; queuedOffline?: boolean }>("/api/invoices", payload)
       // ADV-10: اگر آفلاین صف شده باشد پاسخ متفاوت است
       if (r && (r as { queuedOffline?: boolean }).queuedOffline) {
-        toast.info("آفلاین هستید — فاکتور ذخیره شد و بعد از اتصال خودکار ثبت می‌شود 📥")
+        toast.info("آفلاین هستید — فاکتور ذخیره شد و بعد از اتصال خودکار ثبت می‌شود")
         haptic.warning()
         localStorage.removeItem(DRAFT_KEY)
         await queryClient.invalidateQueries()
         router.push("/invoices")
         return
       }
-      // MO-02: جشن موفقیت + هپتیک تلگرام
+      // MO-02: فقط یک بازخورد — جشن تیک بزرگ (شمارهٔ فاکتور و مازاد داخل همان) + هپتیک
+      setLeavingAfterSave(true)
+      setCelebration({
+        title: editId
+          ? `فاکتور ${toPersianDigits(r.invoice.number)} ویرایش شد`
+          : `فاکتور ${toPersianDigits(r.invoice.number)} ثبت شد`,
+        subtitle:
+          r.excess > 0
+            ? `مازاد ${formatToman(r.excess)} به علی‌الحساب «${person.name}» رفت`
+            : `${person.name} • ${formatToman(total)}`,
+      })
       setCelebrate(true)
-      haptic.success()
-      toast.success(
-        editId
-          ? `فاکتور شماره ${toPersianDigits(r.invoice.number)} ویرایش شد ✅`
-          : `فاکتور شماره ${toPersianDigits(r.invoice.number)} ثبت شد ✅`
-      )
-      if (r.excess > 0) {
-        toast.info(`مازاد ${formatToman(r.excess)} به علی‌الحساب «${person.name}» اضافه شد`)
-      }
       // آپلود عکس چک‌ها (اگر داشتند) — بعد از ساخت/ویرایش فاکتور؛ مستقل از وضعیت ثبت
       // در ویرایش فقط چک‌های تازه‌اضافه فایل دارند (چک‌های قبلی پیوست سرجایشان می‌ماند)
       const createdChecks = ((r as { invoice?: { checks?: { id: string }[] } }).invoice?.checks ?? []) as { id: string }[]
@@ -505,14 +545,14 @@ function NewInvoicePageInner() {
             /* عکس این چک آپلود نشد — بقیه ادامه می‌یابند */
           }
         }
-        if (uploaded > 0) {
-          toast.success(`${toPersianDigits(uploaded)} عکس چک پیوست شد 📎`)
+        if (uploaded < withPhotos.length) {
+          toast.error(`${toPersianDigits(withPhotos.length - uploaded)} عکس چک آپلود نشد — از صفحهٔ چک دوباره بفرستید`)
         }
       }
       // پاک‌سازی پیش‌نویس بعد از ثبت موفق
       if (!editId) localStorage.removeItem(DRAFT_KEY)
       await queryClient.invalidateQueries()
-      setTimeout(() => router.push(`/invoices/${r.invoice.id}`), 1150)
+      setTimeout(() => router.push(`/invoices/${r.invoice.id}`), 1300)
     } catch (e) {
       haptic.error()
       toast.error(e instanceof Error ? e.message : "ثبت فاکتور ناموفق بود")
@@ -534,6 +574,12 @@ function NewInvoicePageInner() {
 
   return (
     <div className="pb-2">
+      <SuccessCelebration show={celebrate} title={celebration.title} subtitle={celebration.subtitle} />
+      <AnimatePresence initial={false}>
+        {pendingDraft && (
+          <DraftBanner draft={pendingDraft} onRestore={restoreDraft} onDiscard={discardDraft} />
+        )}
+      </AnimatePresence>
       {lockedChecks && (
         <p className="mb-3 rounded-2xl bg-warning/10 px-3 py-2.5 text-[0.7rem] font-medium text-warning">
           این فاکتور چک نقدشده/برگشتی دارد و قابل ویرایش نیست — فقط مشاهده.
@@ -890,12 +936,16 @@ function NewInvoicePageInner() {
       </div>
 
       {/* ───────── نوار چسبان پایین ───────── */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/92 px-4 pb-[calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+7rem)] pt-3 backdrop-blur-md lg:pb-5">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
+      <div className="fixed inset-x-3 z-30 [bottom:max(0.75rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:start-[calc(17rem+1.5rem)] lg:end-6">
+        <div className="glass mx-auto flex max-w-3xl items-center gap-3 rounded-[1.6rem] border p-2.5 ps-4 shadow-float">
           <div className="min-w-0 flex-1">
-            <div className="text-[0.65rem] text-muted-foreground">مبلغ نهایی فاکتور</div>
+            <div className="flex items-center gap-1.5 text-[0.65rem] text-muted-foreground">
+              مبلغ نهایی
+              {!editId && <AutosaveStatus savedAt={draftSavedAt} />}
+              {editDirty && <span className="font-bold text-warning">• ذخیره‌نشده</span>}
+            </div>
             <div className="nums truncate text-base font-extrabold sm:text-lg">
-              {formatToman(total, false)}
+              <AnimatedNumber value={total} />
               <span className="ms-1 text-[0.65rem] font-medium text-muted-foreground">تومان</span>
             </div>
           </div>
@@ -1169,7 +1219,7 @@ function QuickPersonSheet({
         openingBalance:
           openingKind === "none" ? 0 : openingKind === "receivable" ? openingAmount : -openingAmount,
       })
-      toast.success("شخص اضافه شد ✅")
+      toast.success("شخص اضافه شد")
       setName("")
       setPhone("")
       setCompany("")
@@ -1376,7 +1426,7 @@ function ItemPickerSheet({
               /* عکس این یکی آپلود نشد — بقیه ادامه می‌یابند */
             }
           }
-          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس جنس پیوست شد 📎`)
+          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس جنس پیوست شد`)
           if (okCount < pendingPhotos.length) toast.error("برخی عکس‌ها آپلود نشدند")
           setPendingPhotos([])
           await queryClient.invalidateQueries({ queryKey: ["products"] })
@@ -2010,4 +2060,139 @@ export default function NewInvoicePage() {
       <NewInvoicePageInner />
     </Suspense>
   )
+}
+
+
+// ───────────────────────── پیش‌نویس و ذخیره خودکار ─────────────────────────
+
+interface SavedDraft {
+  type: "SALE" | "PURCHASE"
+  date: string
+  person: Person | null
+  items: DraftItem[]
+  discount: number
+  paidCash: number
+  accountId: string | null
+  checks: DraftCheck[]
+  note: string
+  savedAt: number
+}
+
+function relativeTime(ts: number): string {
+  const sec = Math.max(0, Math.round((Date.now() - ts) / 1000))
+  if (sec < 45) return "همین الان"
+  const min = Math.round(sec / 60)
+  if (min < 60) return `${toPersianDigits(min)} دقیقه پیش`
+  const h = Math.round(min / 60)
+  if (h < 24) return `${toPersianDigits(h)} ساعت پیش`
+  return `${toPersianDigits(Math.round(h / 24))} روز پیش`
+}
+
+/** بنر «پیش‌نویس نیمه‌کاره داری» — کاربر تصمیم می‌گیرد ادامه بدهد یا از نو شروع کند */
+function DraftBanner({
+  draft,
+  onRestore,
+  onDiscard,
+}: {
+  draft: SavedDraft
+  onRestore: () => void
+  onDiscard: () => void
+}) {
+  const total = (draft.items ?? []).reduce((s, i) => s + Math.round(i.quantity * i.unitPrice), 0)
+  const parts = [
+    draft.type === "SALE" ? "فروش" : "خرید",
+    draft.person?.name,
+    draft.items?.length ? `${toPersianDigits(draft.items.length)} قلم` : null,
+    total > 0 ? formatToman(total) : null,
+  ].filter(Boolean)
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -12, height: 0 }}
+      animate={{ opacity: 1, y: 0, height: "auto" }}
+      exit={{ opacity: 0, y: -8, height: 0, marginBottom: 0 }}
+      transition={{ type: "spring", stiffness: 420, damping: 36 }}
+      className="mb-4 overflow-hidden"
+    >
+      <div className="flex flex-col gap-3 rounded-3xl border border-primary/25 bg-gradient-to-l from-primary/[0.07] to-primary/[0.02] p-3.5 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="relative grid size-11 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-fab">
+            <FileText className="size-5" />
+            <span className="hy-ping absolute -end-0.5 -top-0.5 size-2.5 rounded-full bg-warning ring-2 ring-card" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-sm font-extrabold">یک فاکتور نیمه‌کاره داری</div>
+            <div className="nums truncate text-[0.7rem] text-muted-foreground">
+              {parts.join(" • ")} — {relativeTime(draft.savedAt)}
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={onRestore} className="h-10 flex-1 rounded-2xl px-5 text-xs font-bold sm:flex-none">
+            ادامه بده
+          </Button>
+          <Button
+            onClick={onDiscard}
+            variant="ghost"
+            className="h-10 flex-1 rounded-2xl px-4 text-xs font-bold text-muted-foreground sm:flex-none"
+          >
+            از نو
+          </Button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+/** وضعیت ذخیره خودکار پیش‌نویس — نقطهٔ سبز + زمان */
+function AutosaveStatus({ savedAt }: { savedAt: number | null }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!savedAt) return
+    const t = setInterval(() => tick((n) => n + 1), 30_000)
+    return () => clearInterval(t)
+  }, [savedAt])
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {savedAt ? (
+        <motion.span
+          key={Math.floor(savedAt / 1000)}
+          initial={{ opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className="inline-flex items-center gap-1 rounded-full bg-income/10 px-1.5 py-px font-semibold text-income"
+        >
+          <svg viewBox="0 0 24 24" className="size-3" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <motion.path d="M5 12.5l4.5 4.5L19 7.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.35 }} />
+          </svg>
+          پیش‌نویس ذخیره شد
+        </motion.span>
+      ) : null}
+    </AnimatePresence>
+  )
+}
+
+/** عدد مبلغ با شمارش نرم هنگام تغییر */
+function AnimatedNumber({ value }: { value: number }) {
+  const [shown, setShown] = useState(value)
+  const fromRef = useRef(value)
+  useEffect(() => {
+    const from = fromRef.current
+    if (from === value) return
+    const start = performance.now()
+    const dur = 380
+    let raf = 0
+    const step = (t: number) => {
+      const p = Math.min(1, (t - start) / dur)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setShown(Math.round(from + (value - from) * eased))
+      if (p < 1) raf = requestAnimationFrame(step)
+      else fromRef.current = value
+    }
+    raf = requestAnimationFrame(step)
+    return () => {
+      cancelAnimationFrame(raf)
+      fromRef.current = value
+    }
+  }, [value])
+  return <>{formatToman(shown, false)}</>
 }

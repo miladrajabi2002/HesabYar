@@ -312,7 +312,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         openingBalance:
           openingKind === "none" ? 0 : openingKind === "receivable" ? openingAmount : -openingAmount,
       })
-      toast.success("ذخیره شد ✅")
+      toast.success("ذخیره شد")
       setEditSheet(false)
       await queryClient.invalidateQueries({ queryKey: ["person", id] })
     } catch (e) {
@@ -374,7 +374,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
             : undefined,
         note: "تسویه از پروفایل شخص",
       })
-      toast.success("تسویه ثبت شد ✅")
+      toast.success("تسویه ثبت شد")
       setCheckRegistered(false)
       setCheckRegName("")
       setCheckRegNationalId("")
@@ -476,7 +476,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     setShareSheet(false)
     try {
       await navigator.clipboard.writeText(text)
-      toast.success("متن صورتحساب کپی شد ✅")
+      toast.success("متن صورتحساب کپی شد")
     } catch {
       toast.error("کپی متن ناموفق بود")
     }
@@ -519,7 +519,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       setUploading(false)
     }
     if (okCount > 0) {
-      toast.success(okCount > 1 ? `${toPersianDigits(okCount)} تصویر اضافه شد ✅` : "تصویر اضافه شد ✅")
+      toast.success(okCount > 1 ? `${toPersianDigits(okCount)} تصویر اضافه شد` : "تصویر اضافه شد")
       await queryClient.invalidateQueries({ queryKey: ["attachments", "PERSON", id] })
     }
   }

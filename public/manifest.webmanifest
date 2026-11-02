@@ -9,8 +9,8 @@
   "orientation": "portrait",
   "dir": "rtl",
   "lang": "fa",
-  "background_color": "#f7f8fa",
-  "theme_color": "#0e7c66",
+  "background_color": "#f4f6f5",
+  "theme_color": "#0b7a62",
   "categories": ["finance", "business", "productivity"],
   "icons": [
     {

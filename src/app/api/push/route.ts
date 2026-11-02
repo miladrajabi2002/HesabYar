@@ -46,7 +46,7 @@ export async function PUT(req: NextRequest) {
       url: "/",
     })
     if (r.sent === 0) return fail("هیچ دستگاهی برای نوتیفیکیشن ثبت نشده است", 400)
-    return ok({ message: `به ${r.sent} دستگاه ارسال شد ✅` })
+    return ok({ message: `به ${r.sent} دستگاه ارسال شد` })
   } catch (e) {
     return serverError(e)
   }

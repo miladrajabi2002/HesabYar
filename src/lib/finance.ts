@@ -283,7 +283,7 @@ export async function periodSummary(start: Date, end: Date): Promise<PeriodSumma
   const [sales, purchases, checks] = await Promise.all([
     db.invoice.aggregate({
       where: { type: "SALE", date: { gte: start, lte: end } },
-      _sum: { total: true },
+      _sum: { total: true, discount: true },
       _count: true,
     }),
     db.invoice.aggregate({
@@ -296,12 +296,14 @@ export async function periodSummary(start: Date, end: Date): Promise<PeriodSumma
       select: { amount: true, direction: true },
     }),
   ])
-  // سود = Σ(قیمت فروش − قیمت تمام‌شده) روی اقلام فروش
+  // سود = Σ(قیمت فروش − قیمت تمام‌شده) روی اقلام فروش − تخفیف فاکتورهای فروش
+  // (تخفیف از درآمد کم شده؛ اگر از سود کم نشود سود بیشتر از واقع گزارش می‌شود)
   const saleItems = await db.invoiceItem.findMany({
     where: { invoice: { type: "SALE", date: { gte: start, lte: end } } },
     select: { quantity: true, unitPrice: true, costPrice: true },
   })
-  const profit = saleItems.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0)
+  const profit =
+    saleItems.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0) - (sales._sum.discount ?? 0)
   return {
     sales: sales._sum.total ?? 0,
     purchases: purchases._sum.total ?? 0,
@@ -317,25 +319,28 @@ export async function periodSummary(start: Date, end: Date): Promise<PeriodSumma
 export async function dailySeries(start: Date, end: Date): Promise<
   { day: string; sales: number; purchases: number; profit: number }[]
 > {
-  const items = await db.invoiceItem.findMany({
-    where: { invoice: { date: { gte: start, lte: end } } },
+  // مبالغ از «مبلغ نهایی فاکتور» (بعد از تخفیف) — هماهنگ با کارت‌های خلاصه؛
+  // سود از اقلام منهای تخفیف همان فاکتور
+  const invoices = await db.invoice.findMany({
+    where: { date: { gte: start, lte: end } },
     select: {
-      quantity: true,
-      unitPrice: true,
-      costPrice: true,
+      type: true,
+      date: true,
       total: true,
-      invoice: { select: { type: true, date: true } },
+      discount: true,
+      items: { select: { quantity: true, unitPrice: true, costPrice: true } },
     },
   })
   const map = new Map<string, { sales: number; purchases: number; profit: number }>()
-  for (const it of items) {
-    const day = jalaliDayKey(it.invoice.date)
+  for (const inv of invoices) {
+    const day = jalaliDayKey(inv.date)
     const entry = map.get(day) || { sales: 0, purchases: 0, profit: 0 }
-    if (it.invoice.type === "SALE") {
-      entry.sales += it.total
-      entry.profit += (it.unitPrice - it.costPrice) * it.quantity
+    if (inv.type === "SALE") {
+      entry.sales += inv.total
+      entry.profit +=
+        inv.items.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0) - inv.discount
     } else {
-      entry.purchases += it.total
+      entry.purchases += inv.total
     }
     map.set(day, entry)
   }

@@ -50,88 +50,130 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   سیستم طراحی حساب‌یار — نسخهٔ ۴
+   رنگ برند: سبز زمردی (اعتماد + پول)؛ هر بخش یک رنگ امضا دارد (--hue-*)
+   سطح‌ها با کنتراست نرم، سایه‌های دولایه و حرکت فنری یکدست
+   ═══════════════════════════════════════════════════════════════ */
 :root {
-  --radius: 0.75rem; /* ۱۲px دکمه و input — کارت ۱۶px و باتم‌شیت ۲۴px */
-  --background: #f7f8fa;
-  --foreground: #111827;
+  --radius: 0.875rem; /* ۱۴px دکمه و input — کارت ۲۰px و باتم‌شیت ۲۸px */
+  --background: #f4f6f5;
+  --foreground: #0f1a17;
   --card: #ffffff;
-  --card-foreground: #111827;
+  --card-foreground: #0f1a17;
   --popover: #ffffff;
-  --popover-foreground: #111827;
-  --primary: #0e7c66;
+  --popover-foreground: #0f1a17;
+  --primary: #0b7a62;
   --primary-foreground: #ffffff;
-  --secondary: #e8f3f0;
-  --secondary-foreground: #0b5a4b;
-  --muted: #f1f3f6;
-  --muted-foreground: #6b7280;
-  --accent: #ecf5f3;
-  --accent-foreground: #0b5a4b;
+  --secondary: #e6f3ef;
+  --secondary-foreground: #075543;
+  --muted: #eef1f0;
+  --muted-foreground: #66726e;
+  --accent: #e9f4f0;
+  --accent-foreground: #075543;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
-  --border: #eceef2;
-  --input: #e3e6ec;
-  --ring: #0e7c66;
-  --success: #16a34a;
+  --border: #e5eae8;
+  --input: #dde3e1;
+  --ring: #0b7a62;
+  --success: #12a150;
   --success-foreground: #ffffff;
   --warning: #f59e0b;
   --warning-foreground: #ffffff;
-  --income: #16a34a;
+  --income: #12a150;
   --expense: #e5484d;
-  --chart-1: #0e7c66;
+  --chart-1: #0b7a62;
   --chart-2: #14b8a6;
   --chart-3: #f59e0b;
   --chart-4: #8b5cf6;
   --chart-5: #ec4899;
   --sidebar: #ffffff;
-  --sidebar-foreground: #111827;
-  --sidebar-primary: #0e7c66;
+  --sidebar-foreground: #0f1a17;
+  --sidebar-primary: #0b7a62;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ecf5f3;
-  --sidebar-accent-foreground: #0b5a4b;
-  --sidebar-border: #eceef2;
-  --sidebar-ring: #0e7c66;
+  --sidebar-accent: #eef4f2;
+  --sidebar-accent-foreground: #075543;
+  --sidebar-border: #e8ecea;
+  --sidebar-ring: #0b7a62;
+
+  /* رنگ امضای بخش‌ها — کاشی‌ها و آیکون‌های رنگی */
+  --hue-dashboard: #0b7a62;
+  --hue-invoices: #0ea5a4;
+  --hue-calendar: #7c5cff;
+  --hue-checks: #f08c00;
+  --hue-people: #2f80ed;
+  --hue-products: #e8590c;
+  --hue-accounts: #4c6ef5;
+  --hue-reports: #d6336c;
+  --hue-settings: #5f6b7a;
+
+  /* حرکت — یک زبان مشترک برای همهٔ انیمیشن‌ها */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* پوستهٔ شیشه‌ای (نوار پایین، هدر، توست) */
+  --glass: rgb(255 255 255 / 0.78);
+  --glass-border: rgb(15 26 23 / 0.07);
+  --island: #0f1a17;
+  --island-foreground: #f4f6f5;
 }
 
 .dark {
-  --background: #0d1117;
-  --foreground: #e6e8eb;
-  --card: #161b22;
-  --card-foreground: #e6e8eb;
-  --popover: #161b22;
-  --popover-foreground: #e6e8eb;
-  --primary: #17a585;
-  --primary-foreground: #ffffff;
-  --secondary: #12241f;
-  --secondary-foreground: #a7f3d0;
-  --muted: #1c2128;
-  --muted-foreground: #9aa4b2;
-  --accent: #12241f;
-  --accent-foreground: #a7f3d0;
-  --destructive: #f8717186;
-  --destructive: #ef5350;
+  --background: #0a0f0e;
+  --foreground: #e8eeec;
+  --card: #121918;
+  --card-foreground: #e8eeec;
+  --popover: #151d1b;
+  --popover-foreground: #e8eeec;
+  --primary: #1fb592;
+  --primary-foreground: #04120e;
+  --secondary: #11241f;
+  --secondary-foreground: #a6f0d9;
+  --muted: #18211f;
+  --muted-foreground: #92a19c;
+  --accent: #14231f;
+  --accent-foreground: #a6f0d9;
+  --destructive: #f05a5e;
   --destructive-foreground: #ffffff;
-  --border: #232a33;
-  --input: #2a323d;
-  --ring: #17a585;
-  --success: #22c55e;
-  --success-foreground: #052e16;
+  --border: #1f2a27;
+  --input: #27332f;
+  --ring: #1fb592;
+  --success: #2fcf74;
+  --success-foreground: #04120e;
   --warning: #fbbf24;
-  --warning-foreground: #451a03;
-  --income: #22c55e;
-  --expense: #ef5350;
-  --chart-1: #17a585;
+  --warning-foreground: #2b1702;
+  --income: #2fcf74;
+  --expense: #f05a5e;
+  --chart-1: #1fb592;
   --chart-2: #2dd4bf;
   --chart-3: #fbbf24;
   --chart-4: #a78bfa;
   --chart-5: #f472b6;
-  --sidebar: #161b22;
-  --sidebar-foreground: #e6e8eb;
-  --sidebar-primary: #17a585;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #12241f;
-  --sidebar-accent-foreground: #a7f3d0;
-  --sidebar-border: #232a33;
-  --sidebar-ring: #17a585;
+  --sidebar: #0e1513;
+  --sidebar-foreground: #e8eeec;
+  --sidebar-primary: #1fb592;
+  --sidebar-primary-foreground: #04120e;
+  --sidebar-accent: #14211e;
+  --sidebar-accent-foreground: #a6f0d9;
+  --sidebar-border: #1b2522;
+  --sidebar-ring: #1fb592;
+
+  --hue-dashboard: #1fb592;
+  --hue-invoices: #22c3c2;
+  --hue-calendar: #9b84ff;
+  --hue-checks: #ffa94d;
+  --hue-people: #5b9cf5;
+  --hue-products: #ff8a4c;
+  --hue-accounts: #748ffc;
+  --hue-reports: #f06595;
+  --hue-settings: #94a3b8;
+
+  --glass: rgb(18 25 24 / 0.78);
+  --glass-border: rgb(255 255 255 / 0.07);
+  --island: #f1f5f3;
+  --island-foreground: #0a0f0e;
+  color-scheme: dark;
 }
 
 @layer base {
@@ -145,6 +187,17 @@
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "ss02";
     text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  button,
+  a,
+  [role="button"] {
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+  }
+  :root {
+    transition: background-color 0.3s var(--ease-out, ease);
   }
   ::selection {
     background: color-mix(in srgb, var(--primary) 22%, transparent);
@@ -166,8 +219,33 @@
 
 @utility shadow-fab {
   box-shadow:
-    0 4px 12px rgba(14, 124, 102, 0.32),
-    0 2px 4px rgba(14, 124, 102, 0.24);
+    0 6px 16px -2px color-mix(in srgb, var(--primary) 42%, transparent),
+    0 2px 4px color-mix(in srgb, var(--primary) 26%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.22);
+}
+
+@utility shadow-float {
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.6) inset,
+    0 2px 6px -1px rgb(15 26 23 / 0.06),
+    0 18px 44px -12px rgb(15 26 23 / 0.22);
+}
+
+/* کاشی آیکون رنگی بخش‌ها — رنگ از --tile می‌آید */
+@utility icon-tile {
+  background:
+    radial-gradient(120% 120% at 20% 0%, rgb(255 255 255 / 0.32), transparent 55%),
+    linear-gradient(160deg, color-mix(in srgb, var(--tile) 86%, white) 0%, var(--tile) 60%, color-mix(in srgb, var(--tile) 82%, black) 100%);
+  color: white;
+  box-shadow:
+    0 6px 14px -4px color-mix(in srgb, var(--tile) 55%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.28);
+}
+
+/* کاشی نرم (پس‌زمینهٔ کم‌رنگ + آیکون رنگی) */
+@utility icon-soft {
+  background: color-mix(in srgb, var(--tile) 13%, transparent);
+  color: var(--tile);
 }
 
 /* اعداد جدولی برای مبالغ */
@@ -208,8 +286,33 @@
   /* گرادیان کارت قهرمان داشبورد */
   .hero-gradient {
     background:
-      radial-gradient(120% 140% at 85% -10%, rgba(255, 255, 255, 0.18) 0%, transparent 55%),
-      linear-gradient(135deg, #0e7c66 0%, #0a6353 55%, #084d41 100%);
+      radial-gradient(90% 120% at 100% 0%, rgb(255 255 255 / 0.2) 0%, transparent 55%),
+      radial-gradient(70% 90% at 0% 100%, rgb(52 211 153 / 0.28) 0%, transparent 60%),
+      linear-gradient(135deg, #0d8a6e 0%, #0a6b56 50%, #074a3d 100%);
+  }
+  .dark .hero-gradient {
+    background:
+      radial-gradient(90% 120% at 100% 0%, rgb(255 255 255 / 0.1) 0%, transparent 55%),
+      radial-gradient(70% 90% at 0% 100%, rgb(52 211 153 / 0.18) 0%, transparent 60%),
+      linear-gradient(135deg, #0b5e4c 0%, #08463a 55%, #05302a 100%);
+  }
+  /* بافت ریز نقطه‌ای روی کارت قهرمان */
+  .hero-gradient::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: radial-gradient(rgb(255 255 255 / 0.09) 1px, transparent 1px);
+    background-size: 14px 14px;
+    mask-image: linear-gradient(to left, black, transparent 70%);
+  }
+
+  .glass {
+    background: var(--glass);
+    border-color: var(--glass-border);
+    backdrop-filter: blur(20px) saturate(1.6);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
   }
 
   .safe-bottom {
@@ -246,142 +349,158 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════
-   نوتیفیکیشن‌های داخلی (sonner) — بازطراحی نسخهٔ ۳
-   شیشه‌ای، آیکون‌های رنگی دایره‌ای، RTL و مناسب موبایل + دسکتاپ
+   اعلان‌های داخلی (sonner) — نسخهٔ ۴: «جزیرهٔ پویا»
+   یک قرص کوچک تیره (در حالت تیره، روشن) بالای صفحه؛ آیکون متحرک،
+   یک خط متن، بدون دکمهٔ بستن (با کشیدن یا خودکار بسته می‌شود).
+   خطاها کمی بلندتر می‌مانند و یک نقطهٔ رنگی دارند.
    ═══════════════════════════════════════════════════════════════ */
 .toaster {
-  --normal-bg: var(--card);
-  --normal-text: var(--foreground);
-  --normal-border: var(--border);
-  --border-radius: 1.15rem;
+  --width: min(92vw, 380px);
+  --border-radius: 999px;
 }
-
 .toaster [data-sonner-toaster] {
   direction: rtl;
 }
 
-/* بدنهٔ اصلی توست */
 .cn-toast {
-  align-items: flex-start !important;
-  gap: 0.7rem !important;
-  padding: 0.85rem 1rem !important;
-  border-radius: 1.15rem !important;
-  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent) !important;
-  background: color-mix(in oklab, var(--card) 88%, transparent) !important;
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  align-items: center !important;
+  gap: 0.6rem !important;
+  min-height: 3rem;
+  /* قرص به اندازهٔ متن، دقیقاً وسط (sonner عرض ثابت می‌دهد) */
+  width: fit-content !important;
+  min-width: 11rem;
+  max-width: var(--width);
+  left: 0 !important;
+  right: 0 !important;
+  margin-inline: auto !important;
+  padding: 0.5rem 0.55rem 0.5rem 1.15rem !important; /* RTL: آیکون سمت راست */
+  border-radius: 1.6rem !important;
+  border: 1px solid rgb(255 255 255 / 0.06) !important;
+  background: color-mix(in oklab, var(--island) 94%, transparent) !important;
+  color: var(--island-foreground) !important;
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
   box-shadow:
-    0 2px 6px -2px rgb(16 24 40 / 0.08),
-    0 12px 28px -8px rgb(16 24 40 / 0.18) !important;
+    0 10px 30px -8px rgb(0 0 0 / 0.35),
+    0 2px 6px rgb(0 0 0 / 0.12) !important;
   font-family: "Vazirmatn", "Segoe UI", Tahoma, sans-serif !important;
 }
-
-/* نوار رنگی کنار توست بر اساس نوع */
-.cn-toast::before {
-  content: "";
-  position: absolute;
-  inset-block: 0.7rem;
-  inset-inline-start: 0;
-  width: 0.28rem;
-  border-radius: 99px;
-  background: var(--muted-foreground);
-  opacity: 0.55;
+.dark .cn-toast {
+  border-color: rgb(0 0 0 / 0.06) !important;
+  box-shadow: 0 10px 30px -8px rgb(0 0 0 / 0.6) !important;
 }
-.cn-toast[data-type="success"]::before { background: var(--income); opacity: 1; }
-.cn-toast[data-type="error"]::before { background: var(--destructive); opacity: 1; }
-.cn-toast[data-type="warning"]::before { background: var(--warning); opacity: 1; }
-.cn-toast[data-type="info"]::before { background: var(--primary); opacity: 1; }
-.cn-toast[data-type="loading"]::before { background: var(--primary); opacity: 0.6; }
 
-/* جایگاه آیکون — دایرهٔ رنگی */
+/* آیکون در دایرهٔ رنگی */
 .cn-toast [data-icon] {
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 2.1rem !important;
-  height: 2.1rem !important;
-  border-radius: 0.85rem !important;
-  margin-inline-start: 0.15rem;
+  display: grid !important;
+  place-items: center;
+  width: 2rem !important;
+  height: 2rem !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
   flex-shrink: 0;
-  margin-top: 0.05rem;
+  background: rgb(255 255 255 / 0.1);
+  color: var(--island-foreground);
 }
-.cn-toast[data-type="success"] [data-icon] { background: color-mix(in oklab, var(--income) 14%, transparent); color: var(--income); }
-.cn-toast[data-type="error"] [data-icon] { background: color-mix(in oklab, var(--destructive) 12%, transparent); color: var(--destructive); }
-.cn-toast[data-type="warning"] [data-icon] { background: color-mix(in oklab, var(--warning) 16%, transparent); color: var(--warning); }
-.cn-toast[data-type="info"] [data-icon] { background: color-mix(in oklab, var(--primary) 12%, transparent); color: var(--primary); }
-.cn-toast[data-type="loading"] [data-icon] { background: color-mix(in oklab, var(--primary) 10%, transparent); color: var(--primary); }
-
+.dark .cn-toast [data-icon] { background: rgb(0 0 0 / 0.06); }
+.cn-toast[data-type="success"] [data-icon] { background: var(--income); color: #fff; }
+.cn-toast[data-type="error"] [data-icon] { background: var(--destructive); color: #fff; }
+.cn-toast[data-type="warning"] [data-icon] { background: var(--warning); color: #fff; }
+.cn-toast[data-type="info"] [data-icon] { background: var(--primary); color: #fff; }
 .cn-toast [data-icon] svg {
-  width: 1.15rem !important;
-  height: 1.15rem !important;
-  stroke-width: 2.2;
+  width: 1.05rem !important;
+  height: 1.05rem !important;
 }
 
-/* متن‌ها */
+.cn-toast [data-content] { gap: 0 !important; min-width: 0; }
 .cn-toast [data-title] {
   font-weight: 700 !important;
-  font-size: 0.82rem !important;
-  line-height: 1.45 !important;
+  font-size: 0.8rem !important;
+  line-height: 1.5 !important;
   text-align: start !important;
-  color: var(--foreground) !important;
+  color: inherit !important;
 }
 .cn-toast [data-description] {
   font-weight: 500 !important;
-  font-size: 0.72rem !important;
-  line-height: 1.55 !important;
+  font-size: 0.7rem !important;
+  line-height: 1.5 !important;
   text-align: start !important;
-  color: var(--muted-foreground) !important;
-  margin-top: 0.1rem !important;
+  color: color-mix(in oklab, var(--island-foreground) 66%, transparent) !important;
 }
 
-/* دکمهٔ بستن */
-.cn-toast [data-close-button] {
-  position: relative !important;
+/* دکمهٔ اکشن (مثل «بازگردانی») — قرص روشن داخل جزیره */
+.cn-toast [data-button] {
   margin-inline-start: auto !important;
-  background: transparent !important;
-  border: 0 !important;
-  color: var(--muted-foreground) !important;
-  opacity: 0.75;
-  transition: opacity 0.15s ease, color 0.15s ease;
-  align-self: flex-start;
+  height: 2rem !important;
+  border-radius: 999px !important;
+  font-weight: 800 !important;
+  font-size: 0.72rem !important;
+  padding: 0 0.85rem !important;
+  font-family: inherit !important;
+  background: var(--island-foreground) !important;
+  color: var(--island) !important;
 }
-.cn-toast [data-close-button]:hover {
-  opacity: 1;
-  background: color-mix(in oklab, var(--muted) 70%, transparent) !important;
-}
+.cn-toast [data-close-button] { display: none !important; }
 
-/* انواع رنگی کامل (richColors) */
-.cn-toast[data-type="success"] {
-  background: color-mix(in oklab, var(--card) 92%, var(--income) 4%) !important;
-  border-color: color-mix(in oklab, var(--income) 30%, transparent) !important;
-}
-.cn-toast[data-type="error"] {
-  background: color-mix(in oklab, var(--card) 92%, var(--destructive) 4%) !important;
-  border-color: color-mix(in oklab, var(--destructive) 28%, transparent) !important;
-}
-.cn-toast[data-type="warning"] {
-  background: color-mix(in oklab, var(--card) 92%, var(--warning) 5%) !important;
-  border-color: color-mix(in oklab, var(--warning) 34%, transparent) !important;
-}
-
-/* موبایل: توست زیر هدر چسبان؛ دسکتاپ: بالای صفحه با فاصلهٔ کمتر */
+/* موبایل: زیر ناحیهٔ امن بالای صفحه؛ دسکتاپ: بالا با فاصلهٔ کم */
 .toaster {
-  --y-offset: 4.6rem;
+  top: max(0.6rem, env(safe-area-inset-top)) !important;
 }
 @media (min-width: 1024px) {
-  .toaster {
-    --y-offset: 1.4rem;
-  }
-}
-.toaster {
-  top: var(--y-offset) !important;
+  .toaster { top: 1.1rem !important; }
 }
 
-/* دکمه‌های اکشن داخل توست (مثل «بازگردانی») */
-.cn-toast [data-button] {
-  border-radius: 0.7rem !important;
-  font-weight: 700 !important;
-  font-size: 0.72rem !important;
-  padding: 0.4rem 0.8rem !important;
-  font-family: inherit !important;
+/* ── آیکون‌های متحرک اعلان (CSS خالص؛ با mount اجرا می‌شوند) ── */
+.hy-toast-icon path,
+.hy-toast-icon line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: hy-draw 0.42s var(--ease-out) 0.12s forwards;
+}
+.hy-toast-icon .hy-d2 { animation-delay: 0.26s; }
+.cn-toast [data-icon] {
+  animation: hy-pop 0.5s var(--ease-spring) both;
+}
+@keyframes hy-draw { to { stroke-dashoffset: 0; } }
+@keyframes hy-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   آیکون‌های متحرک برنامه (components/icons) — حرکت هاور با CSS
+   (حرکت «فعال شدن» با framer-motion داخل خود کامپوننت است)
+   ═══════════════════════════════════════════════════════════════ */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .group:hover .hy-icon[data-motion="pop"] { animation: hy-i-pop 0.5s var(--ease-spring); }
+  .group:hover .hy-icon[data-motion="tilt"] { animation: hy-i-tilt 0.55s var(--ease-out); }
+  .group:hover .hy-icon[data-motion="swing"] { animation: hy-i-swing 0.7s var(--ease-out); transform-origin: 50% 10%; }
+  .group:hover .hy-icon[data-motion="bounce"] { animation: hy-i-bounce 0.55s var(--ease-out); }
+  .group:hover .hy-icon[data-motion="spin"] { animation: hy-i-spin 0.6s var(--ease-out); }
+  .group:hover .hy-icon[data-motion="slide"] { animation: hy-i-slide 0.55s var(--ease-out); }
+}
+@keyframes hy-i-pop { 40% { transform: scale(1.18); } 70% { transform: scale(0.95); } }
+@keyframes hy-i-tilt { 30% { transform: rotate(-12deg); } 65% { transform: rotate(6deg); } }
+@keyframes hy-i-swing { 20% { transform: rotate(14deg); } 45% { transform: rotate(-10deg); } 70% { transform: rotate(5deg); } }
+@keyframes hy-i-bounce { 35% { transform: translateY(-3px); } 65% { transform: translateY(1px); } }
+@keyframes hy-i-spin { to { transform: rotate(90deg); } }
+@keyframes hy-i-slide { 35% { transform: translateX(-3px); } 70% { transform: translateX(1.5px); } }
+
+/* نقطهٔ «زنده» (ذخیره خودکار، آنلاین) */
+@keyframes hy-ping {
+  0% { transform: scale(1); opacity: 0.6; }
+  80%, 100% { transform: scale(2.4); opacity: 0; }
+}
+.hy-ping::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: hy-ping 1.8s var(--ease-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hy-toast-icon path, .hy-toast-icon line { animation: none; stroke-dashoffset: 0; }
+  .cn-toast [data-icon], .hy-ping::after { animation: none; }
 }

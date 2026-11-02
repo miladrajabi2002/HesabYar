@@ -71,3 +71,5 @@ agent-ctx/
 
 # پیوست‌های آپلودشده در زمان اجرا — داده است نه کد
 uploads/
+/.next-dev/
+/.next-check/

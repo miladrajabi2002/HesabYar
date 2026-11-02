@@ -46,6 +46,7 @@ interface Invoice {
   type: string
   date: string
   total: number
+  discount?: number
   paidCash: number
   paidChecks: number
   credit: number
@@ -64,11 +65,12 @@ interface Invoice {
   checks: { id: string; amount: number; status: string }[]
 }
 
-/** سود ناخالص یک فاکتور فروش از روی اسنپ‌شات قیمت تمام‌شده اقلام */
+/** سود یک فاکتور فروش = Σ(فی فروش − قیمت تمام‌شده) × تعداد − تخفیف (هماهنگ با صفحهٔ فاکتور و گزارش‌ها) */
 function invoiceProfit(inv: Invoice): number {
   if (inv.type !== "SALE") return 0
-  return Math.round(
-    inv.items.reduce((s, it) => s + (it.unitPrice - (it.costPrice || 0)) * it.quantity, 0)
+  return (
+    Math.round(inv.items.reduce((s, it) => s + (it.unitPrice - (it.costPrice || 0)) * it.quantity, 0)) -
+    (inv.discount ?? 0)
   )
 }
 
