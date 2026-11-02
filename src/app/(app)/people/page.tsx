@@ -5,7 +5,8 @@
  */
 import { Suspense, useState } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { AnimatePresence, motion } from "framer-motion"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
@@ -18,14 +19,17 @@ import {
   Building2,
   UserRound,
   Download,
+  Phone,
 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
-import { formatTomanCompact } from "@/lib/money"
+import { formatTomanCompact, toLatinDigits } from "@/lib/money"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AmountInput } from "@/components/ui/amount-input"
-import { RoleAvatar } from "@/components/ui/role-avatar"
+import { RoleAvatar, RoleBadge } from "@/components/ui/role-avatar"
+import { Segmented } from "@/components/ui/segmented"
+import { SwipeRow } from "@/components/ui/swipe-row"
 import { cn } from "@/lib/utils"
 
 interface Person {
@@ -38,14 +42,9 @@ interface Person {
   balance: number
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  CUSTOMER: "مشتری",
-  SUPPLIER: "فروشنده",
-  BOTH: "مشتری و فروشنده",
-}
-
 function PeoplePageInner() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
   const [role, setRole] = useState<"ALL" | "CUSTOMER" | "SUPPLIER">("ALL")
@@ -123,92 +122,89 @@ function PeoplePageInner() {
         </div>
       </div>
 
-      {/* خلاصه طلب/بدهی */}
+      {/* خلاصه طلب/بدهی — لمس = فیلتر */}
       <div className="mb-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-warning/25 bg-warning/10 p-3.5">
-          <div className="flex items-center gap-1.5 text-[0.7rem] text-warning">
-            <HandCoins className="size-3.5" />
-            جمع طلب از مشتریان
-          </div>
-          <p className="nums mt-1 text-base font-extrabold text-warning sm:text-lg">
-            {formatTomanCompact(totalReceivable)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-3.5">
-          <div className="flex items-center gap-1.5 text-[0.7rem] text-destructive">
-            <Building2 className="size-3.5" />
-            جمع بدهی به تأمین‌کنندگان
-          </div>
-          <p className="nums mt-1 text-base font-extrabold text-destructive sm:text-lg">
-            {formatTomanCompact(totalPayable)}
-          </p>
-        </div>
+        {(
+          [
+            { key: "debtors", label: "طلب ما از اشخاص", value: totalReceivable, tone: "var(--warning)", icon: HandCoins },
+            { key: "creditors", label: "بدهی ما به اشخاص", value: totalPayable, tone: "var(--role-supplier)", icon: Building2 },
+          ] as const
+        ).map((c, i) => (
+          <motion.button
+            key={c.key}
+            type="button"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06, type: "spring", stiffness: 380, damping: 30 }}
+            onClick={() => setBalanceFilter(balanceFilter === c.key ? "all" : c.key)}
+            style={{ ["--tile" as string]: c.tone }}
+            className={cn(
+              "relative overflow-hidden rounded-3xl border bg-card p-3.5 text-start shadow-card transition-all active:scale-[0.98]",
+              balanceFilter === c.key
+                ? "border-[color:var(--tile)] ring-2 ring-[color:color-mix(in_srgb,var(--tile)_18%,transparent)]"
+                : "border-border/70"
+            )}
+          >
+            <span className="pointer-events-none absolute -end-6 -top-6 size-20 rounded-full bg-[color:var(--tile)] opacity-10 blur-xl" />
+            <div className="flex items-center gap-2 text-[0.68rem] font-bold text-muted-foreground">
+              <span className="icon-soft grid size-6 place-items-center rounded-lg">
+                <c.icon className="size-3.5" />
+              </span>
+              {c.label}
+            </div>
+            <p className="nums mt-2 text-base font-extrabold sm:text-lg" style={{ color: "color-mix(in srgb, var(--tile) 82%, black)" }}>
+              {formatTomanCompact(c.value)}
+            </p>
+            <div className="mt-0.5 text-[0.6rem] text-muted-foreground">
+              {balanceFilter === c.key ? "فیلتر فعال — لمس برای حذف" : "لمس برای دیدن فهرست"}
+            </div>
+          </motion.button>
+        ))}
       </div>
 
       {/* فیلترها */}
-      <div className="mb-4 space-y-2.5">
+      <div className="mb-4 space-y-2">
         <div className="relative">
-          <Search className="absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
+          <Search className="pointer-events-none absolute inset-y-0 start-3.5 my-auto size-4 text-muted-foreground" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="جستجوی نام، موبایل، شرکت یا آدرس…"
+            placeholder="نام، موبایل، شرکت یا آدرس…"
             className="field ps-10"
           />
         </div>
-        <div className="flex gap-2">
-          {(
-            [
-              { key: "ALL", label: "همه" },
-              { key: "CUSTOMER", label: "مشتری‌ها" },
-              { key: "SUPPLIER", label: "فروشنده‌ها" },
-            ] as const
-          ).map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setRole(f.key)}
-              className={cn(
-                "flex-1 rounded-2xl border py-2 text-xs font-bold transition-all",
-                role === f.key
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground"
-              )}
+        <Segmented
+          value={role}
+          onChange={setRole}
+          options={[
+            { key: "ALL", label: "همه" },
+            { key: "CUSTOMER", label: "مشتری‌ها", tone: "var(--role-customer)" },
+            { key: "SUPPLIER", label: "فروشنده‌ها", tone: "var(--role-supplier)" },
+          ]}
+          className="sm:max-w-md"
+        />
+        <AnimatePresence initial={false}>
+          {balanceFilter !== "all" && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
             >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          {(
-            [
-              { key: "all", label: "بدون فیلتر" },
-              { key: "debtors", label: "طلبکاران" },
-              { key: "creditors", label: "بستانکاران" },
-            ] as const
-          ).map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setBalanceFilter(f.key)}
-              className={cn(
-                "flex-1 rounded-2xl border py-2 text-xs font-bold transition-all",
-                balanceFilter === f.key
-                  ? f.key === "debtors"
-                    ? "border-warning bg-warning/10 text-warning"
-                    : f.key === "creditors"
-                      ? "border-destructive bg-destructive/10 text-destructive"
-                      : "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground"
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+              <button
+                type="button"
+                onClick={() => setBalanceFilter("all")}
+                className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-[0.68rem] font-bold text-background"
+              >
+                {balanceFilter === "debtors" ? "فقط بدهکاران به ما" : "فقط طلبکاران از ما"}
+                <span className="opacity-60">✕</span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* لیست */}
+      {/* لیست — کشیدن به چپ: تسویه • کشیدن به راست: تماس */}
       {isLoading ? (
         <div className="flex min-h-[30vh] items-center justify-center">
           <Loader2 className="size-8 animate-spin text-primary" />
@@ -216,57 +212,87 @@ function PeoplePageInner() {
       ) : people.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-border bg-card p-10 text-center">
           <Users className="mx-auto size-10 text-muted-foreground/40" />
-          <p className="mt-3 text-sm font-bold">شخصی ثبت نشده</p>
+          <p className="mt-3 text-sm font-bold">{q || role !== "ALL" || balanceFilter !== "all" ? "کسی با این فیلتر نیست" : "شخصی ثبت نشده"}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             هنگام ثبت فاکتور هم می‌توانید سریع شخص اضافه کنید
           </p>
         </div>
       ) : (
         <div className="space-y-2.5">
-          {people.map((p) => (
-            <Link
+          {people.map((p, i) => (
+            <motion.div
               key={p.id}
-              href={`/people/${p.id}`}
-              className="block rounded-3xl border border-border/70 bg-card p-4 shadow-card transition-all hover:shadow-card-hover active:scale-[0.995]"
+              layout="position"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(i * 0.03, 0.3), type: "spring", stiffness: 380, damping: 32 }}
             >
-              <div className="flex items-center gap-3">
-                <RoleAvatar role={p.role} size={44} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-extrabold">{p.name}</div>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[0.65rem] text-muted-foreground">
-                    <span className="rounded-md bg-muted px-1.5 py-px font-medium">
-                      {ROLE_LABEL[p.role] ?? "—"}
-                    </span>
-                    {p.company && <span className="truncate">{p.company}</span>}
+              <SwipeRow
+                hint={i === 0}
+                trailing={[
+                  {
+                    key: "settle",
+                    label: p.balance < 0 ? "پرداخت" : "دریافت",
+                    icon: <HandCoins className="size-4" />,
+                    color: p.balance < 0 ? "var(--role-supplier)" : "var(--warning)",
+                    onAction: () => router.push(`/people/${p.id}?settle=${p.balance < 0 ? "PAY" : "RECEIVE"}`),
+                  },
+                ]}
+                leading={
+                  p.phone
+                    ? [
+                        {
+                          key: "call",
+                          label: "تماس",
+                          icon: <Phone className="size-4" />,
+                          color: "var(--sale)",
+                          onAction: () => {
+                            window.location.href = `tel:${toLatinDigits(p.phone!)}`
+                          },
+                        },
+                      ]
+                    : []
+                }
+              >
+                <Link
+                  href={`/people/${p.id}`}
+                  className="group block rounded-3xl border border-border/70 bg-card p-3.5 shadow-card transition-shadow hover:shadow-card-hover active:bg-accent/30"
+                >
+                  <div className="flex items-center gap-3">
+                    <RoleAvatar role={p.role} name={p.name} size={46} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-extrabold">{p.name}</div>
+                      <div className="mt-1 flex items-center gap-1.5 text-[0.65rem] text-muted-foreground">
+                        <RoleBadge role={p.role} />
+                        {p.company && <span className="truncate">{p.company}</span>}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-end">
+                      {p.balance !== 0 ? (
+                        <>
+                          <div
+                            className="nums text-sm font-extrabold"
+                            style={{
+                              color: `color-mix(in srgb, ${p.balance > 0 ? "var(--warning)" : "var(--role-supplier)"} 85%, black)`,
+                            }}
+                          >
+                            {formatTomanCompact(Math.abs(p.balance))}
+                          </div>
+                          <div className="mt-0.5 text-[0.6rem] font-bold text-muted-foreground">
+                            {p.balance > 0 ? "طلب ما" : "بدهی ما"}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-income/10 px-2 py-0.5 text-[0.6rem] font-bold text-income">
+                          تسویه ✓
+                        </span>
+                      )}
+                    </div>
+                    <ChevronLeft className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:-translate-x-0.5" />
                   </div>
-                </div>
-                <div className="shrink-0 text-end">
-                  {p.balance !== 0 ? (
-                    <>
-                      <div
-                        className={cn(
-                          "nums text-sm font-extrabold",
-                          p.balance > 0 ? "text-warning" : "text-destructive"
-                        )}
-                      >
-                        {formatTomanCompact(Math.abs(p.balance))}
-                      </div>
-                      <div
-                        className={cn(
-                          "text-[0.6rem] font-bold",
-                          p.balance > 0 ? "text-warning" : "text-destructive"
-                        )}
-                      >
-                        {p.balance > 0 ? "طلب ما" : "بدهی ما"}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-[0.65rem] text-muted-foreground">تسویه ✓</span>
-                  )}
-                </div>
-                <ChevronLeft className="size-4 shrink-0 text-muted-foreground/50" />
-              </div>
-            </Link>
+                </Link>
+              </SwipeRow>
+            </motion.div>
           ))}
         </div>
       )}

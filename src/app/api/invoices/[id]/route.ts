@@ -6,6 +6,7 @@ import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-help
 import { invoiceCreateSchema } from "@/lib/validation"
 import { dayKeyToDate } from "@/lib/jalali"
 import { getAveragePurchasePrice } from "@/lib/finance"
+import { invoiceTotal, itemsSubtotal, paymentSplit } from "@/lib/finance-math"
 import { invoiceInclude } from "@/lib/includes"
 
 export const dynamic = "force-dynamic"
@@ -84,10 +85,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     const removedAttachmentFiles: string[] = []
 
     const checkTotal = data.checks.reduce((s, c) => s + c.amount, 0)
-    const subtotal = data.items.reduce((s, i) => s + Math.round(i.quantity * i.unitPrice), 0)
-    const total = Math.max(0, subtotal - data.discount)
-    const credit = Math.max(0, total - data.paidCash - checkTotal - settledElsewhere)
-    const excess = Math.max(0, data.paidCash + checkTotal - total)
+    const subtotal = itemsSubtotal(data.items)
+    const total = invoiceTotal(subtotal, data.discount)
+    const { credit, excess } = paymentSplit({
+      total,
+      paidCash: data.paidCash,
+      paidChecks: checkTotal,
+      settled: settledElsewhere,
+    })
     const date = dayKeyToDate(data.date)
 
     await db.$transaction(async (tx) => {

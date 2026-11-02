@@ -208,6 +208,12 @@ model Setting {
   adminChatId       String?
   miniAppUrl        String?
   checkDueDaysBefore Int    @default(3) // چند روز قبل سررسید چک خبر بدهد
+  // یادآوری صبحگاهی «چک‌های امروز» با دکمهٔ پاس/برگشت داخل تلگرام
+  morningReminder   Boolean @default(true)
+  morningHour       Int     @default(8) // ساعت تهران (۵ تا ۱۲)
+  // بکاپ خودکار رمزدار (AES-256-GCM) به تلگرام — رمز فقط در دیتابیس سرور می‌ماند
+  telegramBackup    Boolean @default(false)
+  backupPassword    String?
 }
 
 // ───────────────────────── Passkey (ورود بیومتریک Face ID / Touch ID) ─────────────────────────

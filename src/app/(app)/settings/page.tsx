@@ -36,7 +36,6 @@ import { Switch } from "@/components/ui/switch"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useConfirm } from "@/components/ui/confirm"
 import { useTelegram } from "@/hooks/use-telegram"
-import { ThemeToggle } from "@/components/layout/theme-toggle"
 import { cn } from "@/lib/utils"
 
 interface Settings {
@@ -47,6 +46,10 @@ interface Settings {
   hasAdminChatId: boolean
   miniAppUrl: string
   checkDueDaysBefore: number
+  morningReminder: boolean
+  morningHour: number
+  telegramBackup: boolean
+  hasBackupPassword: boolean
 }
 
 interface PasskeyItem {
@@ -428,13 +431,6 @@ export default function SettingsPage() {
     <div className="space-y-4">
       <h1 className="text-lg font-extrabold sm:text-xl">تنظیمات</h1>
 
-      {/* ظاهر */}
-      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-1 text-sm font-bold">ظاهر برنامه</div>
-        <p className="mb-3 text-[0.7rem] text-muted-foreground">پوستهٔ تیره شب‌ها چشم را کمتر خسته می‌کند و باتری گوشی را هم کمتر مصرف می‌کند.</p>
-        <ThemeToggle className="max-w-xs" />
-      </section>
-
       {/* ربات تلگرام */}
       <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
         <div className="mb-3 flex items-center gap-2 text-sm font-bold">
@@ -498,6 +494,9 @@ export default function SettingsPage() {
           </Button>
         </div>
       </section>
+
+      {/* یادآوری صبحگاهی + بکاپ رمزدار تلگرام */}
+      <TelegramAutomation settings={data} onSaved={() => refetch()} />
 
       {/* ورود بیومتریک — Passkey (SEC-01) */}
       <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
@@ -791,5 +790,162 @@ export default function SettingsPage() {
         </div>
       </BottomSheet>
     </div>
+  )
+}
+
+// ───────────────────────── اتوماسیون تلگرام ─────────────────────────
+
+const MORNING_HOURS = [6, 7, 8, 9, 10, 11]
+
+/**
+ * یادآوری صبحگاهی «چک‌های امروز» (با دکمهٔ پاس/برگشت داخل تلگرام)
+ * و بکاپ خودکار رمزدار روزانه به تلگرام.
+ */
+function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [password, setPassword] = useState("")
+  const ready = settings.hasBotToken && settings.hasAdminChatId
+
+  const update = async (patch: Record<string, unknown>, okMsg: string) => {
+    setBusy(Object.keys(patch)[0])
+    try {
+      await apiPut("/api/settings", patch)
+      toast.success(okMsg)
+      onSaved()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ذخیره نشد")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const run = async (action: "morning" | "backup") => {
+    setBusy(action)
+    try {
+      const r = await apiPost<{ message?: string }>("/api/telegram/action", { action })
+      toast.success(r.message || "ارسال شد")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ارسال نشد")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
+      <div className="mb-1 flex items-center gap-2 text-sm font-bold">
+        <Send className="size-4 -scale-x-100 text-primary" />
+        خودکارهای تلگرام
+      </div>
+      <p className="mb-4 text-[0.7rem] leading-5 text-muted-foreground">
+        {ready ? "این‌ها از طریق ربات برای خودتان ارسال می‌شوند." : "اول توکن ربات و شناسهٔ چت را بالا ذخیره کنید."}
+      </p>
+
+      {/* یادآوری صبحگاهی */}
+      <div className="rounded-2xl border border-border/70 p-3.5">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-warning/12 text-lg">☀️</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[0.8rem] font-bold">یادآوری صبحگاهی چک‌های امروز</div>
+            <div className="mt-0.5 text-[0.66rem] leading-5 text-muted-foreground">
+              هر صبح فهرست چک‌های امروز و سررسیدگذشته، هر کدام با دکمهٔ «پاس شد» و «برگشت خورد» — بدون باز کردن اپ.
+            </div>
+          </div>
+          <Switch
+            checked={settings.morningReminder}
+            disabled={busy !== null}
+            onCheckedChange={(v) => update({ morningReminder: v }, v ? "یادآوری صبحگاهی روشن شد" : "یادآوری خاموش شد")}
+          />
+        </div>
+        {settings.morningReminder && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-dashed pt-3">
+            <span className="me-1 text-[0.66rem] font-medium text-muted-foreground">ساعت:</span>
+            {MORNING_HOURS.map((h) => (
+              <button
+                key={h}
+                type="button"
+                disabled={busy !== null}
+                onClick={() => update({ morningHour: h }, `یادآوری ساعت ${toPersianDigits(h)} صبح`)}
+                className={cn(
+                  "nums h-8 min-w-10 rounded-xl px-2 text-xs font-bold transition-all active:scale-95",
+                  settings.morningHour === h ? "bg-primary text-primary-foreground shadow-fab" : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {toPersianDigits(h)}
+              </button>
+            ))}
+            <Button
+              onClick={() => run("morning")}
+              disabled={!ready || busy !== null}
+              variant="ghost"
+              className="ms-auto h-8 rounded-xl px-3 text-[0.68rem] font-bold text-primary hover:bg-primary/10"
+            >
+              {busy === "morning" ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5 -scale-x-100" />}
+              همین حالا بفرست
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* بکاپ رمزدار */}
+      <div className="mt-3 rounded-2xl border border-border/70 p-3.5">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg">🔐</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[0.8rem] font-bold">بکاپ خودکار رمزدار به تلگرام</div>
+            <div className="mt-0.5 text-[0.66rem] leading-5 text-muted-foreground">
+              هر شب ساعت ۳:۳۰ یک نسخهٔ رمزگذاری‌شده (AES-256) از کل داده‌ها برایتان فرستاده می‌شود. بدون رمز قابل باز شدن نیست.
+            </div>
+          </div>
+          <Switch
+            checked={settings.telegramBackup}
+            disabled={busy !== null || (!settings.hasBackupPassword && password.length < 6)}
+            onCheckedChange={(v) =>
+              update(
+                { telegramBackup: v, ...(password.length >= 6 ? { backupPassword: password } : {}) },
+                v ? "بکاپ خودکار تلگرام روشن شد" : "بکاپ تلگرام خاموش شد"
+              ).then(() => setPassword(""))
+            }
+          />
+        </div>
+        <div className="mt-3 space-y-2 border-t border-dashed pt-3">
+          <label className="block text-[0.66rem] font-medium text-muted-foreground">
+            رمز بکاپ {settings.hasBackupPassword ? "(تنظیم شده — برای تغییر رمز جدید بزنید)" : "(حداقل ۶ کاراکتر)"}
+          </label>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={settings.hasBackupPassword ? "••••••••" : "یک رمز قوی که فراموش نکنید"}
+              dir="ltr"
+              className="flex-1 text-sm"
+              autoComplete="new-password"
+            />
+            {password.length >= 6 && (
+              <Button
+                onClick={() => update({ backupPassword: password }, "رمز بکاپ ذخیره شد").then(() => setPassword(""))}
+                disabled={busy !== null}
+                className="h-12 rounded-2xl px-4 text-xs font-bold"
+              >
+                ذخیره رمز
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[0.62rem] leading-4 text-warning">رمز را جایی امن نگه دارید؛ بدون آن بکاپ قابل بازیابی نیست.</p>
+            <Button
+              onClick={() => run("backup")}
+              disabled={!ready || !settings.hasBackupPassword || busy !== null}
+              variant="ghost"
+              className="h-8 shrink-0 rounded-xl px-3 text-[0.68rem] font-bold text-primary hover:bg-primary/10"
+            >
+              {busy === "backup" ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5 -scale-x-100" />}
+              ارسال الان
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }

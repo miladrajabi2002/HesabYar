@@ -4,6 +4,7 @@ import { ok, fail, parseBody, parseQuery, requireApiAuth, serverError } from "@/
 import { invoiceCreateSchema, invoiceFilterSchema } from "@/lib/validation"
 import { dayKeyToDate } from "@/lib/jalali"
 import { getAveragePurchasePrice, nextInvoiceNumber } from "@/lib/finance"
+import { invoiceTotal, itemsGrossProfit, itemsSubtotal, paymentSplit } from "@/lib/finance-math"
 import { invoiceInclude } from "@/lib/includes"
 
 export const dynamic = "force-dynamic"
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
       _sum: { discount: true },
     })
     const totalProfit =
-      Math.round(profitRows.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0)) -
+      Math.round(itemsGrossProfit(profitRows)) -
       (saleDiscounts._sum.discount ?? 0)
 
     return ok({ invoices, total, totalProfit, page: f.page, pageSize: f.pageSize })
@@ -105,12 +106,11 @@ export async function POST(req: NextRequest) {
     if (products.length !== productIds.length) return fail("یکی از اجناس پیدا نشد", 404)
 
     const checkTotal = data.checks.reduce((s, c) => s + c.amount, 0)
-    const subtotal = data.items.reduce((s, i) => s + Math.round(i.quantity * i.unitPrice), 0)
-    const total = Math.max(0, subtotal - data.discount)
-    const credit = Math.max(0, total - data.paidCash - checkTotal)
+    const subtotal = itemsSubtotal(data.items)
+    const total = invoiceTotal(subtotal, data.discount)
     // مازاد پرداخت: نقدی + چک بیشتر از مبلغ فاکتور — نباید گم شود؛
     // به‌عنوان تسویه آزاد (علی‌الحساب) در دفتر شخص ثبت می‌شود.
-    const excess = Math.max(0, data.paidCash + checkTotal - total)
+    const { credit, excess } = paymentSplit({ total, paidCash: data.paidCash, paidChecks: checkTotal })
     const date = dayKeyToDate(data.date)
 
     const invoice = await db.$transaction(async (tx) => {

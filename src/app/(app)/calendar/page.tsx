@@ -5,10 +5,10 @@
  * چک‌های سررسید، فاکتورهای فروش/خرید و تسویه‌ها روی روزهای ماه.
  * API: GET /api/calendar?month=1404-08
  */
-import { useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
 import {
   CalendarDays,
@@ -39,6 +39,7 @@ import { ErrorState } from "@/components/ui/error-state"
 import { useTelegramBackButton } from "@/hooks/use-telegram"
 import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { cn } from "@/lib/utils"
+import { InvoiceTypeMark } from "@/components/ui/type-mark"
 
 // ───────────────────────── انواع ─────────────────────────
 
@@ -99,11 +100,18 @@ const CHECK_STATUS_BADGE: Record<string, string> = {
   CANCELED: "bg-muted text-muted-foreground",
 }
 
+const DOT = {
+  sale: "bg-[color:var(--sale)]",
+  purchase: "bg-[color:var(--purchase)]",
+  check: "bg-[color:var(--hue-checks)]",
+  settle: "bg-[color:var(--role-customer)]",
+} as const
+
 const LEGEND = [
-  { dot: "bg-primary", label: "فاکتور فروش" },
-  { dot: "bg-warning", label: "فاکتور خرید" },
-  { dot: "bg-destructive", label: "سررسید چک" },
-  { dot: "bg-income", label: "تسویه" },
+  { dot: DOT.sale, label: "فروش" },
+  { dot: DOT.purchase, label: "خرید" },
+  { dot: DOT.check, label: "سررسید چک" },
+  { dot: DOT.settle, label: "تسویه" },
 ] as const
 
 /** قاب ردیف چک داخل شیت بر اساس وضعیت */
@@ -125,10 +133,10 @@ function dayKinds(events: DayEvents): Array<{ dot: string; count: number }> {
   const sales = events.invoices.filter((i) => i.type === "SALE").length
   const purchases = events.invoices.filter((i) => i.type === "PURCHASE").length
   const kinds: Array<{ dot: string; count: number }> = []
-  if (events.checks.length > 0) kinds.push({ dot: "bg-destructive", count: events.checks.length })
-  if (sales > 0) kinds.push({ dot: "bg-primary", count: sales })
-  if (purchases > 0) kinds.push({ dot: "bg-warning", count: purchases })
-  if (events.settlements.length > 0) kinds.push({ dot: "bg-income", count: events.settlements.length })
+  if (events.checks.length > 0) kinds.push({ dot: DOT.check, count: events.checks.length })
+  if (sales > 0) kinds.push({ dot: DOT.sale, count: sales })
+  if (purchases > 0) kinds.push({ dot: DOT.purchase, count: purchases })
+  if (events.settlements.length > 0) kinds.push({ dot: DOT.settle, count: events.settlements.length })
   return kinds.slice(0, 3)
 }
 
@@ -139,23 +147,34 @@ function SummaryChip({
   label,
   value,
   sub,
-  classes,
+  tone,
+  i = 0,
 }: {
   icon: ReactNode
   label: string
   value: string
   sub: string
-  classes: string
+  tone: string
+  i?: number
 }) {
   return (
-    <div className={cn("rounded-2xl border p-3.5", classes)}>
-      <div className="flex items-center gap-1.5 text-[0.7rem] font-medium">
-        {icon}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: i * 0.05, type: "spring", stiffness: 380, damping: 30 }}
+      style={{ ["--tile" as string]: tone }}
+      className="relative overflow-hidden rounded-3xl border border-border/70 bg-card p-3.5 shadow-card"
+    >
+      <span className="pointer-events-none absolute -end-5 -top-5 size-16 rounded-full bg-[color:var(--tile)] opacity-10 blur-xl" />
+      <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-muted-foreground">
+        <span className="icon-soft grid size-6 place-items-center rounded-lg">{icon}</span>
         {label}
       </div>
-      <p className="nums mt-1 text-base font-extrabold sm:text-lg">{value}</p>
-      <p className="nums mt-0.5 text-[0.65rem] opacity-70">{sub}</p>
-    </div>
+      <p className="nums mt-2 text-base font-extrabold sm:text-lg" style={{ color: "color-mix(in srgb, var(--tile) 85%, black)" }}>
+        {value}
+      </p>
+      <p className="nums mt-0.5 text-[0.62rem] text-muted-foreground">{sub}</p>
+    </motion.div>
   )
 }
 
@@ -204,6 +223,9 @@ export default function CalendarPage() {
 
   const [month, setMonth] = useState<string>(() => currentMonthKey())
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  // جهت تغییر ماه برای انیمیشن لغزشی (۱ = ماه بعد، −۱ = ماه قبل)
+  const [dir, setDir] = useState(0)
+  const draggedRef = useRef(false)
 
   const {
     data,
@@ -279,14 +301,32 @@ export default function CalendarPage() {
     ? selectedEvents.checks.length + selectedEvents.invoices.length + selectedEvents.settlements.length
     : 0
 
-  const goPrev = () => setMonth(previousMonthKey(month))
-  const goNext = () => setMonth(nextMonthKey(month))
+  const goPrev = () => {
+    setDir(-1)
+    setMonth(previousMonthKey(month))
+  }
+  const goNext = () => {
+    setDir(1)
+    setMonth(nextMonthKey(month))
+  }
+
+  // شدت رنگ پس‌زمینهٔ هر روز بر اساس حجم فروش (نقشهٔ حرارتی ملایم)
+  const maxDaySales = useMemo(() => {
+    if (!data) return 0
+    let m = 0
+    for (const d of Object.values(data.days)) {
+      const v = d.invoices.filter((i) => i.type === "SALE").reduce((a, i) => a + i.total, 0)
+      if (v > m) m = v
+    }
+    return m
+  }, [data])
   const goToday = () => {
     const cur = currentMonthKey()
     if (month === cur) {
       toast.info("همین حالا در ماه جاری هستید")
       return
     }
+    setDir(cur > month ? 1 : -1)
     setMonth(cur)
   }
 
@@ -346,28 +386,32 @@ export default function CalendarPage() {
                 label="چک‌های این ماه"
                 value={formatTomanCompact(summary.pendingChecksSum)}
                 sub={`${toPersianDigits(summary.allChecks)} فقره در ماه • ${toPersianDigits(summary.pendingChecks)} در جریان`}
-                classes="border-destructive/25 bg-destructive/[0.06] text-destructive"
+                tone="var(--hue-checks)"
+                i={0}
               />
               <SummaryChip
                 icon={<ReceiptText className="size-3.5" />}
                 label="فروش این ماه"
                 value={formatTomanCompact(summary.salesSum)}
                 sub={`${toPersianDigits(summary.salesCount)} فاکتور فروش`}
-                classes="border-primary/25 bg-primary/[0.06] text-primary"
+                tone="var(--sale)"
+                i={1}
               />
               <SummaryChip
                 icon={<ShoppingCart className="size-3.5" />}
                 label="خرید این ماه"
                 value={formatTomanCompact(summary.purchaseSum)}
                 sub={`${toPersianDigits(summary.purchaseCount)} فاکتور خرید`}
-                classes="border-warning/30 bg-warning/[0.07] text-warning"
+                tone="var(--purchase)"
+                i={2}
               />
               <SummaryChip
                 icon={<HandCoins className="size-3.5" />}
                 label="تسویه‌های این ماه"
                 value={formatTomanCompact(summary.settleSum)}
                 sub={`${toPersianDigits(summary.settleCount)} تسویه`}
-                classes="border-income/25 bg-income/[0.06] text-income"
+                tone="var(--role-customer)"
+                i={3}
               />
             </div>
           )}
@@ -387,10 +431,38 @@ export default function CalendarPage() {
                 </div>
               ))}
             </div>
+            <AnimatePresence mode="popLayout" initial={false} custom={dir}>
             <motion.div
               key={data.month}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              custom={dir}
+              initial={{ opacity: 0, x: -dir * 48 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: dir * 48 }}
+              transition={{ type: "spring", stiffness: 360, damping: 34 }}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.18}
+              dragDirectionLock
+              onDragStart={() => {
+                draggedRef.current = true
+              }}
+              onClickCapture={(e) => {
+                // کلیک پایانِ کشیدن روی یک روز نباید شیت آن روز را باز کند
+                if (draggedRef.current) {
+                  e.stopPropagation()
+                  e.preventDefault()
+                }
+                draggedRef.current = false
+              }}
+              onPointerDown={() => {
+                draggedRef.current = false
+              }}
+              onDragEnd={(_, info) => {
+                // کشیدن به راست → ماه بعد (تقویم راست‌به‌چپ) • به چپ → ماه قبل
+                if (info.offset.x > 70) goNext()
+                else if (info.offset.x < -70) goPrev()
+              }}
+              style={{ touchAction: "pan-y" }}
               className="grid grid-cols-7 gap-1"
             >
               {cells.map((dayNumber, i) => {
@@ -405,6 +477,9 @@ export default function CalendarPage() {
                 const isToday = data.todayKey === dayKey
                 const isFriday = (data.firstWeekday + dayNumber - 1) % 7 === 6
                 const kinds = events ? dayKinds(events) : []
+                const daySales = events
+                  ? events.invoices.filter((x) => x.type === "SALE").reduce((a, x) => a + x.total, 0)
+                  : 0
 
                 const numberBadge = cn(
                   "grid size-7 shrink-0 place-items-center rounded-full text-xs font-extrabold",
@@ -454,20 +529,27 @@ export default function CalendarPage() {
                     transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.5) }}
                     onClick={() => setSelectedDay(dayKey)}
                     aria-label={`${toPersianDigits(dayNumber)} ${monthKeyLabel(data.month)} — ${toPersianDigits(totalCount)} رویداد`}
+                    whileTap={{ scale: 0.92 }}
+                    style={{
+                      background: `color-mix(in srgb, var(--sale) ${Math.round(4 + (maxDaySales ? (daySales / maxDaySales) * 16 : 0))}%, var(--card))`,
+                    }}
                     className={cn(
-                      "flex min-h-[3.4rem] flex-col items-center justify-between gap-1 rounded-2xl border p-1.5 transition-colors lg:min-h-24",
-                      isToday
-                        ? "border-primary/40 bg-primary/[0.06] ring-2 ring-primary"
-                        : "border-primary/20 bg-primary/[0.05]",
-                      "hover:bg-primary/10 active:bg-primary/15"
+                      "flex min-h-[3.4rem] flex-col items-center justify-between gap-1 rounded-2xl border p-1.5 transition-shadow hover:shadow-card-hover lg:min-h-24",
+                      isToday ? "border-primary/40 ring-2 ring-primary" : "border-[color:color-mix(in_srgb,var(--sale)_18%,transparent)]"
                     )}
                   >
                     <span className={numberBadge}>{toPersianDigits(dayNumber)}</span>
+                    {daySales > 0 && (
+                      <span className="nums hidden text-[0.62rem] font-bold text-[color:color-mix(in_srgb,var(--sale)_80%,black)] lg:block">
+                        {formatTomanCompact(daySales).replace(" تومان", "")}
+                      </span>
+                    )}
                     {indicators}
                   </motion.button>
                 )
               })}
             </motion.div>
+            </AnimatePresence>
 
             {/* راهنمای رنگ‌ها */}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 border-t border-dashed pt-3">
@@ -552,14 +634,7 @@ export default function CalendarPage() {
                       }}
                       className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-start transition-all hover:bg-accent/60 active:scale-[0.99]"
                     >
-                      <span
-                        className={cn(
-                          "flex size-10 shrink-0 items-center justify-center rounded-xl",
-                          inv.type === "PURCHASE" ? "bg-warning/10 text-warning" : "bg-primary/10 text-primary"
-                        )}
-                      >
-                        {inv.type === "PURCHASE" ? <ShoppingCart className="size-5" /> : <ReceiptText className="size-5" />}
-                      </span>
+                      <InvoiceTypeMark type={inv.type} size={40} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold">
                           فاکتور {inv.type === "PURCHASE" ? "خرید" : "فروش"}

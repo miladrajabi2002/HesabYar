@@ -440,8 +440,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             className={cn(
               "flex items-center gap-3 p-4 text-white sm:p-5",
               isSale
-                ? "bg-gradient-to-l from-income to-[#0d8a4a]"
-                : "bg-gradient-to-l from-destructive to-[#c73a3f]"
+                ? "bg-[linear-gradient(120deg,#12b07c,#0b7a62_55%,#075543)]"
+                : "bg-[linear-gradient(120deg,#6b74e8,#4f5bd5_55%,#3a43a8)]"
             )}
           >
             <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/25 backdrop-blur">

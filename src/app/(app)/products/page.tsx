@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Attachment, postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
 import { cn } from "@/lib/utils"
+import { InvoiceTypeMark } from "@/components/ui/type-mark"
 
 interface Product {
   id: string
@@ -665,14 +666,7 @@ function ProductDetailsSheet({
                       href={`/invoices/${m.invoiceId}`}
                       className="flex items-center gap-2.5 rounded-2xl border border-border/60 bg-card px-3 py-2 transition-colors hover:bg-accent/50"
                     >
-                      <span
-                        className={cn(
-                          "flex size-8 shrink-0 items-center justify-center rounded-xl",
-                          isPurchase ? "bg-destructive/10 text-destructive" : "bg-income/10 text-income"
-                        )}
-                      >
-                        {isPurchase ? <ArrowDownLeft className="size-4" /> : <ArrowUpRight className="size-4" />}
-                      </span>
+                      <InvoiceTypeMark type={isPurchase ? "PURCHASE" : "SALE"} size={34} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[0.7rem] font-bold">{m.personName}</div>
                         <div className="nums text-[0.6rem] text-muted-foreground">

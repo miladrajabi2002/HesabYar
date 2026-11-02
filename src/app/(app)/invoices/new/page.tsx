@@ -54,6 +54,8 @@ import {
   CheckCircle2,
   ImagePlus,
   X,
+  ArrowRight,
+  Clock3,
 } from "lucide-react"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
@@ -72,6 +74,9 @@ import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
 import { cn } from "@/lib/utils"
 import { useTelegram, useTelegramBackButton, useTelegramMainButton } from "@/hooks/use-telegram"
 import { SuccessCelebration } from "@/components/ui/success-celebration"
+import { useConfirm } from "@/components/ui/confirm"
+import { Segmented } from "@/components/ui/segmented"
+import { InvoiceTypeMark, InvoiceTypePill } from "@/components/ui/type-mark"
 
 // ───────── تایپ‌ها ─────────
 interface Person {
@@ -389,6 +394,59 @@ function NewInvoicePageInner() {
   const credit = Math.max(0, total - paidCash - checkTotal)
   // مازاد پرداخت: نقدی + چک بیشتر از مبلغ فاکتور → علی‌الحساب شخص می‌رود
   const excess = Math.max(0, paidCash + checkTotal - total)
+  // مبلغی که هنوز نه نقد شده نه چک
+  const remaining = Math.max(0, total - paidCash - checkTotal)
+
+  /** نقدی = باقی‌مانده (+ انتخاب خودکار حساب وقتی فقط یک حساب داریم) */
+  const fillCash = (amount = paidCash + remaining) => {
+    setPaidCash(amount)
+    haptic.tap()
+    if (amount > 0 && !account) {
+      if (accounts.length === 1) setAccount(accounts[0])
+      else setTimeout(() => setAccountSheet(true), 180)
+    }
+  }
+  const [checkPrefill, setCheckPrefill] = useState(0)
+  const openCheckSheet = (amount = remaining) => {
+    setCheckPrefill(amount)
+    setCheckSheet(true)
+  }
+  /** انتخاب سریع روش پرداخت */
+  const quickPay = (kind: "cash" | "check" | "credit") => {
+    if (kind === "cash") {
+      setChecks([])
+      fillCash(total)
+    } else if (kind === "check") {
+      setPaidCash(0)
+      openCheckSheet(Math.max(0, total - checkTotal))
+    } else {
+      setPaidCash(0)
+      setChecks([])
+      haptic.tap()
+    }
+  }
+
+  // ───────── خروج / انصراف ─────────
+  const { confirm } = useConfirm()
+  const leave = async () => {
+    const hasContent = items.length > 0 || !!person
+    if (editId ? editDirty : hasContent) {
+      const okLeave = await confirm({
+        title: editId ? "تغییرات ذخیره نشده" : "از این فاکتور خارج می‌شوی؟",
+        description: editId
+          ? "تغییراتی که دادی ذخیره نمی‌شوند."
+          : "پیش‌نویس ذخیره شده — دفعهٔ بعد که «فاکتور جدید» بزنی می‌توانی ادامه بدهی.",
+        confirmText: editId ? "خروج بدون ذخیره" : "بله، خروج",
+        cancelText: "ماندن",
+        tone: editId ? "danger" : "primary",
+      })
+      if (!okLeave) return
+    }
+    setLeavingAfterSave(true)
+    haptic.tap()
+    if (window.history.length > 1) router.back()
+    else router.push(editId ? `/invoices/${editId}` : "/invoices")
+  }
 
   // ───────── UI-08: اعتبارسنجی زنده ─────────
   const rowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map())
@@ -568,7 +626,7 @@ function NewInvoicePageInner() {
     text: editId ? "ذخیره تغییرات" : "ثبت فاکتور",
     enabled: !!person && items.length > 0 && !saving && !hasErrors,
     loading: saving,
-    color: type === "SALE" ? "#16a34a" : "#e5484d",
+    color: type === "SALE" ? "#0f9f6e" : "#4f5bd5",
     onClick: () => submitRef.current(),
   })
 
@@ -585,43 +643,54 @@ function NewInvoicePageInner() {
           این فاکتور چک نقدشده/برگشتی دارد و قابل ویرایش نیست — فقط مشاهده.
         </p>
       )}
-      {/* نوع فاکتور */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-lg font-extrabold sm:text-xl">{editId ? "ویرایش فاکتور" : "فاکتور جدید"}</h1>
-        {editId ? (
-          <span
-            className={cn(
-              "rounded-2xl px-4 py-2 text-xs font-bold text-white",
-              type === "SALE" ? "bg-income" : "bg-destructive"
-            )}
-          >
-            {type === "SALE" ? "فروش" : "خرید"}
-          </span>
-        ) : (
-          <div className="flex rounded-2xl bg-muted p-1">
-            {(["SALE", "PURCHASE"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => {
-                  setType(t)
-                  setPerson(null)
-                }}
-                className={cn(
-                  "rounded-xl px-4 py-2 text-xs font-bold transition-all",
-                  type === t
-                    ? t === "SALE"
-                      ? "bg-income text-white shadow-sm"
-                      : "bg-destructive text-white shadow-sm"
-                    : "text-muted-foreground"
-                )}
-              >
-                {t === "SALE" ? "فروش" : "خرید"}
-              </button>
-            ))}
-          </div>
-        )}
+      {/* ───────── سربرگ: بازگشت/انصراف + عنوان + نوع ───────── */}
+      <div className="mb-4 flex items-center gap-2.5">
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.9 }}
+          onClick={leave}
+          aria-label="انصراف و بازگشت"
+          className="grid size-11 shrink-0 place-items-center rounded-2xl border border-border bg-card text-muted-foreground shadow-card transition-colors hover:text-foreground"
+        >
+          <ArrowRight className="size-[1.15rem]" />
+        </motion.button>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-lg font-extrabold leading-tight sm:text-xl">
+            {editId ? `ویرایش فاکتور ${editData ? toPersianDigits(editData.invoice.number) : ""}` : "فاکتور جدید"}
+          </h1>
+          <p className="text-[0.66rem] text-muted-foreground">
+            {editId ? "تغییرات بعد از «ذخیره» اعمال می‌شود" : type === "SALE" ? "جنس به مشتری دادم" : "جنس از فروشنده گرفتم"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={leave}
+          className="hidden h-11 shrink-0 items-center rounded-2xl px-4 text-xs font-bold text-muted-foreground transition-colors hover:bg-destructive/8 hover:text-destructive sm:flex"
+        >
+          انصراف
+        </button>
       </div>
+
+      {editId ? (
+        <div className="mb-4">
+          <InvoiceTypePill type={type} className="px-3 py-1 text-xs" />
+        </div>
+      ) : (
+        <Segmented
+          value={type}
+          onChange={(t) => {
+            if (t === type) return
+            haptic.tap()
+            setType(t)
+            setPerson(null)
+          }}
+          options={[
+            { key: "SALE", label: "فاکتور فروش", tone: "var(--sale)", icon: <InvoiceTypeMark type="SALE" size={22} /> },
+            { key: "PURCHASE", label: "فاکتور خرید", tone: "var(--purchase)", icon: <InvoiceTypeMark type="PURCHASE" size={22} /> },
+          ]}
+          className="mb-4 sm:max-w-md"
+        />
+      )}
 
       <div className="space-y-4">
         {/* ───────── شخص ───────── */}
@@ -730,208 +799,250 @@ function NewInvoicePageInner() {
           )}
         </section>
 
-        {/* ───────── پرداخت ───────── */}
+        {/* ───────── تاریخ و تخفیف ───────── */}
         <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
-          <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-            <Banknote className="size-4 text-primary" />
-            پرداخت
-          </div>
-
-          {editId && (editData?.invoice.items.length ?? 0) > 0 && (
-            <p className="mb-3 rounded-xl bg-primary/5 px-3 py-2 text-[0.68rem] leading-5 text-muted-foreground">
-              در حال ویرایش فاکتور شماره {toPersianDigits(editData!.invoice.number)} — تسویه‌های ثبت‌شدهٔ بعدی بابت این فاکتور حفظ می‌شوند.
-            </p>
-          )}
-
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3">
             <div ref={dateFieldRef}>
-              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-                تاریخ فاکتور
-              </label>
+              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">تاریخ فاکتور</label>
               <JalaliDateField value={date} onChange={setDate} />
               {showDateError && (
-                <p className="mt-1 text-[0.65rem] font-medium text-destructive">
-                  تاریخ فاکتور را انتخاب کنید
-                </p>
+                <p className="mt-1 text-[0.65rem] font-medium text-destructive">تاریخ فاکتور را انتخاب کنید</p>
               )}
             </div>
             <div ref={discountFieldRef}>
-              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-                تخفیف (تومان)
-              </label>
+              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">تخفیف (تومان)</label>
               <AmountInput
                 value={discount}
                 onChange={(v) => {
                   setDiscount(v)
                   setDiscountTouched(true)
                 }}
-                placeholder="بدون تخفیف"
+                placeholder="ندارد"
                 showWords={false}
               />
               {showDiscountError && (
-                <p className="mt-1 text-[0.65rem] font-medium text-destructive">
-                  تخفیف بیشتر از جمع اقلام است
-                </p>
+                <p className="mt-1 text-[0.65rem] font-medium text-destructive">تخفیف بیشتر از جمع اقلام است</p>
               )}
             </div>
           </div>
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="یادداشت فاکتور (اختیاری)"
+            className="mt-3 bg-card text-sm"
+          />
+        </section>
 
-          {/* نقدی */}
-          <div className="mt-4 rounded-2xl bg-muted/50 p-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <label className="block text-[0.7rem] font-medium text-muted-foreground">
-                    نقدی پرداخت شد
-                  </label>
-                  {total - checkTotal - paidCash > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setPaidCash(Math.max(0, total - checkTotal))}
-                      className="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-0.5 text-[0.7rem] font-bold text-primary transition-colors hover:bg-primary/20"
-                    >
-                      <Banknote className="size-3.5" />
-                      بقیه را نقدی بده ({formatToman(Math.max(0, total - checkTotal), false)})
-                    </button>
-                  )}
-                </div>
-                <AmountInput value={paidCash} onChange={setPaidCash} placeholder="۰" showWords={false} />
-                {/* حساب هوشمند: بعد از این نقدی، چقدر برای چک/نسیه می‌ماند */}
-                {total > 0 && paidCash > 0 && (
-                  <p className="nums mt-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[0.65rem] leading-4 text-muted-foreground">
-                    {total - checkTotal - paidCash > 0
-                      ? `مانده برای چک یا نسیه: ${formatToman(Math.max(0, total - checkTotal - paidCash), false)} تومان`
-                      : paidCash + checkTotal - total > 0
-                        ? `مازاد نقدی: ${formatToman(paidCash + checkTotal - total, false)} تومان (علی‌الحساب)`
-                        : "با این نقدی، فاکتور کامل تسویه می‌شود ✅"}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-                  از حساب بانکی
-                </label>
-                {paidCash > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setAccountSheet(true)}
-                    className={cn(
-                      "flex h-12 w-full items-center gap-2.5 rounded-2xl border px-3 transition-[color,border-color,box-shadow] hover:border-input/80",
-                      account ? "border-input bg-card" : "border-warning/60 bg-warning/5"
-                    )}
-                  >
-                    {account ? (
-                      <>
-                        <BankLogo bankKey={account.bankKey} size={30} />
-                        <span className="min-w-0 flex-1 truncate text-start text-sm">{account.name}</span>
-                        <span className="nums text-[0.65rem] text-muted-foreground">
-                          {formatToman(account.balance, false)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="w-full text-center text-sm font-medium text-warning">
-                        انتخاب حساب…
-                      </span>
-                    )}
-                  </button>
-                ) : (
-                  <div className="flex h-12 items-center rounded-xl border border-border/50 bg-muted/30 px-3 text-xs text-muted-foreground">
-                    اگر نقدی بدهید، حساب را انتخاب می‌کنید
-                  </div>
-                )}
-              </div>
+        {/* ───────── تسویه: نقد / چک / نسیه ───────── */}
+        <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <span className="grid size-7 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Banknote className="size-4" />
+              </span>
+              {type === "SALE" ? "دریافت پول" : "پرداخت پول"}
             </div>
+            <span className="nums text-[0.7rem] text-muted-foreground">
+              مبلغ فاکتور <b className="text-foreground">{formatToman(total, false)}</b>
+            </span>
           </div>
 
-          {/* چک‌ها */}
-          <div className="mt-3 rounded-2xl bg-muted/50 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-bold">چک‌ها</span>
-              {checks.length > 0 && (
-                <span className="nums text-[0.7rem] text-muted-foreground">
-                  جمع: {formatToman(checkTotal, false)}
-                </span>
-              )}
-            </div>
-            <div className="space-y-2">
-              {checks.map((c, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-card px-3 py-2"
+          {editId && (editData?.invoice.items.length ?? 0) > 0 && (
+            <p className="mb-3 rounded-xl bg-primary/5 px-3 py-2 text-[0.68rem] leading-5 text-muted-foreground">
+              تسویه‌های ثبت‌شدهٔ بعدی بابت این فاکتور حفظ می‌شوند.
+            </p>
+          )}
+
+          {/* نوار تقسیم مبلغ */}
+          <PaymentBar total={total} cash={paidCash} checks={checkTotal} />
+
+          {/* انتخاب سریع */}
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {(
+              [
+                { key: "cash", label: "همه نقد", icon: <Banknote className="size-4" />, active: total > 0 && paidCash >= total && checkTotal === 0 },
+                { key: "check", label: "با چک", icon: <CheckSquare2 className="size-4" />, active: checkTotal > 0 && paidCash === 0 },
+                { key: "credit", label: "نسیه", icon: <Clock3 className="size-4" />, active: total > 0 && paidCash === 0 && checkTotal === 0 },
+              ] as const
+            ).map((o) => (
+              <motion.button
+                key={o.key}
+                type="button"
+                whileTap={{ scale: 0.95 }}
+                disabled={total <= 0}
+                onClick={() => quickPay(o.key)}
+                className={cn(
+                  "flex h-12 items-center justify-center gap-1.5 rounded-2xl border text-xs font-bold transition-all disabled:opacity-40",
+                  o.active
+                    ? "border-primary bg-primary text-primary-foreground shadow-fab"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                )}
+              >
+                {o.icon}
+                {o.label}
+              </motion.button>
+            ))}
+          </div>
+
+          {/* ردیف نقدی */}
+          <div className="mt-4 rounded-2xl border border-border/70 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-bold">
+                <span className="size-2 rounded-full bg-[color:var(--sale)]" />
+                نقدی / کارت‌به‌کارت
+              </span>
+              {remaining > 0 && (
+                <button
+                  type="button"
+                  onClick={() => fillCash()}
+                  className="nums rounded-lg bg-primary/10 px-2 py-1 text-[0.65rem] font-bold text-primary transition-colors hover:bg-primary/20"
                 >
-                  <BankLogo bankKey={c.bankKey} size={30} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="nums text-xs font-bold">{formatToman(c.amount, false)}</span>
-                      {c.isRegistered ? (
-                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-income/10 px-1.5 py-px text-[0.56rem] font-bold text-income">
-                          <BadgeCheck className="size-2.5" />
-                          ثبت‌شده
-                        </span>
-                      ) : (
-                        <span className="shrink-0 rounded-md bg-warning/10 px-1.5 py-px text-[0.56rem] font-bold text-warning">
-                          ثبت‌نشده
-                        </span>
-                      )}
-                      {c.photo && <Paperclip className="size-2.5 shrink-0 text-muted-foreground" />}
-                    </div>
-                    <div className="nums text-[0.65rem] text-muted-foreground">
-                      سررسید: {c.dueDate.replace(/-/g, "/")}
-                      {c.serial ? ` • ${c.serial}` : ""}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setChecks(checks.filter((_, i) => i !== idx))}
-                    className="rounded-lg p-1.5 text-destructive/70 hover:bg-destructive/10"
-                    aria-label="حذف چک"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-              ))}
+                  + باقی‌مانده ({formatToman(remaining, false)})
+                </button>
+              )}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
+              <AmountInput value={paidCash} onChange={setPaidCash} placeholder="۰" showWords={false} />
               <button
                 type="button"
-                onClick={() => setCheckSheet(true)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-primary/30 bg-primary/5 py-2.5 text-xs font-bold text-primary transition-colors hover:bg-primary/10"
+                onClick={() => setAccountSheet(true)}
+                disabled={paidCash <= 0}
+                className={cn(
+                  "flex h-12 w-full items-center gap-2.5 rounded-2xl border px-3 transition-all disabled:cursor-default",
+                  paidCash <= 0
+                    ? "border-dashed border-border/70 bg-muted/30"
+                    : account
+                      ? "border-input bg-card hover:border-primary/40"
+                      : "border-warning/60 bg-warning/5"
+                )}
               >
-                <PlusCircle className="size-4" />
-                افزودن چک
+                {paidCash > 0 && account ? (
+                  <>
+                    <BankLogo bankKey={account.bankKey} size={28} />
+                    <span className="min-w-0 flex-1 truncate text-start text-sm">{account.name}</span>
+                    <span className="text-[0.62rem] text-muted-foreground">تغییر</span>
+                  </>
+                ) : (
+                  <span
+                    className={cn(
+                      "w-full text-center text-xs font-medium",
+                      paidCash > 0 ? "text-[color:color-mix(in_srgb,var(--warning)_75%,black)]" : "text-muted-foreground"
+                    )}
+                  >
+                    {paidCash > 0 ? "به کدام حساب؟ انتخاب کنید" : "حساب بانکی (بعد از مبلغ)"}
+                  </span>
+                )}
               </button>
             </div>
           </div>
 
-          {/* مانده / نسیه / مازاد */}
-          <div
-            className={cn(
-              "mt-3 flex items-center justify-between rounded-2xl px-4 py-3",
-              credit > 0
-                ? "bg-warning/10 text-warning"
-                : excess > 0
-                  ? "bg-primary/10 text-primary"
-                  : "bg-income/10 text-income"
-            )}
-          >
-            <span className="text-xs font-bold">
-              {credit > 0
-                ? "مانده روی حساب (نسیه)"
-                : excess > 0
-                  ? "مازاد پرداخت → علی‌الحساب شخص"
-                  : "تسویه کامل ✅"}
-            </span>
-            <span className="nums text-sm font-extrabold">
-              {formatToman(excess > 0 ? excess : credit, false)}
-            </span>
+          {/* ردیف چک‌ها */}
+          <div className="mt-2.5 rounded-2xl border border-border/70 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-bold">
+                <span className="size-2 rounded-full bg-[color:var(--hue-checks)]" />
+                چک{type === "SALE" ? " دریافتی" : " صادره"}
+              </span>
+              {checks.length > 0 && (
+                <span className="nums text-[0.68rem] text-muted-foreground">جمع {formatToman(checkTotal, false)}</span>
+              )}
+            </div>
+            <div className="space-y-2">
+              <AnimatePresence initial={false}>
+                {checks.map((c, idx) => (
+                  <motion.div
+                    key={c.id ?? `${idx}-${c.amount}-${c.dueDate}`}
+                    layout
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 px-3 py-2">
+                      <BankLogo bankKey={c.bankKey} size={30} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="nums text-xs font-bold">{formatToman(c.amount, false)}</span>
+                          {c.isRegistered ? (
+                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-income/10 px-1.5 py-px text-[0.56rem] font-bold text-income">
+                              <BadgeCheck className="size-2.5" />
+                              ثبت‌شده
+                            </span>
+                          ) : (
+                            <span className="shrink-0 rounded-md bg-warning/10 px-1.5 py-px text-[0.56rem] font-bold text-warning">
+                              ثبت‌نشده
+                            </span>
+                          )}
+                          {c.photo && <Paperclip className="size-2.5 shrink-0 text-muted-foreground" />}
+                        </div>
+                        <div className="nums text-[0.62rem] text-muted-foreground">
+                          سررسید {toPersianDigits(c.dueDate.replace(/-/g, "/"))}
+                          {c.serial ? ` • ${c.serial}` : ""}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setChecks(checks.filter((_, i) => i !== idx))}
+                        className="rounded-lg p-1.5 text-destructive/70 hover:bg-destructive/10"
+                        aria-label="حذف چک"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              <button
+                type="button"
+                onClick={() => openCheckSheet()}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[color:color-mix(in_srgb,var(--hue-checks)_45%,transparent)] py-2.5 text-xs font-bold text-[color:var(--hue-checks)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--hue-checks)_8%,transparent)]"
+              >
+                <PlusCircle className="size-4" />
+                {remaining > 0 ? `افزودن چک (${formatToman(remaining, false)} مانده)` : "افزودن چک"}
+              </button>
+            </div>
           </div>
 
-          <div className="mt-3">
-            <Input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="یادداشت فاکتور (اختیاری)"
-              className="bg-card text-sm"
-            />
-          </div>
+          {/* نتیجه: نسیه / تسویه / مازاد */}
+          <motion.div
+            layout
+            className={cn(
+              "mt-3 flex items-center gap-3 rounded-2xl px-4 py-3",
+              credit > 0 ? "bg-warning/10" : excess > 0 ? "bg-primary/10" : "bg-income/10"
+            )}
+          >
+            <span
+              className={cn(
+                "grid size-9 shrink-0 place-items-center rounded-xl text-white",
+                credit > 0 ? "bg-warning" : excess > 0 ? "bg-primary" : "bg-income"
+              )}
+            >
+              {credit > 0 ? <Clock3 className="size-4" /> : excess > 0 ? <Sparkles className="size-4" /> : <CheckCircle2 className="size-4" />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-extrabold">
+                {total === 0
+                  ? "هنوز مبلغی نیست"
+                  : credit > 0
+                    ? `نسیه — به حساب «${person?.name ?? personTypeLabel}» می‌رود`
+                    : excess > 0
+                      ? "مازاد پرداخت → علی‌الحساب شخص"
+                      : "تسویه کامل"}
+              </div>
+              <div className="text-[0.62rem] text-muted-foreground">
+                {credit > 0
+                  ? "بعداً از صفحهٔ شخص یا فاکتور تسویه می‌کنید"
+                  : excess > 0
+                    ? "در تراز شخص لحاظ می‌شود"
+                    : total > 0
+                      ? "چیزی باقی نمانده"
+                      : "اول جنس اضافه کنید"}
+              </div>
+            </div>
+            <span className="nums shrink-0 text-base font-extrabold">
+              <AnimatedNumber value={excess > 0 ? excess : credit} />
+            </span>
+          </motion.div>
         </section>
       </div>
 
@@ -954,7 +1065,9 @@ function NewInvoicePageInner() {
             disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors}
             className={cn(
               "h-12 rounded-2xl px-8 text-sm font-bold shadow-fab",
-              type === "SALE" ? "bg-income hover:bg-income/90" : "bg-destructive hover:bg-destructive/90"
+              type === "SALE"
+                ? "bg-[color:var(--sale)] hover:bg-[color:var(--sale)]/90"
+                : "bg-[color:var(--purchase)] hover:bg-[color:var(--purchase)]/90"
             )}
           >
             {saving ? (
@@ -1041,6 +1154,7 @@ function NewInvoicePageInner() {
         paidCash={paidCash}
         existingChecksTotal={checkTotal}
         invoiceType={type}
+        initialAmount={checkPrefill}
       />
     </div>
   )
@@ -1739,6 +1853,7 @@ function QuickCheckSheet({
   paidCash,
   existingChecksTotal,
   invoiceType,
+  initialAmount = 0,
 }: {
   open: boolean
   onClose: () => void
@@ -1750,8 +1865,14 @@ function QuickCheckSheet({
   /** جمع چک‌های افزوده‌شده تا الان */
   existingChecksTotal: number
   invoiceType: "SALE" | "PURCHASE"
+  /** مبلغ پیشنهادی هنگام باز شدن (معمولاً باقی‌ماندهٔ فاکتور) */
+  initialAmount?: number
 }) {
   const [amount, setAmount] = useState(0)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- پر کردن مبلغ پیشنهادی با هر بار باز شدن
+    if (open && initialAmount > 0) setAmount(initialAmount)
+  }, [open, initialAmount])
   const [bankKey, setBankKey] = useState("mellat")
   const [serial, setSerial] = useState("")
   const [dueDate, setDueDate] = useState("")
@@ -2195,4 +2316,40 @@ function AnimatedNumber({ value }: { value: number }) {
     }
   }, [value])
   return <>{formatToman(shown, false)}</>
+}
+
+/** نوار تقسیم مبلغ فاکتور: نقد (سبز) • چک (نارنجی) • نسیه (راه‌راه) */
+function PaymentBar({ total, cash, checks }: { total: number; cash: number; checks: number }) {
+  const base = Math.max(total, cash + checks, 1)
+  const cashPct = (Math.min(cash, base) / base) * 100
+  const checkPct = (Math.min(checks, base - Math.min(cash, base)) / base) * 100
+  const creditPct = Math.max(0, 100 - cashPct - checkPct)
+  const seg = { type: "spring" as const, stiffness: 260, damping: 30 }
+  return (
+    <div>
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+        <motion.span className="h-full bg-[color:var(--sale)]" animate={{ width: `${cashPct}%` }} transition={seg} />
+        <motion.span className="h-full bg-[color:var(--hue-checks)]" animate={{ width: `${checkPct}%` }} transition={seg} />
+        <motion.span
+          className="h-full bg-[repeating-linear-gradient(-45deg,color-mix(in_srgb,var(--warning)_55%,transparent)_0_4px,color-mix(in_srgb,var(--warning)_25%,transparent)_4px_8px)]"
+          animate={{ width: `${total > 0 ? creditPct : 0}%` }}
+          transition={seg}
+        />
+      </div>
+      <div className="nums mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[0.62rem] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span className="size-1.5 rounded-full bg-[color:var(--sale)]" />
+          نقد {formatToman(cash, false)}
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="size-1.5 rounded-full bg-[color:var(--hue-checks)]" />
+          چک {formatToman(checks, false)}
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="size-1.5 rounded-full bg-warning/60" />
+          نسیه {formatToman(Math.max(0, total - cash - checks), false)}
+        </span>
+      </div>
+    </div>
+  )
 }

@@ -313,4 +313,9 @@ export const settingsSchema = z.object({
     .transform((v) =>
       v === undefined || v === "" ? 3 : Math.max(0, Math.min(30, Number(toLatinDigits(String(v)).replace(/[^\d]/g, "")) || 3))
     ),
+  morningReminder: z.boolean().optional(),
+  morningHour: z.coerce.number().int().min(5, "ساعت یادآوری از ۵ صبح").max(12, "ساعت یادآوری تا ۱۲ ظهر").optional(),
+  telegramBackup: z.boolean().optional(),
+  /** رمز بکاپ تلگرام — خالی یعنی بدون تغییر */
+  backupPassword: z.string().trim().max(100).optional(),
 })

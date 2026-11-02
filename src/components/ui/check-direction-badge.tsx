@@ -23,7 +23,9 @@ export function CheckDirectionBadge({
     <span
       className={cn(
         "flex shrink-0 flex-col items-center justify-center gap-px rounded-xl px-1.5 py-1 font-bold leading-none",
-        received ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive",
+        received
+          ? "bg-[color:color-mix(in_srgb,var(--sale)_11%,transparent)] text-[color:var(--sale)]"
+          : "bg-[color:color-mix(in_srgb,var(--purchase)_11%,transparent)] text-[color:var(--purchase)]",
         className
       )}
     >

@@ -9,20 +9,10 @@ import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
-import {
   TrendingUp,
   TrendingDown,
   Wallet,
   HandCoins,
-  ShoppingCart,
   ReceiptText,
   ArrowUpLeftSquare,
   CheckSquare2,
@@ -32,13 +22,15 @@ import {
 } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, formatTomanParts, toPersianDigits } from "@/lib/money"
-import { formatJalaliShort, dayKeyToDate, JALALI_MONTHS, jalaliOf, nowTehran } from "@/lib/jalali"
+import { formatJalaliShort, JALALI_MONTHS, jalaliOf, nowTehran } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { DashboardSkeleton } from "@/components/ui/page-skeletons"
 import { ErrorState } from "@/components/ui/error-state"
 import { RoleAvatar } from "@/components/ui/role-avatar"
 import { cn } from "@/lib/utils"
+import { InvoiceTypeMark } from "@/components/ui/type-mark"
+import { TrendChart, CollectionDonut, type Collection } from "@/components/charts/finance-charts"
 import { useUIStore } from "@/lib/ui-store"
 
 interface DashboardData {
@@ -68,6 +60,7 @@ interface DashboardData {
     pendingIssuedTotal: number
   }
   series: { day: string; sales: number; purchases: number; profit: number }[]
+  monthCollection: Collection
   recentInvoices: {
     id: string
     number: number
@@ -230,12 +223,6 @@ export default function DashboardPage() {
   const j = jalaliOf(now)
   const monthLabel = `${JALALI_MONTHS[j.jm - 1]} ${toPersianDigits(j.jy)}`
 
-  // سری نمودار — راست به چپ
-  const chartData = [...data.series].reverse().map((s) => ({
-    ...s,
-    label: formatJalaliShort(dayKeyToDate(s.day)),
-  }))
-
   return (
     <div className="space-y-4">
       {/* ───────── کارت قهرمان ───────── */}
@@ -339,74 +326,17 @@ export default function DashboardPage() {
           {/* نمودار */}
           <motion.div custom={2} variants={stagger} initial="hidden" animate="visible">
             <SectionCard
-              title="فروش و سود ۳۰ روز اخیر"
+              title="روند ۳۰ روز اخیر"
               icon={<TrendingUp className="size-4 text-primary" />}
             >
-              <div className="h-56 w-full sm:h-64" dir="ltr">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="gSales" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.28} />
-                        <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="gProfit" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--chart-3)" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="var(--chart-3)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis
-                      reversed
-                      dataKey="label"
-                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                      tickLine={false}
-                      axisLine={false}
-                      interval="preserveStartEnd"
-                      minTickGap={28}
-                    />
-                    <YAxis
-                      orientation="right"
-                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={44}
-                      tickFormatter={(v: number) =>
-                        toPersianDigits(
-                          v >= 1_000_000
-                            ? `${+(v / 1_000_000).toFixed(1)}م`
-                            : v >= 1000
-                              ? `${Math.round(v / 1000)}ه`
-                              : String(v)
-                        )
-                      }
-                    />
-                    <Tooltip
-                      formatter={(value: number, name: string) => [
-                        formatToman(value),
-                        name === "sales" ? "فروش" : "سود",
-                      ]}
-                      labelFormatter={(l) => `${l}`}
-                      contentStyle={{
-                        borderRadius: 14,
-                        border: "1px solid #eceef2",
-                        fontSize: 12,
-                        direction: "rtl",
-                      }}
-                    />
-                    <Area type="monotone" dataKey="sales" stroke="var(--chart-1)" strokeWidth={2.2} fill="url(#gSales)" />
-                    <Area type="monotone" dataKey="profit" stroke="var(--chart-3)" strokeWidth={2} fill="url(#gProfit)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-2 flex items-center justify-center gap-4 text-[0.7rem] text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-primary" /> فروش
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-warning" /> سود
-                </span>
-              </div>
+              <TrendChart series={data.series} height={210} />
+            </SectionCard>
+          </motion.div>
+
+          {/* وصول فروش این ماه */}
+          <motion.div custom={2.5} variants={stagger} initial="hidden" animate="visible">
+            <SectionCard title={`وصول فروش ${monthLabel}`} icon={<HandCoins className="size-4 text-primary" />}>
+              <CollectionDonut data={data.monthCollection} />
             </SectionCard>
           </motion.div>
 
@@ -430,7 +360,7 @@ export default function DashboardPage() {
                     href={`/people/${p.id}`}
                     className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-accent/60"
                   >
-                    <RoleAvatar role={p.role} size={30} className="rounded-xl" />
+                    <RoleAvatar role={p.role} name={p.name} size={32} />
                     <span className="min-w-0 flex-1 truncate text-xs font-medium">{p.name}</span>
                     <span className="nums text-xs font-bold text-warning">
                       {formatTomanCompact(p.balance)}
@@ -463,7 +393,7 @@ export default function DashboardPage() {
                     href={`/people/${p.id}`}
                     className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-accent/60"
                   >
-                    <RoleAvatar role={p.role} size={30} className="rounded-xl" />
+                    <RoleAvatar role={p.role} name={p.name} size={32} />
                     <span className="min-w-0 flex-1 truncate text-xs font-medium">{p.name}</span>
                     <span className="nums text-xs font-bold text-destructive">
                       {formatTomanCompact(Math.abs(p.balance))}
@@ -493,18 +423,7 @@ export default function DashboardPage() {
                     href={`/invoices/${inv.id}`}
                     className="flex items-center gap-3 rounded-2xl border border-border/60 px-3 py-2.5 transition-colors hover:bg-accent/50"
                   >
-                    <span
-                      className={cn(
-                        "flex size-9 shrink-0 items-center justify-center rounded-xl",
-                        inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
-                      )}
-                    >
-                      {inv.type === "SALE" ? (
-                        <ReceiptText className="size-[1.1rem]" strokeWidth={2.1} />
-                      ) : (
-                        <ShoppingCart className="size-[1.1rem]" strokeWidth={2.1} />
-                      )}
-                    </span>
+                    <InvoiceTypeMark type={inv.type} size={38} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate text-xs font-bold">{inv.person.name}</span>

@@ -18,13 +18,11 @@ import { formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { GlobalSearch } from "@/components/search/global-search"
 import { BrandLogo } from "@/components/ui/brand-logo"
-import { ThemeToggle } from "@/components/layout/theme-toggle"
+import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import {
   IconApps,
   IconLogout,
   IconPlus,
-  IconPurchase,
-  IconSale,
   IconSearch,
   SECTION_META,
   type SectionHref,
@@ -172,7 +170,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="space-y-2 border-t border-sidebar-border p-3">
-            <ThemeToggle />
             <div className="flex items-center gap-2">
               <div className="nums flex-1 truncate rounded-xl px-2 text-[0.7rem] text-muted-foreground">{today}</div>
               <button
@@ -210,7 +207,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center">
-            <ThemeToggle compact />
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
@@ -306,34 +302,55 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="grid grid-cols-2 gap-3">
           {(
             [
-              { type: "SALE", title: "فروش", sub: "جنس فروختم", Icon: IconSale, hue: "var(--income)" },
-              { type: "PURCHASE", title: "خرید", sub: "جنس خریدم", Icon: IconPurchase, hue: "var(--expense)" },
+              {
+                type: "SALE",
+                title: "فروش",
+                sub: "جنس دادم، پول گرفتم",
+                tone: "var(--sale)",
+                flow: ["+ پول", "− جنس"],
+              },
+              {
+                type: "PURCHASE",
+                title: "خرید",
+                sub: "جنس گرفتم، پول دادم",
+                tone: "var(--purchase)",
+                flow: ["+ جنس", "− پول"],
+              },
             ] as const
           ).map((o, i) => (
             <motion.button
               key={o.type}
               type="button"
-              initial={reduceMotion ? false : { opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 + i * 0.06, type: "spring", stiffness: 420, damping: 30 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 18, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 0.06 + i * 0.07, type: "spring", stiffness: 420, damping: 28 }}
+              whileHover={{ y: -3 }}
               whileTap={{ scale: 0.96 }}
               onClick={() => {
                 closeAddSheet()
                 go(`/invoices/new?type=${o.type}`)
               }}
-              style={{ ["--tile" as string]: o.hue }}
-              className="group flex flex-col items-start gap-3 rounded-3xl border border-border bg-card p-4 text-start transition-colors hover:border-[color:var(--tile)]"
+              style={{ ["--tile" as string]: o.tone }}
+              className="group relative flex flex-col items-start overflow-hidden rounded-[1.6rem] border border-[color:color-mix(in_srgb,var(--tile)_22%,transparent)] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--tile)_9%,white),color-mix(in_srgb,var(--tile)_3%,white))] p-4 text-start shadow-card transition-shadow hover:shadow-card-hover"
             >
-              <span className="icon-tile grid size-12 place-items-center rounded-2xl">
-                <o.Icon active className="size-6" strokeWidth={2.4} />
-              </span>
-              <span>
-                <span className="block text-base font-extrabold">فاکتور {o.title}</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">{o.sub}</span>
+              {/* هالهٔ رنگی پشت */}
+              <span className="pointer-events-none absolute -end-8 -top-8 size-28 rounded-full bg-[color:var(--tile)] opacity-[0.12] blur-2xl transition-transform duration-500 group-hover:scale-125" />
+              <InvoiceTypeMark type={o.type} size={52} className="relative" />
+              <span className="relative mt-3.5 block text-[1.05rem] font-black">فاکتور {o.title}</span>
+              <span className="relative mt-0.5 block text-[0.7rem] text-muted-foreground">{o.sub}</span>
+              {/* جریان جنس/پول */}
+              <span className="relative mt-3 flex items-center gap-1.5 text-[0.6rem] font-bold">
+                <span className="nums rounded-full bg-[color:color-mix(in_srgb,var(--tile)_13%,transparent)] px-2 py-0.5 text-[color:var(--tile)]">
+                  {o.flow[0]}
+                </span>
+                <span className="nums rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{o.flow[1]}</span>
               </span>
             </motion.button>
           ))}
         </div>
+        <p className="mt-3 text-center text-[0.65rem] text-muted-foreground">
+          پیش‌نویس خودکار ذخیره می‌شود — هر وقت خواستی ادامه بده
+        </p>
       </BottomSheet>
 
       {/* ───────── شیت «بیشتر» ───────── */}
@@ -372,14 +389,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             )
           })}
         </div>
-        <ThemeToggle className="mt-5" />
         <button
           type="button"
           onClick={() => {
             setMoreSheetOpen(false)
             logout()
           }}
-          className="group mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl bg-destructive/8 py-3 text-xs font-bold text-destructive transition-colors hover:bg-destructive/12 active:scale-[0.98]"
+          className="group mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-destructive/8 py-3 text-xs font-bold text-destructive transition-colors hover:bg-destructive/12 active:scale-[0.98]"
         >
           <IconLogout className="size-4" />
           خروج از حساب

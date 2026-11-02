@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
  * این توکن امضاشده ۱۰ دقیقه‌ای دسترسی چاپ می‌دهد.
  */
 const printTokenSchema = z.object({
-  resource: z.enum(["invoice"], { message: "منبع چاپ نامعتبر است" }),
+  resource: z.enum(["invoice", "person"], { message: "منبع چاپ نامعتبر است" }),
   id: z.string().min(1, "شناسهٔ رکورد لازم است"),
 })
 

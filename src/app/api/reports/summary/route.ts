@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { ok, fail, parseQuery, requireApiAuth, serverError } from "@/lib/api-helpers"
-import { periodSummary, dailySeries } from "@/lib/finance"
+import { periodSummary, dailySeries, salesCollection } from "@/lib/finance"
 import {
   nowTehran,
   startOfJalaliDay,
@@ -10,6 +10,7 @@ import {
   endOfJalaliMonth,
   monthKeyRange,
   parseMonthKey,
+  addJalaliMonths,
 } from "@/lib/jalali"
 import { z } from "zod"
 
@@ -54,10 +55,25 @@ export async function GET(req: NextRequest) {
       start = startOfJalaliMonth(now)
     }
 
-    const [summary, series] = await Promise.all([
+    // دورهٔ قبلِ هم‌اندازه برای مقایسه (ماه ← ماه قبل، هفته ← هفتهٔ قبل، روز ← دیروز)
+    const DAY = 86_400_000
+    let prevStart: Date
+    let prevEnd: Date
+    if (q.month || q.period === "month") {
+      prevStart = startOfJalaliMonth(addJalaliMonths(start, -1))
+      prevEnd = new Date(start.getTime() - 1)
+    } else {
+      const len = startOfJalaliDay(end).getTime() - start.getTime() + DAY
+      prevStart = new Date(start.getTime() - len)
+      prevEnd = new Date(start.getTime() - 1)
+    }
+
+    const [summary, series, prev, collection] = await Promise.all([
       periodSummary(start, end),
       // نمودار روزانه بازه (حداکثر ۶۰ روز)
       dailySeries(start, end),
+      periodSummary(prevStart, prevEnd),
+      salesCollection(start, end),
     ])
 
     // پرفروش‌ترین اجناس و بهترین مشتری‌ها
@@ -117,6 +133,8 @@ export async function GET(req: NextRequest) {
       start,
       end,
       summary,
+      prev,
+      collection,
       series,
       topSold,
       topCustomers: topCustomerList,

@@ -73,3 +73,4 @@ agent-ctx/
 uploads/
 /.next-dev/
 /.next-check/
+/.next-staging/

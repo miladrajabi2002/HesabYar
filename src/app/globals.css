@@ -1,7 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/* پوستهٔ تیره حذف شد — فقط پوستهٔ روشن */
+@custom-variant dark (&:is(.hy-no-dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -56,6 +57,7 @@
    سطح‌ها با کنتراست نرم، سایه‌های دولایه و حرکت فنری یکدست
    ═══════════════════════════════════════════════════════════════ */
 :root {
+  color-scheme: light;
   --radius: 0.875rem; /* ۱۴px دکمه و input — کارت ۲۰px و باتم‌شیت ۲۸px */
   --background: #f4f6f5;
   --foreground: #0f1a17;
@@ -107,6 +109,12 @@
   --hue-reports: #d6336c;
   --hue-settings: #5f6b7a;
 
+  /* نوع فاکتور و نقش اشخاص (نسخهٔ ۵) — فروش زمردی، خرید نیلی (نه قرمز خطا) */
+  --sale: #0f9f6e;
+  --purchase: #4f5bd5;
+  --role-customer: #2f80ed;
+  --role-supplier: #8b5cf6;
+
   /* حرکت — یک زبان مشترک برای همهٔ انیمیشن‌ها */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -119,62 +127,6 @@
   --island-foreground: #f4f6f5;
 }
 
-.dark {
-  --background: #0a0f0e;
-  --foreground: #e8eeec;
-  --card: #121918;
-  --card-foreground: #e8eeec;
-  --popover: #151d1b;
-  --popover-foreground: #e8eeec;
-  --primary: #1fb592;
-  --primary-foreground: #04120e;
-  --secondary: #11241f;
-  --secondary-foreground: #a6f0d9;
-  --muted: #18211f;
-  --muted-foreground: #92a19c;
-  --accent: #14231f;
-  --accent-foreground: #a6f0d9;
-  --destructive: #f05a5e;
-  --destructive-foreground: #ffffff;
-  --border: #1f2a27;
-  --input: #27332f;
-  --ring: #1fb592;
-  --success: #2fcf74;
-  --success-foreground: #04120e;
-  --warning: #fbbf24;
-  --warning-foreground: #2b1702;
-  --income: #2fcf74;
-  --expense: #f05a5e;
-  --chart-1: #1fb592;
-  --chart-2: #2dd4bf;
-  --chart-3: #fbbf24;
-  --chart-4: #a78bfa;
-  --chart-5: #f472b6;
-  --sidebar: #0e1513;
-  --sidebar-foreground: #e8eeec;
-  --sidebar-primary: #1fb592;
-  --sidebar-primary-foreground: #04120e;
-  --sidebar-accent: #14211e;
-  --sidebar-accent-foreground: #a6f0d9;
-  --sidebar-border: #1b2522;
-  --sidebar-ring: #1fb592;
-
-  --hue-dashboard: #1fb592;
-  --hue-invoices: #22c3c2;
-  --hue-calendar: #9b84ff;
-  --hue-checks: #ffa94d;
-  --hue-people: #5b9cf5;
-  --hue-products: #ff8a4c;
-  --hue-accounts: #748ffc;
-  --hue-reports: #f06595;
-  --hue-settings: #94a3b8;
-
-  --glass: rgb(18 25 24 / 0.78);
-  --glass-border: rgb(255 255 255 / 0.07);
-  --island: #f1f5f3;
-  --island-foreground: #0a0f0e;
-  color-scheme: dark;
-}
 
 @layer base {
   * {
@@ -242,6 +194,21 @@
     inset 0 1px 0 rgb(255 255 255 / 0.28);
 }
 
+/* نشان نوع فاکتور — کاشی نرم گرادیانی با لبهٔ روشن */
+.type-mark {
+  color: var(--tile);
+  background:
+    radial-gradient(120% 90% at 25% 0%, rgb(255 255 255 / 0.9), transparent 60%),
+    linear-gradient(155deg, color-mix(in srgb, var(--tile) 10%, white), color-mix(in srgb, var(--tile) 20%, white));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--tile) 18%, transparent),
+    0 4px 10px -4px color-mix(in srgb, var(--tile) 40%, transparent);
+}
+.type-mark-glyph { transition: transform 0.35s var(--ease-spring); }
+@media (hover: hover) {
+  .group:hover .type-mark-glyph { transform: translateY(-1.5px) scale(1.06); }
+}
+
 /* کاشی نرم (پس‌زمینهٔ کم‌رنگ + آیکون رنگی) */
 @utility icon-soft {
   background: color-mix(in srgb, var(--tile) 13%, transparent);
@@ -289,12 +256,6 @@
       radial-gradient(90% 120% at 100% 0%, rgb(255 255 255 / 0.2) 0%, transparent 55%),
       radial-gradient(70% 90% at 0% 100%, rgb(52 211 153 / 0.28) 0%, transparent 60%),
       linear-gradient(135deg, #0d8a6e 0%, #0a6b56 50%, #074a3d 100%);
-  }
-  .dark .hero-gradient {
-    background:
-      radial-gradient(90% 120% at 100% 0%, rgb(255 255 255 / 0.1) 0%, transparent 55%),
-      radial-gradient(70% 90% at 0% 100%, rgb(52 211 153 / 0.18) 0%, transparent 60%),
-      linear-gradient(135deg, #0b5e4c 0%, #08463a 55%, #05302a 100%);
   }
   /* بافت ریز نقطه‌ای روی کارت قهرمان */
   .hero-gradient::after {
@@ -385,10 +346,6 @@
     0 2px 6px rgb(0 0 0 / 0.12) !important;
   font-family: "Vazirmatn", "Segoe UI", Tahoma, sans-serif !important;
 }
-.dark .cn-toast {
-  border-color: rgb(0 0 0 / 0.06) !important;
-  box-shadow: 0 10px 30px -8px rgb(0 0 0 / 0.6) !important;
-}
 
 /* آیکون در دایرهٔ رنگی */
 .cn-toast [data-icon] {
@@ -402,7 +359,6 @@
   background: rgb(255 255 255 / 0.1);
   color: var(--island-foreground);
 }
-.dark .cn-toast [data-icon] { background: rgb(0 0 0 / 0.06); }
 .cn-toast[data-type="success"] [data-icon] { background: var(--income); color: #fff; }
 .cn-toast[data-type="error"] [data-icon] { background: var(--destructive); color: #fff; }
 .cn-toast[data-type="warning"] [data-icon] { background: var(--warning); color: #fff; }
@@ -500,7 +456,21 @@
   animation: hy-ping 1.8s var(--ease-out) infinite;
 }
 
+/* ورود پلکانی ردیف‌های لیست (CSS خالص، بدون JS) — با --i ترتیب داده می‌شود */
+@keyframes hy-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.hy-rise {
+  animation: hy-rise 0.45s var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 10) * 35ms);
+}
+
+/* درخشش اسکلتی ملایم */
+@keyframes hy-shimmer { to { background-position: -200% 0; } }
+
 @media (prefers-reduced-motion: reduce) {
+  .hy-rise { animation: none; }
   .hy-toast-icon path, .hy-toast-icon line { animation: none; stroke-dashoffset: 0; }
   .cn-toast [data-icon], .hy-ping::after { animation: none; }
 }

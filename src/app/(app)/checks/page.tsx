@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { motion } from "framer-motion"
 import {
   CheckSquare2,
   Loader2,
@@ -39,6 +40,8 @@ import { Input } from "@/components/ui/input"
 import { useConfirm } from "@/components/ui/confirm"
 import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { cn } from "@/lib/utils"
+import { Segmented } from "@/components/ui/segmented"
+import { SwipeRow } from "@/components/ui/swipe-row"
 
 interface Check {
   id: string
@@ -401,81 +404,76 @@ export default function ChecksPage() {
     <div>
       <h1 className="mb-4 text-lg font-extrabold sm:text-xl">چک‌ها</h1>
 
-      {/* خلاصه */}
+      {/* خلاصه — دو کارت در جریان با نوار نسبت */}
       {summary && (
         <div className="mb-4 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3.5">
-            <div className="flex items-center gap-1.5 text-[0.7rem] text-primary">
-              <CheckDirectionBadge direction="RECEIVED" size="sm" />
-              چک دریافت‌شده در جریان
-            </div>
-            <p className="nums mt-1 text-base font-extrabold text-primary sm:text-lg">
-              {formatTomanCompact(summary.pendingReceived)}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-3.5">
-            <div className="flex items-center gap-1.5 text-[0.7rem] text-destructive">
-              <CheckDirectionBadge direction="ISSUED" size="sm" />
-              چک صادره در جریان
-            </div>
-            <p className="nums mt-1 text-base font-extrabold text-destructive sm:text-lg">
-              {formatTomanCompact(summary.pendingIssued)}
-            </p>
-          </div>
+          {(
+            [
+              { key: "RECEIVED", label: "دریافتی در جریان", value: summary.pendingReceived, tone: "var(--sale)" },
+              { key: "ISSUED", label: "صادره در جریان", value: summary.pendingIssued, tone: "var(--purchase)" },
+            ] as const
+          ).map((c, i) => {
+            const all = summary.pendingReceived + summary.pendingIssued
+            return (
+              <motion.button
+                key={c.key}
+                type="button"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06, type: "spring", stiffness: 380, damping: 30 }}
+                onClick={() => setDirection(direction === c.key ? "ALL" : c.key)}
+                style={{ ["--tile" as string]: c.tone }}
+                className={cn(
+                  "rounded-3xl border bg-card p-3.5 text-start shadow-card transition-all active:scale-[0.98]",
+                  direction === c.key
+                    ? "border-[color:var(--tile)] ring-2 ring-[color:color-mix(in_srgb,var(--tile)_18%,transparent)]"
+                    : "border-border/70"
+                )}
+              >
+                <div className="flex items-center gap-2 text-[0.68rem] font-bold text-muted-foreground">
+                  <CheckDirectionBadge direction={c.key} size="sm" />
+                  {c.label}
+                </div>
+                <p className="nums mt-2 text-base font-extrabold text-[color:var(--tile)] sm:text-lg">
+                  {formatTomanCompact(c.value)}
+                </p>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    className="h-full rounded-full bg-[color:var(--tile)]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${all ? (c.value / all) * 100 : 0}%` }}
+                    transition={{ delay: 0.15, type: "spring", stiffness: 120, damping: 20 }}
+                  />
+                </div>
+              </motion.button>
+            )
+          })}
         </div>
       )}
 
       {/* فیلترها */}
-      <div className="mb-4 space-y-2.5">
-        <div className="flex gap-2">
-          {(
-            [
-              { key: "ALL", label: "همه" },
-              { key: "RECEIVED", label: "دریافتی" },
-              { key: "ISSUED", label: "صادره" },
-            ] as const
-          ).map((d) => (
-            <button
-              key={d.key}
-              type="button"
-              onClick={() => setDirection(d.key)}
-              className={cn(
-                "flex-1 rounded-2xl border py-2 text-xs font-bold transition-all",
-                direction === d.key
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground"
-              )}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          {(
-            [
-              { key: "PENDING", label: "در جریان" },
-              { key: "CASHED", label: "پاس‌شده" },
-              { key: "BOUNCED", label: "برگشت خورده" },
-              { key: "ALL", label: "همه" },
-            ] as const
-          ).map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => setStatus(s.key)}
-              className={cn(
-                "flex-1 rounded-2xl border py-2 text-xs font-bold transition-all",
-                status === s.key
-                  ? s.key === "BOUNCED"
-                    ? "border-destructive bg-destructive/10 text-destructive"
-                    : "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground"
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+      <div className="mb-4 space-y-2">
+        <Segmented
+          value={status}
+          onChange={setStatus}
+          options={[
+            { key: "PENDING", label: "در جریان", tone: "var(--hue-checks)" },
+            { key: "CASHED", label: "پاس‌شده", tone: "var(--income)" },
+            { key: "BOUNCED", label: "برگشتی", tone: "var(--destructive)" },
+            { key: "ALL", label: "همه" },
+          ]}
+        />
+        <Segmented
+          size="sm"
+          value={direction}
+          onChange={setDirection}
+          options={[
+            { key: "ALL", label: "دریافتی و صادره" },
+            { key: "RECEIVED", label: "دریافتی", tone: "var(--sale)" },
+            { key: "ISSUED", label: "صادره", tone: "var(--purchase)" },
+          ]}
+          className="sm:max-w-md"
+        />
       </div>
 
       {/* لیست */}
@@ -493,13 +491,63 @@ export default function ChecksPage() {
         </div>
       ) : (
         <div className="space-y-2.5">
-          {checks.map((c) => {
+          {checks.map((c, i) => {
             const daysLeft = diffJalaliDays(today, new Date(c.dueDate))
             const overdue = c.status === "PENDING" && daysLeft < 0
             const soon = c.status === "PENDING" && daysLeft >= 0 && daysLeft <= 3
+            const swipeable = c.status === "PENDING"
             return (
-              <button
+              <motion.div
                 key={c.id}
+                layout="position"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(i * 0.035, 0.35), type: "spring", stiffness: 380, damping: 32 }}
+              >
+              <SwipeRow
+                hint={i === 0 && swipeable}
+                disabled={!swipeable}
+                trailing={[
+                  {
+                    key: "cash",
+                    label: c.direction === "RECEIVED" ? "پاس شد" : "پرداخت شد",
+                    icon: <CheckCircle2 className="size-4" />,
+                    color: "var(--income)",
+                    onAction: () => {
+                      if (!c.isRegistered) {
+                        toast.error("چک ثبت‌نشده قابل پاس شدن نیست — اول ثبتش کنید")
+                        setActionSheet(c)
+                        return
+                      }
+                      setActionSheet(c)
+                      setAccountSheet(true)
+                    },
+                  },
+                ]}
+                leading={[
+                  {
+                    key: "bounce",
+                    label: "برگشت",
+                    icon: <Ban className="size-4" />,
+                    color: "var(--destructive)",
+                    onAction: async () => {
+                      if (!c.isRegistered) {
+                        toast.error("چک ثبت‌نشده قابل برگشت نیست — اول ثبتش کنید")
+                        setActionSheet(c)
+                        return
+                      }
+                      const okBounce = await confirm({
+                        title: "برگشت چک",
+                        description: `چک ${formatToman(c.amount)} «${c.person.name}» برگشت خورده؟ مبلغ به حساب شخص برمی‌گردد.`,
+                        confirmText: "بله، برگشت خورد",
+                        tone: "danger",
+                      })
+                      if (okBounce) bounceCheck(c)
+                    },
+                  },
+                ]}
+              >
+              <button
                 type="button"
                 onClick={() => c.status === "PENDING" && setActionSheet(c)}
                 className={cn(
@@ -608,6 +656,8 @@ export default function ChecksPage() {
                   </div>
                 )}
               </button>
+              </SwipeRow>
+              </motion.div>
             )
           })}
         </div>

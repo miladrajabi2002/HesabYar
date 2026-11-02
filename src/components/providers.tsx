@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { ThemeProvider } from "next-themes"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { TelegramProvider } from "@/hooks/use-telegram"
@@ -25,6 +24,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   // موبایل: با باز شدن کیبورد، فیلد فوکوس‌شده در دید می‌ماند
   // (داخل باتم‌شیت‌ها فیلدهای پایینی پشت کیبورد پنهان می‌شدند)
+  // پوستهٔ تیره حذف شد — کلاس/کلید قدیمی next-themes پاک می‌شود
+  useEffect(() => {
+    document.documentElement.classList.remove("dark")
+    document.documentElement.style.colorScheme = "light"
+    try {
+      localStorage.removeItem("theme")
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   useEffect(() => {
     let t1: number | undefined
     let t2: number | undefined
@@ -55,7 +65,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <TelegramProvider>
@@ -68,6 +77,5 @@ export function Providers({ children }: { children: React.ReactNode }) {
         </TelegramProvider>
       </TooltipProvider>
     </QueryClientProvider>
-    </ThemeProvider>
   )
 }

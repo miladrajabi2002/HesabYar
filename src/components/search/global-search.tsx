@@ -6,10 +6,11 @@
  * باز شدن: دکمه جستجو در هدر + میانبر Ctrl+K / Cmd+K
  */
 import { useEffect, useRef, useState } from "react"
+import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
-import { Search, FileText, Users, Package, CheckSquare2, Loader2, CornerDownLeft, ShoppingCart, ReceiptText, ArrowDownToLine, ArrowUpFromLine } from "lucide-react"
+import { Search, FileText, Users, Package, CheckSquare2, Loader2, CornerDownLeft, ArrowDownToLine, ArrowUpFromLine } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatTomanCompact } from "@/lib/money"
 import { formatJalaliShort } from "@/lib/jalali"
@@ -131,13 +132,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                     onClick={() => go(`/invoices/${inv.id}`)}
                     className="flex w-full items-center gap-3 rounded-2xl border border-border/60 px-3 py-2.5 text-start transition-colors hover:bg-accent/50"
                   >
-                    <span
-                      className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
-                        inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
-                      }`}
-                    >
-                      {inv.type === "SALE" ? <ReceiptText className="size-4" /> : <ShoppingCart className="size-4" />}
-                    </span>
+                    <InvoiceTypeMark type={inv.type} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-bold">
                         {inv.person.name} — فاکتور {inv.number}
@@ -170,7 +165,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                     onClick={() => go(`/people/${p.id}`)}
                     className="flex w-full items-center gap-3 rounded-2xl border border-border/60 px-3 py-2.5 text-start transition-colors hover:bg-accent/50"
                   >
-                    <RoleAvatar role={p.role} size={36} />
+                    <RoleAvatar role={p.role} name={p.name} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-bold">{p.name}</span>
                       <span className="nums block truncate text-[0.65rem] text-muted-foreground">

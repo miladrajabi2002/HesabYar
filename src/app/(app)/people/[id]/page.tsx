@@ -9,6 +9,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { motion } from "framer-motion"
 import {
   ArrowRight,
   ArrowDownLeft,
@@ -26,13 +27,21 @@ import {
   ImagePlus,
   Images,
   MessageCircle,
+  FileDown,
   Share2,
   X,
   BadgeCheck,
 } from "lucide-react"
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toLatinDigits, toPersianDigits } from "@/lib/money"
-import { formatJalaliShort, formatJalaliWithWeekday } from "@/lib/jalali"
+import {
+  addJalaliMonths,
+  formatJalaliShort,
+  formatJalaliWithWeekday,
+  jalaliDayKey,
+  jalaliOf,
+  startOfJalaliMonth,
+} from "@/lib/jalali"
 import { BANKS, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
@@ -41,7 +50,8 @@ import { JalaliDateField } from "@/components/ui/jalali-date-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { RoleAvatar } from "@/components/ui/role-avatar"
+import { InvoiceTypeMark } from "@/components/ui/type-mark"
+import { RoleAvatar, RoleBadge } from "@/components/ui/role-avatar"
 import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfirm } from "@/components/ui/confirm"
@@ -168,6 +178,33 @@ function normalizeWaPhone(raw: string): string | null {
   return digits.length >= 8 ? digits : null
 }
 
+/** بازه‌های آمادهٔ صورتحساب — کلید روز شمسی «jy-jm-jd» */
+type StatementPreset = { key: string; title: string; sub: string; range: () => { from?: string; to?: string } }
+const STATEMENT_PRESETS: StatementPreset[] = [
+  { key: "all", title: "کل حساب", sub: "از اولین معامله تا امروز", range: () => ({}) },
+  {
+    key: "month",
+    title: "این ماه",
+    sub: "از اول ماه جاری",
+    range: () => ({ from: jalaliDayKey(startOfJalaliMonth(new Date())) }),
+  },
+  {
+    key: "3m",
+    title: "۳ ماه اخیر",
+    sub: "با مانده از قبل",
+    range: () => ({ from: jalaliDayKey(startOfJalaliMonth(addJalaliMonths(new Date(), -2))) }),
+  },
+  {
+    key: "year",
+    title: "امسال",
+    sub: "از اول فروردین",
+    range: () => {
+      const j = jalaliOf(new Date())
+      return { from: `${j.jy}-1-1` }
+    },
+  },
+]
+
 export default function PersonPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
@@ -271,6 +308,25 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       urls.clear()
     }
   }, [])
+
+  /* ── صورتحساب PDF ── */
+  const [statementSheet, setStatementSheet] = useState(false)
+  const [statementBusy, setStatementBusy] = useState<string | null>(null)
+
+  // کشیدن «تسویه» روی ردیف لیست اشخاص → ?settle=RECEIVE|PAY
+  const settleDeepLinkRef = useRef(false)
+  useEffect(() => {
+    if (!data || settleDeepLinkRef.current) return
+    settleDeepLinkRef.current = true
+    const want = new URLSearchParams(window.location.search).get("settle")
+    if (want !== "RECEIVE" && want !== "PAY") return
+    window.history.replaceState(null, "", `/people/${id}`)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- یک‌بار، باز کردن شیت از لینک
+    setDirection(want)
+    setMethod("CASH")
+    setAmount(0)
+    setSettleSheet(true)
+  }, [data, id])
 
   if (isLoading || !data) {
     return (
@@ -384,6 +440,24 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       toast.error(e instanceof Error ? e.message : "خطا در ثبت تسویه")
     } finally {
       setSaving(false)
+    }
+  }
+
+  /* ── صورتحساب PDF: صفحهٔ چاپ مستقل با لوگو (توکن کوتاه‌عمر؛ داخل تلگرام در مرورگر باز می‌شود) ── */
+  const openStatement = async (preset: StatementPreset) => {
+    setStatementBusy(preset.key)
+    try {
+      const r = await apiPost<{ token: string }>("/api/print-token", { resource: "person", id })
+      const qs = new URLSearchParams({ t: r.token })
+      const range = preset.range()
+      if (range.from) qs.set("from", range.from)
+      if (range.to) qs.set("to", range.to)
+      setStatementSheet(false)
+      openExternal(`${window.location.origin}/api/people/${id}/statement?${qs}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "آماده‌سازی صورتحساب ناموفق بود")
+    } finally {
+      setStatementBusy(null)
     }
   }
 
@@ -575,13 +649,11 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       {/* کارت شخص */}
       <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
         <div className="flex items-center gap-3">
-          <RoleAvatar role={p.role} size={56} />
+          <RoleAvatar role={p.role} name={p.name} size={60} />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-extrabold sm:text-lg">{p.name}</h1>
             <div className="mt-1 flex flex-wrap gap-1.5 text-[0.65rem] text-muted-foreground">
-              <span className="rounded-md bg-muted px-1.5 py-px font-medium">
-                {p.role === "CUSTOMER" ? "مشتری" : p.role === "SUPPLIER" ? "فروشنده" : "مشتری و فروشنده"}
-              </span>
+              <RoleBadge role={p.role} />
             </div>
           </div>
         </div>
@@ -667,15 +739,24 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           </Button>
         </div>
 
-        {/* اشتراک صورتحساب (ADV-06) */}
-        <Button
-          onClick={() => setShareSheet(true)}
-          variant="outline"
-          className="mt-2 h-11 w-full rounded-2xl border-primary/30 text-xs font-bold text-primary hover:bg-primary/10"
-        >
-          <MessageCircle className="size-4" />
-          اشتراک گذاری
-        </Button>
+        {/* صورتحساب PDF با لوگو + اشتراک متنی (ADV-06) */}
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Button
+            onClick={() => setStatementSheet(true)}
+            className="h-11 rounded-2xl text-xs font-bold shadow-fab"
+          >
+            <FileDown className="size-4" />
+            صورتحساب PDF
+          </Button>
+          <Button
+            onClick={() => setShareSheet(true)}
+            variant="outline"
+            className="h-11 rounded-2xl border-primary/30 text-xs font-bold text-primary hover:bg-primary/10"
+          >
+            <MessageCircle className="size-4" />
+            اشتراک متنی
+          </Button>
+        </div>
       </div>
 
       {/* فاکتورها */}
@@ -691,18 +772,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               href={`/invoices/${inv.id}`}
               className="flex items-center gap-3 rounded-2xl border border-border/60 px-3 py-2.5 transition-colors hover:bg-accent/50"
             >
-              <span
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-xl",
-                  inv.type === "SALE" ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
-                )}
-              >
-                {inv.type === "SALE" ? (
-                  <ArrowUpRight className="size-4" strokeWidth={2.3} />
-                ) : (
-                  <ArrowDownLeft className="size-4" strokeWidth={2.3} />
-                )}
-              </span>
+              <InvoiceTypeMark type={inv.type} size={38} />
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-bold">
                   {inv.type === "SALE" ? "فروش" : "خرید"} شماره {toPersianDigits(inv.number)}
@@ -1208,6 +1278,41 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       </BottomSheet>
 
       {/* ───────── شیت اشتراک صورتحساب (ADV-06) ───────── */}
+      <BottomSheet
+        open={statementSheet}
+        onClose={() => setStatementSheet(false)}
+        title="صورتحساب PDF"
+        description="دفتر بدهکار/بستانکار با لوگو — قابل چاپ یا ذخیره به PDF"
+      >
+        <div className="grid grid-cols-2 gap-2">
+          {STATEMENT_PRESETS.map((pr, i) => (
+            <motion.button
+              key={pr.key}
+              type="button"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.04 + i * 0.04, type: "spring", stiffness: 420, damping: 30 }}
+              whileTap={{ scale: 0.96 }}
+              disabled={statementBusy !== null}
+              onClick={() => openStatement(pr)}
+              className={cn(
+                "flex flex-col items-start gap-1 rounded-2xl border p-3.5 text-start transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-60",
+                pr.key === "all" ? "col-span-2 border-primary/30 bg-primary/5" : "border-border bg-card"
+              )}
+            >
+              <span className="flex w-full items-center justify-between text-sm font-extrabold">
+                {pr.title}
+                {statementBusy === pr.key ? (
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                ) : (
+                  <FileDown className="size-4 text-primary" />
+                )}
+              </span>
+              <span className="text-[0.68rem] text-muted-foreground">{pr.sub}</span>
+            </motion.button>
+          ))}
+        </div>
+      </BottomSheet>
       <BottomSheet
         open={shareSheet}
         onClose={() => setShareSheet(false)}

@@ -5,6 +5,17 @@
  */
 import { db } from "@/lib/db"
 import { jalaliDayKey, startOfJalaliDay } from "@/lib/jalali"
+import {
+  accountBalance,
+  collectionBreakdown,
+  itemsGrossProfit,
+  paymentSplit,
+  personBalance,
+  stockLevel,
+  weightedAverageCost,
+} from "@/lib/finance-math"
+
+export { itemsSubtotal } from "@/lib/finance-math"
 
 // ───────────────────────── حساب‌های بانکی ─────────────────────────
 
@@ -12,10 +23,6 @@ import { jalaliDayKey, startOfJalaliDay } from "@/lib/jalali"
 export async function getAccountBalance(accountId: string): Promise<number> {
   const account = await db.account.findUnique({ where: { id: accountId }, select: { initialBalance: true } })
   if (!account) return 0
-  const agg = await db.transaction.aggregate({
-    where: { accountId },
-    _sum: { amount: true },
-  })
   const ins = await db.transaction.aggregate({
     where: { accountId, direction: "IN" },
     _sum: { amount: true },
@@ -24,7 +31,7 @@ export async function getAccountBalance(accountId: string): Promise<number> {
     where: { accountId, direction: "OUT" },
     _sum: { amount: true },
   })
-  return account.initialBalance + (ins._sum.amount ?? 0) - (outs._sum.amount ?? 0)
+  return accountBalance(account.initialBalance, ins._sum.amount ?? 0, outs._sum.amount ?? 0)
 }
 
 /** تراز همه حساب‌های فعال — IMP-06: با دو groupBy به‌جای N+1 */
@@ -68,7 +75,7 @@ export async function getAccountBalances(): Promise<
   const outMap = new Map(outs.map((g) => [g.accountId, g._sum.amount ?? 0]))
   return accounts.map((a) => ({
     ...a,
-    balance: a.initialBalance + (inMap.get(a.id) ?? 0) - (outMap.get(a.id) ?? 0),
+    balance: accountBalance(a.initialBalance, inMap.get(a.id) ?? 0, outMap.get(a.id) ?? 0),
   }))
 }
 
@@ -108,13 +115,13 @@ export async function getPersonBalance(personId: string): Promise<number> {
       _sum: { amount: true },
     }),
   ])
-  return (
-    (person?.openingBalance ?? 0) +
-    (saleCredits._sum.credit ?? 0) -
-    (purchaseCredits._sum.credit ?? 0) -
-    (receives._sum.amount ?? 0) +
-    (pays._sum.amount ?? 0)
-  )
+  return personBalance({
+    openingBalance: person?.openingBalance ?? 0,
+    saleCredit: saleCredits._sum.credit ?? 0,
+    purchaseCredit: purchaseCredits._sum.credit ?? 0,
+    freeReceives: receives._sum.amount ?? 0,
+    freePays: pays._sum.amount ?? 0,
+  })
 }
 
 /** تراز همه اشخاص فعال — IMP-06: با groupBy به‌جای ۴×N کوئری (+ مانده اولیه) */
@@ -171,7 +178,7 @@ export async function getProductStock(productId: string): Promise<number> {
     where: { productId, invoice: { type: "SALE" } },
     _sum: { quantity: true },
   })
-  return (product?.initialStock ?? 0) + (purchases._sum.quantity ?? 0) - (sales._sum.quantity ?? 0)
+  return stockLevel(product?.initialStock ?? 0, purchases._sum.quantity ?? 0, sales._sum.quantity ?? 0)
 }
 
 /** موجودی همه اجناس به صورت یکجا (شامل موجودی اولیه؛ کارآمدتر: یک کوئری روی اجناس و یک کوئری روی اقلام) */
@@ -218,24 +225,14 @@ export async function getAveragePurchasePrice(productId: string, untilDate?: Dat
     },
     select: { quantity: true, unitPrice: true },
   })
-  const purchasedQty = items.reduce((s, i) => s + i.quantity, 0)
-  const purchasedCost = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
   // موجودی اولیه قبل از همه خریدهاست، پس همیشه در میانگین لحاظ می‌شود
-  const initialQty = product?.initialStock ?? 0
-  const initialCost = initialQty * (product?.initialStockCostPrice ?? 0)
-  const totalQty = initialQty + purchasedQty
-  if (totalQty <= 0) return 0
-  return Math.round((initialCost + purchasedCost) / totalQty)
+  return weightedAverageCost(
+    { quantity: product?.initialStock ?? 0, unitCost: product?.initialStockCostPrice ?? 0 },
+    items
+  )
 }
 
 // ───────────────────────── بازمحاسبه فاکتور ─────────────────────────
-
-/** جمع اقلام فاکتور */
-export function itemsSubtotal(
-  items: { quantity: number; unitPrice: number }[]
-): number {
-  return items.reduce((s, i) => s + Math.round(i.quantity * i.unitPrice), 0)
-}
 
 /**
  * بازمحاسبه مانده فاکتور:
@@ -259,10 +256,10 @@ export async function recomputeInvoice(invoiceId: string): Promise<void> {
   })
   const paidChecks = paidChecksAgg._sum.amount ?? 0
   const settled = settledAgg._sum.amount ?? 0
-  const credit = Math.max(0, invoice.total - invoice.paidCash - paidChecks - settled)
+  const { credit, status } = paymentSplit({ total: invoice.total, paidCash: invoice.paidCash, paidChecks, settled })
   await db.invoice.update({
     where: { id: invoiceId },
-    data: { paidChecks, credit, status: credit <= 0 ? "SETTLED" : "OPEN" },
+    data: { paidChecks, credit, status },
   })
 }
 
@@ -302,8 +299,7 @@ export async function periodSummary(start: Date, end: Date): Promise<PeriodSumma
     where: { invoice: { type: "SALE", date: { gte: start, lte: end } } },
     select: { quantity: true, unitPrice: true, costPrice: true },
   })
-  const profit =
-    saleItems.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0) - (sales._sum.discount ?? 0)
+  const profit = itemsGrossProfit(saleItems) - (sales._sum.discount ?? 0)
   return {
     sales: sales._sum.total ?? 0,
     purchases: purchases._sum.total ?? 0,
@@ -337,8 +333,7 @@ export async function dailySeries(start: Date, end: Date): Promise<
     const entry = map.get(day) || { sales: 0, purchases: 0, profit: 0 }
     if (inv.type === "SALE") {
       entry.sales += inv.total
-      entry.profit +=
-        inv.items.reduce((s, i) => s + (i.unitPrice - i.costPrice) * i.quantity, 0) - inv.discount
+      entry.profit += itemsGrossProfit(inv.items) - inv.discount
     } else {
       entry.purchases += inv.total
     }
@@ -357,4 +352,13 @@ export async function dailySeries(start: Date, end: Date): Promise<
     guard++
   }
   return days
+}
+
+/** وصول فروش بازه (نقد / چک / بعداً تسویه / هنوز نسیه) — برای نمودار دونات */
+export async function salesCollection(start: Date, end: Date) {
+  const invoices = await db.invoice.findMany({
+    where: { type: "SALE", date: { gte: start, lte: end } },
+    select: { total: true, paidCash: true, paidChecks: true, credit: true },
+  })
+  return collectionBreakdown(invoices)
 }

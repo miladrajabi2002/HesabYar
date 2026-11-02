@@ -246,20 +246,7 @@ export const IconPurchase = makeIcon("purchase", "bounce", () => (
   </>
 ))
 
-export const IconMoon = makeIcon("moon", "swing", () => (
-  <>
-    <F d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
-    <S d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
-  </>
-))
 
-export const IconSun = makeIcon("sun", "spin", () => (
-  <>
-    <F d="M12 7.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z" />
-    <S d="M12 7.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z" />
-    <S d="M12 2.5v1.5M12 20v1.5M4.6 4.6l1.1 1.1M18.3 18.3l1.1 1.1M2.5 12H4M20 12h1.5M4.6 19.4l1.1-1.1M18.3 5.7l1.1-1.1" delay={0.15} />
-  </>
-))
 
 /** نگاشت مسیر → آیکون و رنگ امضای بخش */
 export const SECTION_META = {

@@ -6,6 +6,7 @@ import {
   getPersonBalances,
   periodSummary,
   dailySeries,
+  salesCollection,
 } from "@/lib/finance"
 import {
   nowTehran,
@@ -36,13 +37,14 @@ export async function GET(req: NextRequest) {
     const saturdayOffset = (gteDay + 1) % 7
     const weekStart = new Date(startOfJalaliDay(now).getTime() - saturdayOffset * 86_400_000)
 
-    const [today, week, month, prevMonth, accounts, personBalances] = await Promise.all([
+    const [today, week, month, prevMonth, accounts, personBalances, monthCollection] = await Promise.all([
       periodSummary(dayStart, dayEnd),
       periodSummary(weekStart, dayEnd),
       periodSummary(monthStart, monthEnd),
       periodSummary(prevMonthStart, prevMonthEnd),
       getAccountBalances(),
       getPersonBalances(),
+      salesCollection(monthStart, monthEnd),
     ])
 
     // ST-01: درصد تغییر ماه جاری نسبت به ماه قبل (null = ماه قبل صفر بوده)
@@ -129,6 +131,7 @@ export async function GET(req: NextRequest) {
       },
       series,
       recentInvoices,
+      monthCollection,
     })
   } catch (e) {
     return serverError(e)
