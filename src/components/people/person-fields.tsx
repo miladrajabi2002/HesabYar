@@ -7,9 +7,7 @@
  *  • «حساب از قبل»: جملهٔ روشن («به ما بدهکار است / ما بدهکاریم / ندارد») + مبلغ با حروف
  */
 import { useState, type ReactNode } from "react"
-import { ChevronDown } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Input } from "@/components/ui/input"
+import { ChevronLeft } from "lucide-react"
 import { AmountInput } from "@/components/ui/amount-input"
 import { RoleAvatar } from "@/components/ui/role-avatar"
 import { cn } from "@/lib/utils"
@@ -17,27 +15,50 @@ import { cn } from "@/lib/utils"
 export type PersonRole = "CUSTOMER" | "SUPPLIER" | "BOTH"
 export type OpeningKind = "none" | "receivable" | "payable"
 
-function Group({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+function GroupTitle({ title, hint }: { title: string; hint?: string }) {
   return (
-    <section>
-      <div className="mb-2 flex items-baseline justify-between px-0.5">
-        <h3 className="text-label font-extrabold text-foreground/85">{title}</h3>
-        {hint && <span className="text-caption text-muted-foreground">{hint}</span>}
-      </div>
-      <div className="space-y-3">{children}</div>
-    </section>
+    <div className="mb-2 flex items-baseline justify-between px-1">
+      <h3 className="text-label font-extrabold text-foreground/85">{title}</h3>
+      {hint && <span className="text-caption text-muted-foreground">{hint}</span>}
+    </div>
   )
 }
 
-function Field({ label, optional, children }: { label: string; optional?: boolean; children: ReactNode }) {
+/** فیلد درون‌گروهی: برچسب کوچک بالا، ورودی بدون قاب زیرش (الگوی فهرست گروهی) */
+function InlineField({
+  label,
+  optional,
+  children,
+}: {
+  label: string
+  optional?: boolean
+  children: ReactNode
+}) {
   return (
-    <label className="block">
-      <span className="mb-1.5 flex items-center gap-1.5 text-label font-bold text-foreground/80">
+    <label className="block px-3.5 pb-1.5 pt-2.5 transition-colors focus-within:bg-primary/[0.04]">
+      <span className="flex items-center gap-1.5 text-caption font-bold text-foreground/70">
         {label}
-        {optional && <span className="text-caption font-medium text-muted-foreground">اختیاری</span>}
+        {optional && <span className="font-medium text-muted-foreground">اختیاری</span>}
       </span>
       {children}
     </label>
+  )
+}
+
+const bareInput =
+  "h-9 w-full bg-transparent text-[0.95rem] font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
+
+function AddRow({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-h-[3.25rem] w-full items-center gap-3 px-3.5 text-start transition-colors hover:bg-accent/40"
+    >
+      <span className="flex-1 text-sm font-semibold">{label}</span>
+      <span className="text-label text-muted-foreground">افزودن</span>
+      <ChevronLeft className="size-4 text-muted-foreground/60" />
+    </button>
   )
 }
 
@@ -87,8 +108,9 @@ export function PersonFields({
   setOpeningAmount: (n: number) => void
   autoFocusName?: boolean
 }) {
-  // جزئیات بیشتر: اگر از قبل مقدار دارد (ویرایش)، باز شروع شود
-  const [more, setMore] = useState(!!(company || shopAddress))
+  // جزئیات بیشتر: ردیف «افزودن ›» تا وقتی لمس نشده یا مقدار ندارد
+  const [openCompany, setOpenCompany] = useState(!!company)
+  const [openAddress, setOpenAddress] = useState(!!shopAddress)
 
   return (
     <div className="space-y-5 pb-1">
@@ -115,101 +137,102 @@ export function PersonFields({
         </div>
       )}
 
-      <Group title="اطلاعات اصلی">
-        <Field label="نام">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="مثلاً آهنگری رحیمی"
-            autoFocus={autoFocusName}
-          />
-        </Field>
-        <Field label="موبایل" optional>
-          <Input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            inputMode="tel"
-            dir="ltr"
-            placeholder="09…"
-            className="nums text-end"
-          />
-        </Field>
-      </Group>
-
       <section>
-        <button
-          type="button"
-          onClick={() => setMore((v) => !v)}
-          aria-expanded={more}
-          className="flex w-full items-center justify-between rounded-xl px-0.5 py-1 text-label font-extrabold text-foreground/85"
-        >
-          <span>
-            جزئیات بیشتر <span className="text-caption font-medium text-muted-foreground">شرکت و آدرس · اختیاری</span>
-          </span>
-          <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", more && "rotate-180")} />
-        </button>
-        <AnimatePresence initial={false}>
-          {more && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="overflow-hidden"
-            >
-              <div className="space-y-3 pt-2">
-                <Field label="شرکت یا مغازه">
-                  <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="مثلاً فنی قلندری" />
-                </Field>
-                <Field label="آدرس">
-                  <Input
-                    value={shopAddress}
-                    onChange={(e) => setShopAddress(e.target.value)}
-                    placeholder="مثلاً بازار آهن، پلاک ۴۵"
-                  />
-                </Field>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <GroupTitle title="اطلاعات اصلی" />
+        <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/80 bg-card">
+          <InlineField label="نام">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="مثلاً آهنگری رحیمی"
+              autoFocus={autoFocusName}
+              className={bareInput}
+            />
+          </InlineField>
+          <InlineField label="موبایل" optional>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              inputMode="tel"
+              dir="ltr"
+              placeholder="09…"
+              className={cn(bareInput, "nums text-end")}
+            />
+          </InlineField>
+        </div>
       </section>
 
-      <Group title="حساب از قبل" hint="مانده قبل از شروع کار با حساب‌یار">
-        <div className="flex rounded-[0.9rem] bg-muted p-1">
-          {OPENING.map((k) => {
-            const on = openingKind === k.key
-            return (
-              <button
-                key={k.key}
-                type="button"
-                onClick={() => setOpeningKind(k.key)}
-                aria-pressed={on}
-                className={cn(
-                  "h-9 flex-1 rounded-[0.65rem] px-1 text-label font-bold transition-colors",
-                  on
-                    ? cn(
-                        "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]",
-                        k.key === "receivable" ? "text-warning-ink" : k.key === "payable" ? "text-purchase" : "text-foreground"
-                      )
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {k.label}
-              </button>
-            )
-          })}
+      <section>
+        <GroupTitle title="جزئیات بیشتر" hint="اختیاری" />
+        <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/80 bg-card">
+          {openCompany ? (
+            <InlineField label="شرکت یا مغازه">
+              <input
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="مثلاً فنی قلندری"
+                autoFocus={!company}
+                className={bareInput}
+              />
+            </InlineField>
+          ) : (
+            <AddRow label="شرکت یا مغازه" onClick={() => setOpenCompany(true)} />
+          )}
+          {openAddress ? (
+            <InlineField label="آدرس">
+              <input
+                value={shopAddress}
+                onChange={(e) => setShopAddress(e.target.value)}
+                placeholder="مثلاً بازار آهن، پلاک ۴۵"
+                autoFocus={!shopAddress}
+                className={bareInput}
+              />
+            </InlineField>
+          ) : (
+            <AddRow label="آدرس" onClick={() => setOpenAddress(true)} />
+          )}
         </div>
-        {openingKind !== "none" && (
-          <div>
-            <AmountInput value={openingAmount} onChange={setOpeningAmount} />
-            <p className="mt-1 text-caption text-muted-foreground">
-              {openingKind === "receivable"
-                ? "این مبلغ به‌عنوان طلب شما در حساب این شخص ثبت می‌شود."
-                : "این مبلغ به‌عنوان بدهی شما به این شخص ثبت می‌شود."}
-            </p>
+      </section>
+
+      <section>
+        <GroupTitle title="حساب از قبل" hint="قبل از حساب‌یار" />
+        <div className="rounded-2xl border border-border/80 bg-card p-3">
+          <div className="flex rounded-[0.9rem] bg-muted p-1">
+            {OPENING.map((k) => {
+              const on = openingKind === k.key
+              return (
+                <button
+                  key={k.key}
+                  type="button"
+                  onClick={() => setOpeningKind(k.key)}
+                  aria-pressed={on}
+                  className={cn(
+                    "h-9 flex-1 rounded-[0.65rem] px-1 text-label font-bold transition-colors",
+                    on
+                      ? cn(
+                          "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]",
+                          k.key === "receivable" ? "text-warning-ink" : k.key === "payable" ? "text-purchase" : "text-foreground"
+                        )
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {k.label}
+                </button>
+              )
+            })}
           </div>
-        )}
-      </Group>
+          {openingKind !== "none" && (
+            <div className="mt-2 px-1">
+              <AmountInput bare value={openingAmount} onChange={setOpeningAmount} placeholder="مبلغ به تومان" className="[&_input]:h-12 [&_input]:text-xl [&_input]:font-extrabold" />
+              <p className="text-caption text-muted-foreground">
+                {openingKind === "receivable"
+                  ? "به‌عنوان طلب شما در حساب این شخص ثبت می‌شود."
+                  : "به‌عنوان بدهی شما به این شخص ثبت می‌شود."}
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

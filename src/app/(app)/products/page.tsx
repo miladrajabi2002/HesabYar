@@ -788,7 +788,7 @@ export default function ProductsPage() {
             className="h-10 rounded-xl px-4 text-label font-bold"
           >
             <Plus className="size-4" />
-            کالای جدید
+            افزودن کالا
           </Button>
         </div>
       </div>
@@ -902,7 +902,7 @@ export default function ProductsPage() {
                       p.lastPurchasePrice > 0 ? `خرید ${formatToman(p.lastPurchasePrice, false)}` : null,
                     ]
                       .filter(Boolean)
-                      .join(" · ") || `واحد: ${formatUnit(p.unit)}`}
+                      .join(" | ") || `واحد: ${formatUnit(p.unit)}`}
                   </div>
                 </div>
                 <div className="shrink-0 text-end">

@@ -190,7 +190,7 @@ function InvoicesPageInner() {
   const overdueCount =
     (overdue ? (type !== "PURCHASE" ? overdue.sale.count : 0) + (type !== "SALE" ? overdue.purchase.count : 0) : 0)
 
-  // نسخهٔ ۷: گروه‌بندی بر اساس روز (موبایل) — «امروز · ۳ فاکتور · ۲۸٫۱ م»
+  // نسخهٔ ۷: گروه‌بندی بر اساس روز (موبایل) — «امروز، ۳ فاکتور، ۲۸٫۱ م»
   const todayKey = jalaliDayKey(nowTehran())
   const yesterdayKey = jalaliDayKey(new Date(nowTehran().getTime() - 86_400_000))
   const groups: { key: string; label: string; items: Invoice[]; sum: number }[] = []
@@ -201,9 +201,9 @@ function InvoicesPageInner() {
     if (!g) {
       const label =
         key === todayKey
-          ? `امروز · ${formatJalaliShort(d)}`
+          ? `امروز | ${formatJalaliShort(d)}`
           : key === yesterdayKey
-            ? `دیروز · ${formatJalaliShort(d)}`
+            ? `دیروز | ${formatJalaliShort(d)}`
             : formatJalaliWithWeekday(d)
       g = { key, label, items: [], sum: 0 }
       groups.push(g)
@@ -331,8 +331,8 @@ function InvoicesPageInner() {
         {overdueOnly && overdue && (
           <p className="nums text-caption text-muted-foreground">
             فاکتورهایی که بیش از {toPersianDigits(overdue.days)} روز نسیه مانده‌اند
-            {type !== "PURCHASE" && overdue.sale.count > 0 && ` · فروش ${formatTomanCompact(overdue.sale.total)}`}
-            {type !== "SALE" && overdue.purchase.count > 0 && ` · خرید ${formatTomanCompact(overdue.purchase.total)}`}
+            {type !== "PURCHASE" && overdue.sale.count > 0 && ` | فروش ${formatTomanCompact(overdue.sale.total)}`}
+            {type !== "SALE" && overdue.purchase.count > 0 && ` | خرید ${formatTomanCompact(overdue.purchase.total)}`}
           </p>
         )}
       </div>
@@ -455,7 +455,7 @@ function InvoicesPageInner() {
                 <div className="mb-2 flex items-baseline justify-between px-1">
                   <h3 className="nums text-label font-extrabold text-foreground/85">{g.label}</h3>
                   <span className="nums text-caption font-semibold text-muted-foreground">
-                    {toPersianDigits(g.items.length)} فاکتور · {formatTomanCompact(g.sum)}
+                    {toPersianDigits(g.items.length)} فاکتور | {formatTomanCompact(g.sum)}
                   </span>
                 </div>
                 <div className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
@@ -499,11 +499,11 @@ function InvoicesPageInner() {
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-[0.95rem] font-bold">{inv.person.name}</div>
                               <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
-                                {inv.type === "SALE" ? "فروش" : "خرید"} · #{toPersianDigits(inv.number)}
-                                {inv.items.length > 0 && ` · ${toPersianDigits(inv.items.length)} قلم`}
+                                {inv.type === "SALE" ? "فروش" : "خرید"}
+                                {inv.items.length > 0 && ` | ${toPersianDigits(inv.items.length)} قلم`} | ش {toPersianDigits(inv.number)}
                                 {inv.type === "SALE" && (
                                   <span className={cn("font-bold", profit >= 0 ? "text-income" : "text-destructive")}>
-                                    {" "}· سود {formatTomanCompact(profit)}
+                                     | سود {formatTomanCompact(profit)}
                                   </span>
                                 )}
                               </div>

@@ -469,338 +469,242 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       sub: formatJalaliShort(new Date(st.date)),
       amount: st.amount,
       icon: <HandCoins className="size-4" />,
-      color: "var(--role-customer)",
+      color: "var(--purchase)",
     })),
   ]
 
   return (
     <>
       <div className="space-y-4">
-        {/* ───────── سربرگ ───────── */}
-        <div className="flex items-center gap-2.5">
+        {/* ───────── سربرگ (نسخهٔ ۷): بازگشت + عنوان + اقدام‌ها ───────── */}
+        <div className="flex items-center gap-2">
           <Link
             href="/invoices"
             aria-label="بازگشت به فاکتورها"
-            className="grid size-11 shrink-0 place-items-center rounded-2xl border border-border bg-card text-muted-foreground shadow-card transition-colors hover:text-foreground"
+            className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-card text-foreground/70 transition-colors hover:text-foreground"
           >
-            <ArrowRight className="size-[1.15rem]" />
+            <ArrowRight className="size-[1.1rem]" />
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-extrabold leading-tight sm:text-xl">
-              فاکتور {isSale ? "فروش" : "خرید"} <span className="nums">{toPersianDigits(inv.number)}</span>
+            <p className="hidden text-caption text-muted-foreground lg:block">
+              <Link href="/invoices" className="hover:text-foreground">فاکتورها</Link> ‹ #{toPersianDigits(inv.number)}
+            </p>
+            <h1 className="truncate text-[1.1rem] font-extrabold leading-tight lg:text-2xl">
+              فاکتور {isSale ? "فروش" : "خرید"} <span className="nums">#{toPersianDigits(inv.number)}</span>
             </h1>
-            <p className="nums text-caption text-muted-foreground">{formatJalaliWithWeekday(new Date(inv.date))}</p>
           </div>
-          <div className="flex gap-1.5">
-            <Link
-              href={`/invoices/new?edit=${inv.id}`}
-              className="flex h-11 items-center gap-1.5 rounded-2xl border border-border bg-card px-3 text-xs font-bold text-muted-foreground shadow-card transition-colors hover:text-foreground"
-              aria-label="ویرایش فاکتور"
-            >
-              <Pencil className="size-4" />
-              <span className="hidden sm:inline">ویرایش</span>
-            </Link>
-            <button
-              onClick={printInvoice}
-              disabled={printing}
-              className="flex h-11 items-center gap-1.5 rounded-2xl border border-border bg-card px-3 text-xs font-bold text-muted-foreground shadow-card transition-colors hover:text-foreground"
-              aria-label="چاپ یا PDF"
-            >
-              {printing ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
-              <span className="hidden sm:inline">چاپ / PDF</span>
-            </button>
-            <button
-              onClick={remove}
-              className="hidden size-11 place-items-center rounded-2xl border border-destructive/25 bg-card text-destructive/80 transition-colors hover:bg-destructive/10 sm:grid"
-              aria-label="حذف فاکتور"
-            >
-              <Trash2 className="size-4" />
-            </button>
-          </div>
+          <Link
+            href={`/invoices/new?edit=${inv.id}`}
+            aria-label="ویرایش فاکتور"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 text-label font-bold text-foreground/75 transition-colors hover:text-foreground lg:px-3.5"
+          >
+            <Pencil className="size-4" />
+            <span className="hidden lg:inline">ویرایش</span>
+          </Link>
+          <button
+            onClick={printInvoice}
+            disabled={printing}
+            aria-label="چاپ یا PDF"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 text-label font-bold text-foreground/75 transition-colors hover:text-foreground lg:px-3.5"
+          >
+            {printing ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
+            <span className="hidden lg:inline">چاپ / PDF</span>
+          </button>
+          <button
+            onClick={remove}
+            aria-label="حذف فاکتور"
+            className="hidden size-10 place-items-center rounded-xl border border-border bg-card text-destructive/80 transition-colors hover:bg-destructive/8 lg:grid"
+          >
+            <Trash2 className="size-4" />
+          </button>
         </div>
 
-        {/* ───────── کارت قهرمان ───────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 340, damping: 30 }}
-          className={cn(
-            "relative overflow-hidden rounded-[1.4rem] p-5 text-white sm:p-6",
-            // نسخهٔ ۷: رنگ یکدست با یک نور ملایم — بدون گرادیان سه‌رنگ و سایهٔ رنگی
-            isSale
-              ? "bg-[radial-gradient(120%_80%_at_100%_0%,rgb(255_255_255/0.13),transparent_60%),#0a6a55]"
-              : "bg-[radial-gradient(120%_80%_at_100%_0%,rgb(255_255_255/0.13),transparent_60%),#3d48b8]"
-          )}
-        >
-          <div className="relative flex items-start gap-3.5">
-            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/20 ring-1 ring-white/25 backdrop-blur">
-              <InvoiceTypeMark type={inv.type} size={34} className="!bg-white !shadow-none" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-caption opacity-80">{isSale ? "فروخته شد به" : "خریداری شد از"}</div>
-              <Link
-                href={`/people/${inv.person.id}`}
-                className="block truncate text-lg font-black underline-offset-4 hover:underline sm:text-xl"
-              >
-                {inv.person.name}
-              </Link>
-              {(inv.person.company || inv.person.phone) && (
-                <div className="nums truncate text-caption opacity-80">
-                  {[inv.person.company, inv.person.phone && toPersianDigits(inv.person.phone)].filter(Boolean).join(" • ")}
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="min-w-0 space-y-4">
+            {/* ───────── خلاصه ───────── */}
+            <motion.section
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="rounded-[1.25rem] border border-border/80 bg-card p-4 sm:p-5"
+            >
+              <div className="flex items-center gap-3">
+                <InvoiceTypeMark type={inv.type} size={44} />
+                <div className="min-w-0 flex-1">
+                  <Link href={`/people/${inv.person.id}`} className="block truncate text-base font-extrabold hover:underline">
+                    {inv.person.name}
+                  </Link>
+                  <p className="nums truncate text-caption text-muted-foreground">
+                    {isSale ? "فروش" : "خرید"} | {formatJalaliWithWeekday(new Date(inv.date))}
+                  </p>
                 </div>
-              )}
-            </div>
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2.5 py-1 text-caption font-extrabold",
-                inv.credit > 0 ? "bg-[#ffd86b] text-[#5c3a00]" : "bg-white text-[color:var(--sale)]"
-              )}
-            >
-              {inv.credit > 0 ? "مانده‌دار" : "تسویه ✓"}
-            </span>
-          </div>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2.5 py-1 text-caption font-bold",
+                    inv.credit > 0 ? "bg-warning/15 text-warning-ink" : "bg-income/10 text-income"
+                  )}
+                >
+                  {inv.credit > 0 ? "مانده دارد" : "تسویه ✓"}
+                </span>
+              </div>
 
-          <div className="relative mt-5 flex items-end justify-between gap-3">
-            <div>
-              <div className="text-caption opacity-80">مبلغ نهایی</div>
-              <div className="nums text-[1.9rem] font-black leading-none tracking-tight sm:text-[2.3rem]">
+              <p className="nums mt-4 text-[1.9rem] font-black leading-tight tracking-tight">
                 <AnimatedAmount value={inv.total} />
-                <span className="ms-1.5 text-xs font-semibold opacity-70">تومان</span>
-              </div>
-            </div>
-            {inv.credit > 0 && (
-              <div className="text-end">
-                <div className="text-caption opacity-80">مانده</div>
-                <div className="nums text-base font-extrabold text-[#ffd86b]">{formatToman(inv.credit, false)}</div>
-              </div>
-            )}
-          </div>
+                <span className="ms-1.5 text-label font-semibold tracking-normal text-muted-foreground">تومان</span>
+              </p>
 
-          {/* نوار پرداخت */}
-          <div className="relative mt-4">
-            <div className="flex h-2.5 overflow-hidden rounded-full bg-white/20">
-              <motion.span className="h-full bg-white" initial={{ width: 0 }} animate={{ width: `${cashPct}%` }} transition={{ delay: 0.2, type: "spring", stiffness: 120, damping: 20 }} />
-              <motion.span className="h-full bg-[#ffc14d]" initial={{ width: 0 }} animate={{ width: `${checkPct}%` }} transition={{ delay: 0.3, type: "spring", stiffness: 120, damping: 20 }} />
-              <motion.span className="h-full bg-[#9cc8ff]" initial={{ width: 0 }} animate={{ width: `${laterPct}%` }} transition={{ delay: 0.4, type: "spring", stiffness: 120, damping: 20 }} />
-            </div>
-            <div className="nums mt-2 flex flex-wrap gap-x-3 gap-y-1 text-caption opacity-90">
-              <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-white" />نقد {formatToman(inv.paidCash, false)}</span>
-              <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-[#ffc14d]" />چک {formatToman(inv.paidChecks, false)}</span>
-              {settledLater > 0 && (
-                <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-[#9cc8ff]" />تسویهٔ بعدی {formatToman(settledLater, false)}</span>
-              )}
+              <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted">
+                <motion.span className="h-full bg-[color:var(--sale)]" initial={{ width: 0 }} animate={{ width: `${cashPct}%` }} transition={{ delay: 0.15, duration: 0.6, ease: [0.16, 1, 0.3, 1] }} />
+                <motion.span className="h-full bg-warning" initial={{ width: 0 }} animate={{ width: `${checkPct}%` }} transition={{ delay: 0.2, duration: 0.6, ease: [0.16, 1, 0.3, 1] }} />
+                <motion.span className="h-full bg-[color:var(--purchase)]" initial={{ width: 0 }} animate={{ width: `${laterPct}%` }} transition={{ delay: 0.25, duration: 0.6, ease: [0.16, 1, 0.3, 1] }} />
+              </div>
+              <div className="nums mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+                {inv.paidCash > 0 && (
+                  <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[color:var(--sale)]" />نقد {formatToman(inv.paidCash, false)}</span>
+                )}
+                {inv.paidChecks > 0 && (
+                  <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-warning" />چک {formatToman(inv.paidChecks, false)}</span>
+                )}
+                {settledLater > 0 && (
+                  <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[color:var(--purchase)]" />تسویهٔ بعدی {formatToman(settledLater, false)}</span>
+                )}
+                {inv.credit > 0 && (
+                  <span className="ms-auto font-bold text-warning-ink">
+                    مانده {formatToman(inv.credit, false)}
+                    {daysOpen > 0 && <span className="ms-1 inline-block font-medium text-muted-foreground">({toPersianDigits(daysOpen)} روز)</span>}
+                  </span>
+                )}
+              </div>
+
               {inv.credit > 0 && (
-                <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-white/30" />{daysOpen > 0 ? `${toPersianDigits(daysOpen)} روز است باز مانده` : "باز"}</span>
+                <Button
+                  onClick={openSettle}
+                  style={{ ["--tile" as string]: tone }}
+                  className="mt-4 h-12 w-full rounded-2xl bg-[color:var(--tile)] text-[0.95rem] font-bold text-white hover:bg-[color:var(--tile)]/90"
+                >
+                  <HandCoins className="size-5" />
+                  {isSale ? "دریافت مانده" : "پرداخت مانده"}
+                  <span className="nums rounded-lg bg-white/20 px-2 py-0.5 text-label">{formatToman(inv.credit, false)}</span>
+                </Button>
               )}
-            </div>
-          </div>
-        </motion.div>
+            </motion.section>
 
-        {/* دکمهٔ اصلی تسویه */}
-        {inv.credit > 0 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-            <Button
-              onClick={openSettle}
-              style={{ ["--tile" as string]: tone }}
-              className="h-14 w-full rounded-2xl bg-[color:var(--tile)] text-sm font-extrabold hover:bg-[color:var(--tile)]/90"
-            >
-              <HandCoins className="size-5" />
-              {isSale ? "دریافت مانده از" : "پرداخت مانده به"} {inv.person.name}
-              <span className="nums rounded-lg bg-white/20 px-2 py-0.5 text-xs">{formatToman(inv.credit, false)}</span>
-            </Button>
-          </motion.div>
-        )}
-
-        <div className="grid items-start gap-4 lg:grid-cols-5">
-          {/* ───────── اقلام ───────── */}
-          <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 lg:col-span-3">
-            <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-              <span className="grid size-7 place-items-center rounded-xl bg-primary/10 text-primary">
-                <FileText className="size-4" />
-              </span>
-              اقلام
-              <span className="nums rounded-full bg-muted px-2 py-0.5 text-caption font-bold text-muted-foreground">
-                {toPersianDigits(inv.items.length)}
-              </span>
-            </div>
-
-            {/* دسکتاپ: جدول */}
-            <table className="hidden w-full text-xs sm:table">
-              <thead>
-                <tr className="text-caption text-muted-foreground">
-                  <th className="w-8 pb-2 text-start font-medium">#</th>
-                  <th className="pb-2 text-start font-medium">کالا</th>
-                  <th className="pb-2 text-start font-medium">تعداد</th>
-                  <th className="pb-2 text-end font-medium">فی</th>
-                  <th className="pb-2 text-end font-medium">مبلغ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inv.items.map((it, i) => (
-                  <tr key={it.id} style={{ ["--i" as string]: i }} className="hy-rise border-t border-border/60">
-                    <td className="nums py-3 text-muted-foreground">{toPersianDigits(i + 1)}</td>
-                    <td className="py-3">
-                      <div className="font-bold">{it.productName}</div>
-                      <div className="text-caption text-muted-foreground">
-                        {[it.brand, it.code && `کد ${it.code}`].filter(Boolean).join(" • ")}
+            {/* ───────── اقلام (رسیدی) ───────── */}
+            <section className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+              <div className="flex items-baseline gap-2 px-4 pb-1 pt-3.5">
+                <h2 className="text-[0.95rem] font-extrabold">اقلام</h2>
+                <span className="nums text-caption font-semibold text-muted-foreground">{toPersianDigits(inv.items.length)} قلم</span>
+              </div>
+              <div className="divide-y divide-border/60">
+                {inv.items.map((it) => (
+                  <div key={it.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold">
+                        {it.productName}
+                        {it.brand ? <span className="font-medium text-muted-foreground"> — {it.brand}</span> : null}
+                      </div>
+                      <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
+                        {toPersianDigits(it.quantity)} {formatUnit(it.unit)} × {formatToman(it.unitPrice, false)}
+                        {it.code ? ` | کد ${it.code}` : ""}
                         {isSale && (it.costPrice || 0) > 0 && (
-                          <span className="nums ms-1 font-bold text-income">
-                            {it.brand || it.code ? " • " : ""}سود {formatToman(Math.round((it.unitPrice - it.costPrice) * it.quantity), false)}
-                          </span>
+                          <span className="font-bold text-income">، سود {formatToman(Math.round((it.unitPrice - it.costPrice) * it.quantity), false)}</span>
                         )}
                       </div>
-                    </td>
-                    <td className="nums py-3">{toPersianDigits(it.quantity)} {formatUnit(it.unit)}</td>
-                    <td className="nums py-3 text-end text-muted-foreground">{formatToman(it.unitPrice, false)}</td>
-                    <td className="nums py-3 text-end font-extrabold">{formatToman(it.total, false)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* موبایل: ردیف‌ها */}
-            <div className="-mx-4 divide-y divide-border/60 border-y border-border/60 sm:hidden">
-              {inv.items.map((it, i) => (
-                <div key={it.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="nums grid size-7 shrink-0 place-items-center rounded-lg bg-card text-caption font-extrabold text-muted-foreground">
-                    {toPersianDigits(i + 1)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold">
-                      {it.productName}
-                      {it.brand ? <span className="font-medium text-muted-foreground"> — {it.brand}</span> : null}
                     </div>
-                    <div className="nums mt-0.5 text-caption text-muted-foreground">
-                      {toPersianDigits(it.quantity)} {formatUnit(it.unit)} × {formatToman(it.unitPrice, false)}
-                      {isSale && (it.costPrice || 0) > 0 && (
-                        <span className="font-bold text-income"> • سود {formatToman(Math.round((it.unitPrice - it.costPrice) * it.quantity), false)}</span>
-                      )}
-                    </div>
+                    <div className="nums shrink-0 text-sm font-extrabold">{formatToman(it.total, false)}</div>
                   </div>
-                  <div className="nums shrink-0 text-sm font-extrabold">{formatToman(it.total, false)}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* جمع‌ها */}
-            <div className="mt-3 space-y-1.5 border-t border-dashed border-border pt-3 text-label">
-              <div className="flex justify-between text-muted-foreground">
-                <span>جمع اقلام</span>
-                <span className="nums">{formatToman(inv.subtotal, false)}</span>
+                ))}
               </div>
-              {inv.discount > 0 && (
+              <div className="nums mx-4 space-y-1.5 border-t border-dashed border-border py-3 text-label">
                 <div className="flex justify-between text-muted-foreground">
-                  <span>تخفیف</span>
-                  <span className="nums text-destructive">−{formatToman(inv.discount, false)}</span>
+                  <span>جمع اقلام</span>
+                  <span>{formatToman(inv.subtotal, false)}</span>
                 </div>
-              )}
-              <div className="flex justify-between border-t border-dashed border-border pt-1.5 text-sm font-extrabold">
-                <span>مبلغ نهایی</span>
-                <span className="nums">{formatToman(inv.total, false)} <span className="text-caption font-medium text-muted-foreground">تومان</span></span>
+                {inv.discount > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>تخفیف</span>
+                    <span className="text-destructive">−{formatToman(inv.discount, false)}</span>
+                  </div>
+                )}
+                <div className="flex items-baseline justify-between pt-0.5 text-[0.95rem] font-extrabold">
+                  <span>جمع کل</span>
+                  <span>
+                    {formatToman(inv.total, false)} <span className="text-caption font-medium text-muted-foreground">تومان</span>
+                  </span>
+                </div>
               </div>
-            </div>
+              {inv.note && (
+                <p className="border-t border-border/60 px-4 py-3 text-label leading-6 text-muted-foreground">
+                  <span className="font-bold text-foreground">یادداشت: </span>
+                  {inv.note}
+                </p>
+              )}
+            </section>
+          </div>
 
-            {inv.note && (
-              <p className="mt-3 rounded-2xl border border-dashed border-border px-3 py-2.5 text-caption leading-6 text-muted-foreground">
-                <span className="font-bold text-foreground">یادداشت: </span>
-                {inv.note}
-              </p>
-            )}
-          </section>
-
-          <div className="space-y-4 lg:col-span-2">
-            {/* ───────── خط زمانی پرداخت‌ها ───────── */}
-            <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-              <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-                <span className="grid size-7 place-items-center rounded-xl bg-primary/10 text-primary">
-                  <Banknote className="size-4" />
-                </span>
-                {isSale ? "دریافت‌ها" : "پرداخت‌ها"}
+          <div className="space-y-4">
+            {/* ───────── دریافت‌ها / پرداخت‌ها ───────── */}
+            <section className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+              <div className="px-4 pb-1 pt-3.5">
+                <h2 className="text-[0.95rem] font-extrabold">{isSale ? "دریافت‌ها" : "پرداخت‌ها"}</h2>
               </div>
               {timeline.length === 0 ? (
-                <p className="rounded-2xl bg-muted/45 px-3 py-4 text-center text-caption text-muted-foreground">
-                  هنوز {isSale ? "پولی دریافت نشده" : "پولی پرداخت نشده"} — کل مبلغ نسیه است
+                <p className="px-4 pb-4 pt-2 text-label text-muted-foreground">
+                  هنوز {isSale ? "پولی دریافت نشده" : "پولی پرداخت نشده"} — کل مبلغ نسیه است.
                 </p>
               ) : (
-                <ol className="relative space-y-3 before:absolute before:inset-y-3 before:start-[1.05rem] before:w-px before:bg-border">
-                  {timeline.map((t, i) => (
-                    <motion.li
-                      key={t.key}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.05 + i * 0.05 }}
-                      className={cn("relative flex items-center gap-3", t.muted && "opacity-55")}
-                    >
+                <div className="divide-y divide-border/60">
+                  {timeline.map((t) => (
+                    <div key={t.key} className={cn("flex items-center gap-3 px-4 py-3", t.muted && "opacity-55")}>
                       <span
                         style={{ ["--tile" as string]: t.color }}
-                        className="relative z-10 grid size-[2.15rem] shrink-0 place-items-center rounded-full bg-card text-[color:var(--tile)] ring-2 ring-[color:color-mix(in_srgb,var(--tile)_30%,transparent)]"
+                        className="grid size-9 shrink-0 place-items-center rounded-xl bg-[color:color-mix(in_srgb,var(--tile)_12%,transparent)] text-[color:var(--tile)]"
                       >
                         {t.icon}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 text-xs font-bold">
+                        <div className="flex items-center gap-1.5 text-sm font-bold">
                           <span className="truncate">{t.title}</span>
                           {t.badge && (
-                            <span className={cn("shrink-0 rounded-md px-1.5 py-px text-micro font-bold", t.badge.cls)}>
+                            <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4", t.badge.cls)}>
                               {t.badge.text}
                             </span>
                           )}
                         </div>
                         <div className="nums truncate text-caption text-muted-foreground">{t.sub}</div>
                       </div>
-                      <span className={cn("nums shrink-0 text-xs font-extrabold", t.muted && "line-through")}>
+                      <span className={cn("nums shrink-0 text-sm font-extrabold", t.muted && "line-through")}>
                         {formatToman(t.amount, false)}
                       </span>
-                    </motion.li>
+                    </div>
                   ))}
-                  <li className="relative flex items-center gap-3">
-                    <span
-                      className={cn(
-                        "relative z-10 grid size-[2.15rem] shrink-0 place-items-center rounded-full text-white",
-                        inv.credit > 0 ? "bg-warning" : "bg-income"
-                      )}
-                    >
-                      {inv.credit > 0 ? <Clock3 className="size-4" /> : <CheckCheck className="size-4" />}
-                    </span>
-                    <div className="flex-1 text-xs font-extrabold">{inv.credit > 0 ? "مانده (نسیه)" : "کامل تسویه شد"}</div>
-                    {inv.credit > 0 && (
-                      <span className="nums text-xs font-extrabold text-[color:color-mix(in_srgb,var(--warning)_75%,black)]">
-                        {formatToman(inv.credit, false)}
-                      </span>
-                    )}
-                  </li>
-                </ol>
+                </div>
               )}
             </section>
 
-            {/* ───────── سود (فروش) / اثر روی انبار (خرید) ───────── */}
+            {/* ───────── سود (فروش، فقط برای شما) / اثر روی انبار (خرید) ───────── */}
             {isSale ? (
-              <section className="rounded-3xl border border-income/20 bg-[linear-gradient(160deg,color-mix(in_srgb,var(--income)_7%,var(--card)),var(--card))] p-4 shadow-card sm:p-5">
+              <section className="rounded-[1.25rem] border border-border/80 bg-card p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-sm font-bold">
-                    <span className="grid size-7 place-items-center rounded-xl bg-income text-white">
-                      <TrendingUp className="size-4" />
-                    </span>
-                    سود این فاکتور
-                  </div>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-micro font-bold text-muted-foreground">فقط برای شما — چاپ نمی‌شود</span>
+                  <h2 className="text-[0.95rem] font-extrabold">سود این فاکتور</h2>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-micro font-bold text-muted-foreground">فقط برای شما</span>
                 </div>
                 <div className="mt-3 flex items-center gap-4">
                   <MarginRing pct={marginPct} />
-                  <div className="min-w-0 flex-1 space-y-1.5 text-xs">
+                  <div className="nums min-w-0 flex-1 space-y-1.5 text-label">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">سود اقلام</span>
-                      <span className="nums font-bold">{formatToman(grossProfit, false)}</span>
+                      <span className="font-bold">{formatToman(grossProfit, false)}</span>
                     </div>
                     {inv.discount > 0 && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">منهای تخفیف</span>
-                        <span className="nums font-bold text-destructive">−{formatToman(inv.discount, false)}</span>
+                        <span className="font-bold text-destructive">−{formatToman(inv.discount, false)}</span>
                       </div>
                     )}
                     <div className="flex justify-between border-t border-dashed border-border pt-1.5 text-sm">
                       <span className="font-bold">سود خالص</span>
-                      <span className={cn("nums font-extrabold", netProfit >= 0 ? "text-income" : "text-destructive")}>
+                      <span className={cn("font-extrabold", netProfit >= 0 ? "text-income" : "text-destructive")}>
                         {formatToman(netProfit, false)}
                       </span>
                     </div>
@@ -808,41 +712,32 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               </section>
             ) : (
-              <section className="rounded-3xl border border-[color:color-mix(in_srgb,var(--purchase)_20%,transparent)] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--purchase)_7%,var(--card)),var(--card))] p-4 shadow-card sm:p-5">
-                <div className="mb-2.5 flex items-center gap-2 text-sm font-bold">
-                  <span className="grid size-7 place-items-center rounded-xl bg-[color:var(--purchase)] text-white">
-                    <PackagePlus className="size-4" />
-                  </span>
-                  به انبار اضافه شد
+              <section className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+                <div className="px-4 pb-1 pt-3.5">
+                  <h2 className="text-[0.95rem] font-extrabold">به انبار اضافه شد</h2>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="divide-y divide-border/60">
                   {inv.items.map((it) => (
-                    <Link
-                      key={it.id}
-                      href="/products"
-                      className="nums rounded-xl bg-card px-2.5 py-1.5 text-caption font-bold ring-1 ring-border transition-colors hover:ring-[color:var(--purchase)]"
-                    >
-                      <span className="text-[color:var(--purchase)]">+{toPersianDigits(it.quantity)} {formatUnit(it.unit)}</span>{" "}
-                      {it.productName}
+                    <Link key={it.id} href="/products" className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/40">
+                      <span className="min-w-0 flex-1 truncate text-label font-semibold">{it.productName}</span>
+                      <span className="nums shrink-0 text-label font-bold text-purchase">
+                        +{toPersianDigits(it.quantity)} {formatUnit(it.unit)}
+                      </span>
                     </Link>
                   ))}
                 </div>
-                <p className="nums mt-2.5 text-caption text-muted-foreground">
-                  میانگین قیمت هر واحد: {formatToman(Math.round(inv.subtotal / Math.max(1, inv.items.reduce((s, it) => s + it.quantity, 0))), false)} تومان
-                </p>
               </section>
             )}
           </div>
         </div>
 
         {/* پیوست‌ها (تصاویر) — ADV-04 */}
-        <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 ">
+        <section className="rounded-[1.25rem] border border-border/80 bg-card p-4 sm:p-5">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2 text-sm font-bold">
-              <Paperclip className="size-4 shrink-0 text-primary" />
-              <span className="truncate">پیوست‌ها (تصاویر)</span>
-              <span className="nums shrink-0 rounded-full bg-muted px-2 py-0.5 text-caption font-bold text-muted-foreground">
-                {toPersianDigits(attachments.length)}
+            <div className="flex min-w-0 items-baseline gap-2">
+              <h2 className="text-[0.95rem] font-extrabold">پیوست‌ها</h2>
+              <span className="nums text-caption font-semibold text-muted-foreground">
+                {attachments.length ? `${toPersianDigits(attachments.length)} تصویر` : "عکس فاکتور یا رسید"}
               </span>
               {attLoading && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
             </div>
@@ -852,10 +747,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="h-9 shrink-0 rounded-2xl px-3 text-xs font-bold"
+              className="h-9 shrink-0 rounded-xl border-0 bg-primary/10 px-3 text-label font-bold text-secondary-foreground hover:bg-primary/15"
             >
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
-              {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
+              {uploading ? "در حال بارگذاری…" : "افزودن"}
             </Button>
           </div>
 
@@ -926,7 +821,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         <button
           type="button"
           onClick={remove}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-label font-bold text-destructive transition-colors hover:bg-destructive/8 sm:hidden"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-label font-bold text-destructive transition-colors hover:bg-destructive/8 lg:hidden"
         >
           <Trash2 className="size-4" />
           حذف این فاکتور

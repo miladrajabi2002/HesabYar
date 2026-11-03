@@ -20,6 +20,7 @@ import { ErrorState } from "@/components/ui/error-state"
 import { BalanceAvatar, formatOpenDays } from "@/components/ui/role-avatar"
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
+import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { TrendChart, CollectionDonut, Sparkline, type Collection } from "@/components/charts/finance-charts"
 
 /** ردیف طلب/بدهی داشبورد — openDays = چند روز است مانده باز است */
@@ -167,8 +168,8 @@ function SectionCard({
   return (
     <section className={cn("overflow-hidden rounded-[1.25rem] border border-border/80 bg-card", className)}>
       <div className="flex items-baseline gap-2 px-4 pb-1 pt-3.5">
-        <h2 className="text-[0.95rem] font-extrabold">{title}</h2>
-        {sub && <span className="nums truncate text-caption font-semibold text-muted-foreground">{sub}</span>}
+        <h2 className="shrink-0 whitespace-nowrap text-[0.95rem] font-extrabold">{title}</h2>
+        {sub && <span className="nums min-w-0 truncate text-caption font-semibold text-muted-foreground">{sub}</span>}
         {href && (
           <Link
             href={href}
@@ -282,7 +283,7 @@ export default function DashboardPage() {
                   <span className="ms-1.5 text-[0.95rem] font-semibold tracking-normal text-white/65">تومان</span>
                 </p>
                 <p className="nums mt-0.5 text-label text-white/80">
-                  {toPersianDigits(data.today.saleCount)} فاکتور · سود {formatToman(data.today.profit, false)}
+                  {toPersianDigits(data.today.saleCount)} فاکتور | سود {formatToman(data.today.profit, false)}
                 </p>
               </>
             ) : (
@@ -391,7 +392,7 @@ export default function DashboardPage() {
           <motion.div custom={3} variants={stagger} initial="hidden" animate="visible" className="grid gap-4 sm:grid-cols-2">
             <SectionCard
               title="طلب از مشتریان"
-              sub={`${formatTomanCompact(data.totalReceivable)} · ${toPersianDigits(data.debtors.length)} نفر`}
+              sub={`${formatTomanCompact(data.totalReceivable)} | ${toPersianDigits(data.debtors.length)} نفر`}
               href="/people?filter=debtors"
             >
               <div className="divide-y divide-border/60 pb-1">
@@ -404,7 +405,7 @@ export default function DashboardPage() {
 
             <SectionCard
               title="بدهی به فروشنده‌ها"
-              sub={`${formatTomanCompact(data.totalPayable)} · ${toPersianDigits(data.creditors.length)} نفر`}
+              sub={`${formatTomanCompact(data.totalPayable)} | ${toPersianDigits(data.creditors.length)} نفر`}
               href="/people?filter=creditors"
             >
               <div className="divide-y divide-border/60 pb-1">
@@ -426,8 +427,8 @@ export default function DashboardPage() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-bold">{inv.person.name}</div>
                       <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
-                        {inv.type === "SALE" ? "فروش" : "خرید"} · #{toPersianDigits(inv.number)} ·{" "}
-                        {formatJalaliShort(new Date(inv.date))}
+                        {inv.type === "SALE" ? "فروش" : "خرید"} | {formatJalaliShort(new Date(inv.date))} | ش{" "}
+                        {toPersianDigits(inv.number)}
                       </div>
                     </div>
                     <div className="shrink-0 text-end">
@@ -456,7 +457,7 @@ export default function DashboardPage() {
           <motion.div custom={3} variants={stagger} initial="hidden" animate="visible">
             <SectionCard
               title="چک‌های پیش رو"
-              sub={`دریافتی ${formatTomanCompact(data.checks.pendingReceivedTotal)} · صادره ${formatTomanCompact(data.checks.pendingIssuedTotal)}`}
+              sub={`دریافتی ${formatTomanCompact(data.checks.pendingReceivedTotal)} | صادره ${formatTomanCompact(data.checks.pendingIssuedTotal)}`}
               href="/checks"
             >
               <div className="divide-y divide-border/60 pb-1">
@@ -464,12 +465,12 @@ export default function DashboardPage() {
                   <Row key={c.id} href="/checks">
                     <BankLogo bankKey={c.bankKey} size={38} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold">{c.person.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-bold">{c.person.name}</span>
+                        <CheckDirectionBadge direction={c.direction} size="sm" />
+                      </div>
                       <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
-                        <span className={cn("font-bold", c.direction === "RECEIVED" ? "text-sale" : "text-purchase")}>
-                          {c.direction === "RECEIVED" ? "↓ دریافتی" : "↑ صادره"}
-                        </span>{" "}
-                        · {formatJalaliShort(new Date(c.dueDate))}
+                        سررسید {formatJalaliShort(new Date(c.dueDate))}
                       </div>
                     </div>
                     <div className="shrink-0 text-end">

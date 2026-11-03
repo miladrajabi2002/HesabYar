@@ -142,7 +142,7 @@ function PeoplePageInner() {
           </Button>
           <Button onClick={() => setAddSheet(true)} className="h-10 rounded-xl px-4 text-label font-bold">
             <Plus className="size-4" />
-            شخص جدید
+            افزودن شخص
           </Button>
         </div>
       </div>
@@ -298,7 +298,7 @@ function PeoplePageInner() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[0.95rem] font-bold">{p.name}</div>
                       <div className="mt-0.5 truncate text-caption text-muted-foreground">
-                        {[ROLE_LABELS[p.role], p.company].filter(Boolean).join(" · ")}
+                        {[ROLE_LABELS[p.role], p.company].filter(Boolean).join(" | ")}
                       </div>
                     </div>
                     <div className="shrink-0 text-end">

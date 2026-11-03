@@ -1,10 +1,10 @@
 "use client"
 
 /**
- * نشان عمودی جهت چک — آیکون بالا، متن پایین (دریافتی / صادره)
+ * نشان جهت چک — فقط آیکون (نسخهٔ ۷): فلش پایین سبز = دریافتی، فلش بالا نیلی = صادره
  * در لیست چک‌ها، تقویم مالی و جزئیات فاکتور استفاده می‌شود.
  */
-import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react"
+import { ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpFromLine } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function CheckDirectionBadge({
@@ -37,24 +37,23 @@ export function CheckDirectionBadge({
       </span>
     )
   }
-  const iconSize = size === "sm" ? "size-3" : "size-3.5"
-  const textSize = size === "sm" ? "text-micro" : "text-micro"
+  // نسخهٔ ۷: فقط آیکون — فلش پایین سبز (دریافتی) / فلش بالا نیلی (صادره)؛ متن فقط برای صفحه‌خوان
+  const Icon = received ? ArrowDown : ArrowUp
   return (
     <span
+      role="img"
+      aria-label={received ? "چک دریافتی" : "چک صادره"}
+      title={received ? "دریافتی" : "صادره"}
       className={cn(
-        "flex shrink-0 flex-col items-center justify-center gap-px rounded-xl px-1.5 py-1 font-bold leading-none",
+        "grid shrink-0 place-items-center rounded-full",
+        size === "sm" ? "size-5" : "size-6",
         received
-          ? "bg-[color:color-mix(in_srgb,var(--sale)_11%,transparent)] text-[color:var(--sale)]"
-          : "bg-[color:color-mix(in_srgb,var(--purchase)_11%,transparent)] text-[color:var(--purchase)]",
+          ? "bg-[color:color-mix(in_srgb,var(--sale)_12%,transparent)] text-[color:var(--sale)]"
+          : "bg-[color:color-mix(in_srgb,var(--purchase)_12%,transparent)] text-[color:var(--purchase)]",
         className
       )}
     >
-      {received ? (
-        <ArrowDownToLine className={cn(iconSize, "mb-px")} strokeWidth={2.4} />
-      ) : (
-        <ArrowUpFromLine className={cn(iconSize, "mb-px")} strokeWidth={2.4} />
-      )}
-      <span className={textSize}>{received ? "دریافتی" : "صادره"}</span>
+      <Icon className={size === "sm" ? "size-3" : "size-3.5"} strokeWidth={2.8} />
     </span>
   )
 }

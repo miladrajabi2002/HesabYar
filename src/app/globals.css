@@ -534,44 +534,22 @@
    دکمهٔ + : گرادیان زمردی با درخشش بالا، حلقهٔ هم‌رنگ پس‌زمینه تا از نوار «جدا» دیده شود
    ═══════════════════════════════════════════════════════════════ */
 .hy-nav {
-  background:
-    linear-gradient(to bottom, rgb(255 255 255 / 0.96), rgb(255 255 255 / 0.86));
-  border: 1px solid rgb(15 26 23 / 0.07);
+  background: rgb(255 255 255 / 0.94);
+  border: 1px solid rgb(15 26 23 / 0.06);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.9),
-    0 2px 6px -1px rgb(15 26 23 / 0.06),
-    0 22px 48px -14px rgb(15 26 23 / 0.3);
-  backdrop-filter: blur(22px) saturate(1.7);
-  -webkit-backdrop-filter: blur(22px) saturate(1.7);
+    0 1px 2px rgb(15 26 23 / 0.04),
+    0 16px 40px -14px rgb(15 26 23 / 0.22);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
 }
 .hy-fab {
-  background:
-    radial-gradient(120% 80% at 30% 0%, rgb(255 255 255 / 0.38), transparent 55%),
-    linear-gradient(160deg, #17a887 0%, var(--primary) 55%, #065444 100%);
+  background: var(--primary);
   box-shadow:
-    0 0 0 6px var(--background),
-    0 12px 24px -6px color-mix(in srgb, var(--primary) 60%, transparent),
-    0 3px 6px color-mix(in srgb, var(--primary) 30%, transparent),
-    inset 0 1px 0 rgb(255 255 255 / 0.35),
-    inset 0 -2px 0 rgb(0 0 0 / 0.12);
+    0 0 0 5px var(--background),
+    0 10px 20px -8px color-mix(in srgb, var(--primary) 70%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.18);
 }
-.hy-fab::after {
-  /* هالهٔ آرام دور دکمه — فقط وقتی حرکت مجاز است */
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 1.65rem;
-  border: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
-  opacity: 0;
-  pointer-events: none;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .hy-fab::after { animation: hy-fab-halo 2.6s var(--ease-out) 1.2s 3; }
-}
-@keyframes hy-fab-halo {
-  0% { transform: scale(0.92); opacity: 0.7; }
-  60%, 100% { transform: scale(1.18); opacity: 0; }
-}
+
 
 /* کارت قهرمان داشبورد (نسخهٔ ۷) — زمردی یکدست با یک نور ملایم؛ بدون بافت نقطه‌ای */
 .hero-solid {

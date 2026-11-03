@@ -86,23 +86,35 @@ export function JalaliDatePicker({
   return (
     <div className="select-none" dir="rtl">
       {label && <div className="mb-2 text-xs font-medium text-muted-foreground">{label}</div>}
-      <div className="flex items-center justify-between rounded-2xl bg-muted/70 px-2 py-2">
-        <button
-          type="button"
-          onClick={() => moveMonth(-1)}
-          aria-label="ماه قبل"
-          className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-card"
-        >
-          <ChevronRight className="size-4" />
-        </button>
-        <div className="text-sm font-bold">
+      {/* نسخهٔ ۷: نام ماه + «امروز» + جابه‌جایی ماه در یک ردیف تمیز */}
+      <div className="flex items-center gap-1.5">
+        <div className="nums flex-1 text-base font-extrabold">
           {JALALI_MONTHS[view.jm - 1]} {toPersianDigits(view.jy)}
         </div>
         <button
           type="button"
+          onClick={() => {
+            const j = jalaliOf(nowTehran())
+            setView({ jy: j.jy, jm: j.jm })
+            onChange(todayKey())
+          }}
+          className="h-8 rounded-full bg-primary/10 px-3 text-label font-bold text-primary transition-colors hover:bg-primary/15"
+        >
+          امروز
+        </button>
+        <button
+          type="button"
+          onClick={() => moveMonth(-1)}
+          aria-label="ماه قبل"
+          className="grid size-8 place-items-center rounded-full border border-border text-foreground/70 transition-colors hover:bg-accent"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+        <button
+          type="button"
           onClick={() => moveMonth(1)}
           aria-label="ماه بعد"
-          className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-card"
+          className="grid size-8 place-items-center rounded-full border border-border text-foreground/70 transition-colors hover:bg-accent"
         >
           <ChevronLeft className="size-4" />
         </button>
@@ -133,11 +145,11 @@ export function JalaliDatePicker({
                 )
               }}
               className={cn(
-                "nums flex aspect-square items-center justify-center rounded-xl text-sm transition-all duration-150 active:scale-95",
+                "nums mx-auto flex size-10 items-center justify-center rounded-full text-sm transition-all duration-150 active:scale-95",
                 isSelected
-                  ? "bg-primary font-bold text-primary-foreground shadow-fab"
+                  ? "bg-primary font-bold text-primary-foreground"
                   : isToday
-                    ? "bg-primary/10 font-bold text-primary"
+                    ? "font-bold text-primary ring-1 ring-inset ring-primary/40"
                     : isFriday
                       ? "text-destructive/80 hover:bg-accent"
                       : "text-foreground hover:bg-accent"
@@ -158,59 +170,63 @@ export function JalaliDateField({
   onChange,
   placeholder = "انتخاب تاریخ",
   className,
+  variant = "field",
+  label = "تاریخ",
 }: {
   value: string
   onChange: (key: string) => void
   placeholder?: string
   className?: string
+  /** «cell»: ردیف فهرستی (برچسب راست، تاریخ و › چپ) — نسخهٔ ۷ */
+  variant?: "field" | "cell"
+  label?: string
 }) {
   const [open, setOpen] = useState(false)
   const j = value ? parseDayKey(value) : null
-  const label = j
+  const text = j
     ? `${toPersianDigits(j.jd)} ${JALALI_MONTHS[j.jm - 1]} ${toPersianDigits(j.jy)}`
     : placeholder
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={cn(
-          "flex h-12 w-full items-center gap-2 rounded-2xl border border-input bg-card px-3.5 text-sm transition-[color,border-color,box-shadow] hover:border-input/80 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/15",
-          className
-        )}
-      >
-        <CalendarDays className="size-4 text-muted-foreground" />
-        <span className={cn("flex-1 text-start", !j && "text-muted-foreground")}>{label}</span>
-      </button>
+      {variant === "cell" ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn("flex min-h-[3.25rem] w-full items-center gap-3 px-4 text-start transition-colors hover:bg-accent/40", className)}
+        >
+          <span className="flex-1 text-sm font-semibold">{label}</span>
+          <span className={cn("nums text-sm", j ? "text-foreground/80" : "text-muted-foreground")}>{text}</span>
+          <ChevronLeft className="size-4 text-muted-foreground/60" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn(
+            "flex h-12 w-full items-center gap-2 rounded-2xl border border-input bg-card px-3.5 text-sm transition-[color,border-color,box-shadow] hover:border-input/80 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/15",
+            className
+          )}
+        >
+          <CalendarDays className="size-4 text-muted-foreground" />
+          <span className={cn("flex-1 text-start", !j && "text-muted-foreground")}>{text}</span>
+        </button>
+      )}
       <BottomSheet
         open={open}
         onClose={() => setOpen(false)}
         title="انتخاب تاریخ"
         size="auto"
         footer={
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => {
-                onChange(todayKey())
-                setOpen(false)
-              }}
-            >
-              امروز
-            </Button>
-            <Button
-              className="flex-1"
-              onClick={() => {
-                if (value) setOpen(false)
-                else onChange(todayKey())
-                setOpen(false)
-              }}
-            >
-              تأیید
-            </Button>
-          </div>
+          <Button
+            className="h-[3.25rem] w-full rounded-2xl text-[0.95rem] font-bold"
+            onClick={() => {
+              if (!value) onChange(todayKey())
+              setOpen(false)
+            }}
+          >
+            تأیید
+          </Button>
         }
       >
         <JalaliDatePicker value={value || todayKey()} onChange={onChange} />

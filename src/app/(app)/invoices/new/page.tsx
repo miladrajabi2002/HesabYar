@@ -59,6 +59,7 @@ import {
   ChevronDown,
   Check,
   Minus,
+  ChevronLeft,
 } from "lucide-react"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
@@ -347,6 +348,7 @@ function NewInvoicePageInner() {
   // شیت‌ها
   const [personSheet, setPersonSheet] = useState(false)
   const [personFormSheet, setPersonFormSheet] = useState(false)
+  const [mixedMode, setMixedMode] = useState(false)
   const [quickName, setQuickName] = useState("")
   const [itemSheet, setItemSheet] = useState(false)
   const [accountSheet, setAccountSheet] = useState(false)
@@ -410,6 +412,16 @@ function NewInvoicePageInner() {
   const excess = Math.max(0, paidCash + checkTotal - total)
   // مبلغی که هنوز نه نقد شده نه چک
   const remaining = Math.max(0, total - paidCash - checkTotal)
+  // حالت تسویه برای سوییچ بالای بخش (نسخهٔ ۷): «ترکیبی» انتخاب صریح کاربر است، بقیه از مقادیر به دست می‌آید
+  const payMode: "cash" | "check" | "credit" | "mixed" = mixedMode
+    ? "mixed"
+    : total > 0 && checkTotal === 0 && paidCash >= total
+      ? "cash"
+      : checkTotal > 0 && paidCash === 0
+        ? "check"
+        : paidCash === 0 && checkTotal === 0
+          ? "credit"
+          : "mixed"
 
   /** نقدی = باقی‌مانده (+ انتخاب خودکار حساب وقتی فقط یک حساب داریم) */
   const fillCash = (amount = paidCash + remaining) => {
@@ -657,8 +669,34 @@ function NewInvoicePageInner() {
           این فاکتور چک نقدشده/برگشتی دارد و قابل ویرایش نیست — فقط مشاهده.
         </p>
       )}
-      {/* ───────── سربرگ: بازگشت/انصراف + عنوان + نوع ───────── */}
-      <div className="mb-4 flex items-center gap-2.5">
+      {/* ───────── سربرگ موبایل: ✕ + عنوان وسط + وضعیت ذخیره (نسخهٔ ۷) ───────── */}
+      <div className="mb-3 flex items-center gap-2 lg:hidden">
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.9 }}
+          onClick={leave}
+          aria-label="انصراف و بازگشت"
+          className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card text-foreground/70"
+        >
+          <X className="size-[1.1rem]" />
+        </motion.button>
+        <div className="min-w-0 flex-1 text-center">
+          <h1 className="truncate text-[1.05rem] font-extrabold leading-tight">
+            {editId
+              ? `ویرایش فاکتور ${editData ? toPersianDigits(editData.invoice.number) : ""}`
+              : type === "SALE"
+                ? "فاکتور فروش"
+                : "فاکتور خرید"}
+          </h1>
+          <div className="flex min-h-4 items-center justify-center text-caption text-muted-foreground">
+            {editId ? (editDirty ? <span className="font-bold text-warning-ink">ذخیره‌نشده</span> : "ویرایش") : <AutosaveStatus savedAt={draftSavedAt} />}
+          </div>
+        </div>
+        <span className="size-10 shrink-0" aria-hidden />
+      </div>
+
+      {/* ───────── سربرگ دسکتاپ: بازگشت/انصراف + عنوان ───────── */}
+      <div className="mb-4 hidden items-center gap-2.5 lg:flex">
         <motion.button
           type="button"
           whileTap={{ scale: 0.9 }}
@@ -676,13 +714,7 @@ function NewInvoicePageInner() {
             {editId ? "تغییرات بعد از «ذخیره» اعمال می‌شود" : type === "SALE" ? "کالا را به مشتری فروختم" : "کالا را از فروشنده خریدم"}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={leave}
-          className="hidden h-11 shrink-0 items-center rounded-2xl px-4 text-xs font-bold text-muted-foreground transition-colors hover:bg-destructive/8 hover:text-destructive sm:flex"
-        >
-          انصراف
-        </button>
+
       </div>
 
       {editId ? (
@@ -699,8 +731,8 @@ function NewInvoicePageInner() {
             setPerson(null)
           }}
           options={[
-            { key: "SALE", label: "فاکتور فروش", tone: "var(--sale)", icon: <InvoiceTypeMark type="SALE" size={22} /> },
-            { key: "PURCHASE", label: "فاکتور خرید", tone: "var(--purchase)", icon: <InvoiceTypeMark type="PURCHASE" size={22} /> },
+            { key: "SALE", label: "فروش", tone: "var(--sale)" },
+            { key: "PURCHASE", label: "خرید", tone: "var(--purchase)" },
           ]}
           className="mb-4 sm:max-w-md"
         />
@@ -723,11 +755,11 @@ function NewInvoicePageInner() {
                   <div className="nums truncate text-caption text-muted-foreground">
                     {person.balance > 0 ? "از قبل به ما بدهکار است: " : "از قبل ما بدهکاریم: "}
                     <b className={person.balance > 0 ? "text-warning-ink" : "text-purchase"}>
-                      {formatToman(Math.abs(person.balance), false)}
+                      {formatTomanCompact(Math.abs(person.balance))}
                     </b>
                     {person.openDays != null && person.openDays > 0 && (
-                      <span className={cn(person.openDays > 30 && "font-bold text-destructive")}>
-                        {" "}· {toPersianDigits(person.openDays)} روز
+                      <span className={cn("ms-1 inline-block", person.openDays > 30 && "font-bold text-destructive")}>
+                        ({toPersianDigits(person.openDays)} روز)
                       </span>
                     )}
                   </div>
@@ -751,14 +783,17 @@ function NewInvoicePageInner() {
               type="button"
               onClick={() => setPersonSheet(true)}
               className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed py-3.5 text-sm font-medium transition-colors",
+                "flex h-14 w-full items-center gap-3 rounded-2xl px-3 text-start text-sm font-bold transition-colors",
                 showPersonError
-                  ? "border-destructive/60 text-destructive"
-                  : "border-input text-muted-foreground hover:border-primary/40 hover:text-primary"
+                  ? "bg-destructive/8 text-destructive ring-1 ring-destructive/40"
+                  : "bg-muted/60 text-foreground/80 hover:bg-accent"
               )}
             >
-              <UserPlus className="size-4" />
-              انتخاب {personTypeLabel}
+              <span className="grid size-9 place-items-center rounded-xl bg-card text-primary">
+                <UserPlus className="size-[1.1rem]" />
+              </span>
+              <span className="flex-1">انتخاب {personTypeLabel}</span>
+              <ChevronLeft className="size-4 text-muted-foreground/60" />
             </button>
           )}
           {showPersonError && (
@@ -820,7 +855,7 @@ function NewInvoicePageInner() {
           )}
         </section>
 
-        {/* ───────── تسویه: نقد / چک / نسیه ───────── */}
+        {/* ───────── ۳. تسویه: نقد / چک / نسیه / ترکیبی (نسخهٔ ۷) ───────── */}
         <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
           <StepHeader
             n={3}
@@ -839,101 +874,95 @@ function NewInvoicePageInner() {
             </p>
           )}
 
-          {/* نوار تقسیم مبلغ */}
-          <PaymentBar total={total} cash={paidCash} checks={checkTotal} />
+          <Segmented
+            value={payMode}
+            onChange={(k) => {
+              haptic.tap()
+              if (k === "mixed") return setMixedMode(true)
+              setMixedMode(false)
+              quickPay(k)
+            }}
+            options={[
+              { key: "cash", label: "نقد" },
+              { key: "check", label: "چک" },
+              { key: "credit", label: "نسیه" },
+              { key: "mixed", label: "ترکیبی" },
+            ]}
+          />
 
-          {/* انتخاب سریع */}
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {(
-              [
-                { key: "cash", label: "همه نقد", icon: <Banknote className="size-4" />, active: total > 0 && paidCash >= total && checkTotal === 0 },
-                { key: "check", label: "با چک", icon: <CheckSquare2 className="size-4" />, active: checkTotal > 0 && paidCash === 0 },
-                { key: "credit", label: "نسیه", icon: <Clock3 className="size-4" />, active: total > 0 && paidCash === 0 && checkTotal === 0 },
-              ] as const
-            ).map((o) => (
-              <motion.button
-                key={o.key}
-                type="button"
-                whileTap={{ scale: 0.95 }}
-                disabled={total <= 0}
-                onClick={() => quickPay(o.key)}
-                className={cn(
-                  "flex h-12 items-center justify-center gap-1.5 rounded-2xl border text-xs font-bold transition-all disabled:opacity-40",
-                  o.active
-                    ? "border-primary bg-primary text-primary-foreground shadow-fab"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+          {/* نوار تقسیم مبلغ + راهنما */}
+          {total > 0 && (
+            <div className="mt-4">
+              <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
+                <span className="h-full bg-[color:var(--sale)] transition-[width] duration-500" style={{ width: `${Math.min(100, (paidCash / total) * 100)}%` }} />
+                <span className="h-full bg-warning transition-[width] duration-500" style={{ width: `${Math.min(100, (Math.min(checkTotal, Math.max(0, total - paidCash)) / total) * 100)}%` }} />
+              </div>
+              <div className="nums mt-2 flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-[color:var(--sale)]" />
+                  نقد <b className="text-foreground">{formatToman(paidCash, false)}</b>
+                </span>
+                {checkTotal > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-warning" />
+                    چک <b className="text-foreground">{formatToman(checkTotal, false)}</b>
+                  </span>
                 )}
-              >
-                {o.icon}
-                {o.label}
-              </motion.button>
-            ))}
-          </div>
+                {credit > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-muted-foreground/30" />
+                    نسیه <b className="text-foreground">{formatToman(credit, false)}</b>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
-          {/* ردیف نقدی */}
-          <div className="mt-4 rounded-2xl border border-border/70 p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-bold">
-                <span className="size-2 rounded-full bg-[color:var(--sale)]" />
-                نقدی / کارت‌به‌کارت
-              </span>
-              {remaining > 0 && (
+          {/* ردیف‌های پرداخت — فهرست گروهی */}
+          {(payMode === "cash" || payMode === "mixed" || payMode === "check" || paidCash > 0 || checks.length > 0) && (
+            <div className="mt-3 divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/80">
+              {(payMode === "cash" || payMode === "mixed" || paidCash > 0) && (
+                <div className="flex min-h-[3.4rem] items-center gap-3 px-3.5">
+                  <button
+                    type="button"
+                    onClick={() => setAccountSheet(true)}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
+                  >
+                    {account ? (
+                      <BankLogo bankKey={account.bankKey} size={30} />
+                    ) : (
+                      <span className="grid size-[1.875rem] shrink-0 place-items-center rounded-lg bg-sale/10 text-sale">
+                        <Banknote className="size-4" />
+                      </span>
+                    )}
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">نقد / کارت‌به‌کارت</span>
+                      <span
+                        className={cn(
+                          "block truncate text-caption",
+                          account ? "text-muted-foreground" : paidCash > 0 ? "font-bold text-warning-ink" : "text-muted-foreground"
+                        )}
+                      >
+                        {account ? account.name : "انتخاب حساب ›"}
+                      </span>
+                    </span>
+                  </button>
+                  <div className="w-36 shrink-0">
+                    <AmountInput bare value={paidCash} onChange={setPaidCash} placeholder="مبلغ" showWords={false} />
+                  </div>
+                </div>
+              )}
+              {payMode === "mixed" && remaining > 0 && (
                 <button
                   type="button"
                   onClick={() => fillCash()}
-                  className="nums rounded-lg bg-primary/10 px-2 py-1 text-caption font-bold text-primary transition-colors hover:bg-primary/20"
+                  className="nums flex min-h-11 w-full items-center gap-2 px-3.5 text-label font-bold text-primary transition-colors hover:bg-accent/40"
                 >
-                  + باقی‌مانده ({formatToman(remaining, false)})
+                  <Plus className="size-4" />
+                  باقی‌مانده را نقد کن
+                  <span className="ms-auto font-semibold text-muted-foreground">{formatToman(remaining, false)}</span>
                 </button>
               )}
-            </div>
-            <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
-              <AmountInput value={paidCash} onChange={setPaidCash} placeholder="۰" showWords={false} />
-              <button
-                type="button"
-                onClick={() => setAccountSheet(true)}
-                disabled={paidCash <= 0}
-                className={cn(
-                  "flex h-12 w-full items-center gap-2.5 rounded-2xl border px-3 transition-all disabled:cursor-default",
-                  paidCash <= 0
-                    ? "border-dashed border-border/70 bg-muted/30"
-                    : account
-                      ? "border-input bg-card hover:border-primary/40"
-                      : "border-warning/60 bg-warning/5"
-                )}
-              >
-                {paidCash > 0 && account ? (
-                  <>
-                    <BankLogo bankKey={account.bankKey} size={28} />
-                    <span className="min-w-0 flex-1 truncate text-start text-sm">{account.name}</span>
-                    <span className="text-caption text-muted-foreground">تغییر</span>
-                  </>
-                ) : (
-                  <span
-                    className={cn(
-                      "w-full text-center text-xs font-medium",
-                      paidCash > 0 ? "text-[color:color-mix(in_srgb,var(--warning)_75%,black)]" : "text-muted-foreground"
-                    )}
-                  >
-                    {paidCash > 0 ? "به کدام حساب؟ انتخاب کنید" : "حساب بانکی (بعد از مبلغ)"}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* ردیف چک‌ها */}
-          <div className="mt-2.5 rounded-2xl border border-border/70 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-xs font-bold">
-                <span className="size-2 rounded-full bg-[color:var(--hue-checks)]" />
-                چک{type === "SALE" ? " دریافتی" : " صادره"}
-              </span>
-              {checks.length > 0 && (
-                <span className="nums text-caption text-muted-foreground">جمع {formatToman(checkTotal, false)}</span>
-              )}
-            </div>
-            <div className="space-y-2">
               <AnimatePresence initial={false}>
                 {checks.map((c, idx) => (
                   <motion.div
@@ -944,126 +973,122 @@ function NewInvoicePageInner() {
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 px-3 py-2">
+                    <div className="flex min-h-[3.4rem] items-center gap-2.5 px-3.5 py-2">
                       <BankLogo bankKey={c.bankKey} size={30} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="nums text-xs font-bold">{formatToman(c.amount, false)}</span>
-                          {c.isRegistered ? (
-                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-income/10 px-1.5 py-px text-micro font-bold text-income">
-                              <BadgeCheck className="size-2.5" />
-                              ثبت‌شده
-                            </span>
-                          ) : (
-                            <span className="shrink-0 rounded-md bg-warning/10 px-1.5 py-px text-micro font-bold text-warning-ink">
-                              ثبت‌نشده
-                            </span>
-                          )}
-                          {c.photo && <Paperclip className="size-2.5 shrink-0 text-muted-foreground" />}
+                          <span className="nums text-sm font-bold">{formatToman(c.amount, false)}</span>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                              c.isRegistered ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
+                            )}
+                          >
+                            {c.isRegistered ? "ثبت‌شده" : "ثبت‌نشده"}
+                          </span>
+                          {c.photo && <Paperclip className="size-3 shrink-0 text-muted-foreground" />}
                         </div>
-                        <div className="nums text-caption text-muted-foreground">
-                          سررسید {toPersianDigits(c.dueDate.replace(/-/g, "/"))}
-                          {c.serial ? ` • ${c.serial}` : ""}
+                        <div className="nums truncate text-caption text-muted-foreground">
+                          چک{c.serial ? ` ${c.serial}` : ""} | سررسید {toPersianDigits(c.dueDate.replace(/-/g, "/"))}
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setChecks(checks.filter((_, i) => i !== idx))}
-                        className="rounded-lg p-1.5 text-destructive/70 hover:bg-destructive/10"
+                        className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         aria-label="حذف چک"
                       >
-                        <Trash2 className="size-3.5" />
+                        <Trash2 className="size-4" />
                       </button>
                     </div>
                   </motion.div>
                 ))}
               </AnimatePresence>
-              <button
-                type="button"
-                onClick={() => openCheckSheet()}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[color:color-mix(in_srgb,var(--hue-checks)_45%,transparent)] py-2.5 text-xs font-bold text-[color:var(--hue-checks)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--hue-checks)_8%,transparent)]"
-              >
-                <PlusCircle className="size-4" />
-                {remaining > 0 ? `افزودن چک (${formatToman(remaining, false)} مانده)` : "افزودن چک"}
-              </button>
+              {(payMode === "check" || payMode === "mixed" || checks.length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => openCheckSheet()}
+                  className="nums flex min-h-[3.25rem] w-full items-center gap-2 px-3.5 text-sm font-bold text-primary transition-colors hover:bg-accent/40"
+                >
+                  <Plus className="size-4" />
+                  افزودن چک
+                  {remaining > 0 && (
+                    <span className="ms-auto text-caption font-semibold text-muted-foreground">
+                      {formatToman(remaining, false)} مانده
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
-          </div>
+          )}
 
-          {/* نتیجه: نسیه / تسویه / مازاد */}
-          <motion.div
-            layout
+          {/* نتیجه */}
+          <div
             className={cn(
-              "mt-3 flex items-center gap-3 rounded-2xl px-4 py-3",
-              credit > 0 ? "bg-warning/10" : excess > 0 ? "bg-primary/10" : "bg-income/10"
+              "nums mt-3 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-label font-bold",
+              total === 0
+                ? "bg-muted/60 text-muted-foreground"
+                : credit > 0
+                  ? "bg-warning/12 text-warning-ink"
+                  : excess > 0
+                    ? "bg-primary/8 text-primary"
+                    : "bg-income/10 text-income"
             )}
           >
-            <span
-              className={cn(
-                "grid size-9 shrink-0 place-items-center rounded-xl text-white",
-                credit > 0 ? "bg-warning" : excess > 0 ? "bg-primary" : "bg-income"
-              )}
-            >
-              {credit > 0 ? <Clock3 className="size-4" /> : excess > 0 ? <Sparkles className="size-4" /> : <CheckCircle2 className="size-4" />}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-extrabold">
-                {total === 0
-                  ? "هنوز مبلغی نیست"
-                  : credit > 0
-                    ? `نسیه — به حساب «${person?.name ?? personTypeLabel}» می‌رود`
-                    : excess > 0
-                      ? "مازاد پرداخت → علی‌الحساب شخص"
-                      : "تسویه کامل"}
-              </div>
-              <div className="text-caption text-muted-foreground">
-                {credit > 0
-                  ? "بعداً از صفحهٔ شخص یا فاکتور تسویه می‌کنید"
+            {total > 0 && credit === 0 && excess === 0 ? <CheckCircle2 className="size-4" /> : <Clock3 className="size-4" />}
+            <span className="min-w-0 flex-1 truncate">
+              {total === 0
+                ? "اول کالا اضافه کنید"
+                : credit > 0
+                  ? `نسیه — به حساب «${person?.name ?? personTypeLabel}»`
                   : excess > 0
-                    ? "در تراز شخص لحاظ می‌شود"
-                    : total > 0
-                      ? "چیزی باقی نمانده"
-                      : "اول کالا اضافه کنید"}
-              </div>
-            </div>
-            <span className="nums shrink-0 text-base font-extrabold">
-              <AnimatedNumber value={excess > 0 ? excess : credit} />
+                    ? "مازاد پرداخت — علی‌الحساب شخص"
+                    : "تسویه کامل"}
             </span>
-          </motion.div>
+            {(credit > 0 || excess > 0) && <AnimatedNumber value={excess > 0 ? excess : credit} />}
+          </div>
         </section>
 
-        {/* ───────── جزئیات: تاریخ، تخفیف، یادداشت ───────── */}
-        <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
-          <h2 className="mb-3 text-[0.95rem] font-extrabold">جزئیات</h2>
-          <div className="grid grid-cols-2 gap-3">
+        {/* ───────── جزئیات: تاریخ، تخفیف، یادداشت — ردیف‌های فهرستی ───────── */}
+        <section className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-card">
+          <h2 className="px-4 pb-1 pt-4 text-[0.95rem] font-extrabold">جزئیات</h2>
+          <div className="divide-y divide-border/60">
             <div ref={dateFieldRef}>
-              <label className="mb-1.5 block text-label font-bold text-foreground/80">تاریخ فاکتور</label>
-              <JalaliDateField value={date} onChange={setDate} />
+              <JalaliDateField variant="cell" label="تاریخ" value={date} onChange={setDate} />
               {showDateError && (
-                <p className="mt-1 text-caption font-medium text-destructive">تاریخ فاکتور را انتخاب کنید</p>
+                <p className="px-4 pb-2 text-caption font-medium text-destructive">تاریخ فاکتور را انتخاب کنید</p>
               )}
             </div>
             <div ref={discountFieldRef}>
-              <label className="mb-1.5 block text-label font-bold text-foreground/80">تخفیف (تومان)</label>
-              <AmountInput
-                value={discount}
-                onChange={(v) => {
-                  setDiscount(v)
-                  setDiscountTouched(true)
-                }}
-                placeholder="ندارد"
-                showWords={false}
-              />
+              <label className="flex min-h-[3.25rem] items-center gap-3 px-4">
+                <span className="flex-1 text-sm font-semibold">تخفیف</span>
+                <span className="w-40">
+                  <AmountInput
+                    bare
+                    value={discount}
+                    onChange={(v) => {
+                      setDiscount(v)
+                      setDiscountTouched(true)
+                    }}
+                    placeholder="ندارد"
+                    showWords={false}
+                  />
+                </span>
+              </label>
               {showDiscountError && (
-                <p className="mt-1 text-caption font-medium text-destructive">تخفیف بیشتر از جمع اقلام است</p>
+                <p className="px-4 pb-2 text-caption font-medium text-destructive">تخفیف بیشتر از جمع اقلام است</p>
               )}
             </div>
+            <label className="flex min-h-[3.25rem] items-center gap-3 px-4">
+              <span className="shrink-0 text-sm font-semibold">یادداشت</span>
+              <input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="اختیاری"
+                className="h-11 min-w-0 flex-1 bg-transparent text-end text-sm outline-none placeholder:text-muted-foreground/70"
+              />
+            </label>
           </div>
-          <Input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="یادداشت فاکتور (اختیاری)"
-            className="mt-3 bg-card text-sm"
-          />
         </section>
 
       </div>
@@ -1131,16 +1156,15 @@ function NewInvoicePageInner() {
       </div>
 
       {/* ───────── نوار چسبان پایین ───────── */}
-      {/* موبایل: چسبیده به لبهٔ پایین با خلاصهٔ «۳ قلم · نسیه X» (نسخهٔ ۷) — دسکتاپ: پنل خلاصهٔ کنار فرم */}
+      {/* موبایل: چسبیده به لبهٔ پایین با خلاصهٔ «۳ قلم، نسیه X» (نسخهٔ ۷) — دسکتاپ: پنل خلاصهٔ کنار فرم */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/80 bg-card/95 px-4 pt-2.5 backdrop-blur-xl [padding-bottom:max(0.75rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="nums flex items-center gap-1.5 truncate text-caption text-muted-foreground">
               {items.length > 0 ? `${toPersianDigits(items.length)} قلم` : "مبلغ نهایی"}
               {credit > 0 && total > 0 && (
-                <span className="font-bold text-warning-ink">· نسیه {formatTomanCompact(credit)}</span>
+                <span className="font-bold text-warning-ink">| نسیه {formatTomanCompact(credit)}</span>
               )}
-              {!editId && <AutosaveStatus savedAt={draftSavedAt} />}
               {editDirty && <span className="font-bold text-warning-ink">• ذخیره‌نشده</span>}
             </div>
             <div className="nums truncate text-lg font-black tracking-tight">
@@ -1353,7 +1377,7 @@ function PersonPickerSheet({
       open={open}
       onClose={onClose}
       title={type === "SALE" ? "انتخاب مشتری" : "انتخاب فروشنده"}
-      description={`${toPersianDigits(people.length)} شخص · مانده هر نفر کنار نامش`}
+      description={`${toPersianDigits(people.length)} شخص، مانده هر نفر کنار نامش`}
       size="tall"
     >
       <div className="sticky -top-2 z-10 -mx-5 -mt-2 bg-card px-5 pb-2 pt-2">
@@ -1385,6 +1409,13 @@ function PersonPickerSheet({
             <span className="block text-caption text-muted-foreground">فقط نام کافی است، بقیه بعداً</span>
           </span>
         </button>
+      </div>
+      {filtered.length > 0 && (
+        <div className="mb-0.5 mt-3 px-0.5 text-caption font-bold text-muted-foreground">
+          {q ? "نتیجهٔ جستجو" : type === "SALE" ? "مشتری‌ها" : "فروشنده‌ها"}
+        </div>
+      )}
+      <div className="divide-y divide-border/60">
         {filtered.map((p) => {
           const bal = p.balance ?? 0
           return (
@@ -1545,14 +1576,8 @@ function ItemInsight({
   const lastPurchase = product.lastPurchasePrice ?? 0
 
   type Tile = { key: string; label: string; value: string; tone?: string; price?: number }
-  const tiles: Tile[] = [
-    {
-      key: "stock",
-      label: "موجودی انبار",
-      value: `${toPersianDigits(Number.isInteger(stock) ? String(stock) : stock.toFixed(1))} ${unit}`,
-      tone: isSale && (stock <= 0 || quantity > stock) ? "text-destructive" : undefined,
-    },
-  ]
+  // موجودی بالای شیت جدا نمایش داده می‌شود؛ اینجا فقط قیمت‌های مرجع
+  const tiles: Tile[] = []
   if (isSale) {
     if (cost > 0) tiles.push({ key: "cost", label: "تمام‌شده", value: formatToman(cost, false) })
     if (ownLast > 0) tiles.push({ key: "own", label: "با همین شخص", value: formatToman(ownLast, false), price: ownLast })
@@ -1602,61 +1627,52 @@ function ItemInsight({
     muted: "bg-muted/60 text-muted-foreground",
   }
 
+  // نسخهٔ ۷: چیپ‌های قیمت مرجع (لمس = همان قیمت) + یک ردیف وضعیت سود/تغییر قیمت
   return (
-    <div className="col-span-2 overflow-hidden rounded-2xl border border-border/70 bg-card">
-      {/* کاشی‌ها — gap-px روی پس‌زمینهٔ border: خط جداکننده مستقل از جهت متن */}
-      <div className="grid gap-px bg-border/60" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
-        {tiles.map((t) => {
-          const active = t.price !== undefined && unitPrice === t.price
-          const body = (
-            <>
-              <span className="flex items-center gap-1 truncate text-micro text-muted-foreground">
-                {t.label}
-                {active && <CheckCircle2 className="size-3 shrink-0 text-primary" />}
+    <div className="space-y-2.5">
+      {tiles.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tiles.map((t) => {
+            const active = t.price !== undefined && unitPrice === t.price
+            const body = (
+              <>
+                <span className="font-medium opacity-80">{t.label}</span>
+                <span className={cn("nums font-extrabold", t.tone)}>{t.value}</span>
+                {active && <CheckCircle2 className="size-3.5 shrink-0" />}
+              </>
+            )
+            return t.price !== undefined ? (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => onUse(t.price!)}
+                aria-label={`استفاده از قیمت ${t.label}`}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-caption transition-colors",
+                  active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-secondary-foreground hover:bg-primary/15"
+                )}
+              >
+                {body}
+              </button>
+            ) : (
+              <span key={t.key} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-muted px-3 text-caption text-foreground/80">
+                {body}
               </span>
-              <span className={cn("nums mt-0.5 block truncate text-label font-extrabold", t.tone, t.price !== undefined && "text-primary")}>
-                {t.value}
-              </span>
-            </>
-          )
-          return t.price !== undefined ? (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => onUse(t.price!)}
-              aria-label={`استفاده از قیمت ${t.label}`}
-              className={cn(
-                "min-w-0 px-2.5 py-2 text-start transition-colors active:bg-primary/15",
-                active ? "bg-primary/[0.07]" : "bg-card hover:bg-accent/60"
-              )}
-            >
-              {body}
-            </button>
-          ) : (
-            <div key={t.key} className="min-w-0 bg-card px-2.5 py-2">
-              {body}
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
       {strip && (
-        <div className={cn("nums border-t border-border/60 px-3 py-2 text-caption font-bold", toneCls[strip.tone])}>
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate">{strip.main}</span>
-            {strip.side && <span className="shrink-0 text-caption font-medium opacity-85">{strip.side}</span>}
-          </div>
-          {strip.bar !== undefined && (
-            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-current/15">
-              <div className="h-full rounded-full bg-current transition-[width] duration-300" style={{ width: `${Math.max(4, strip.bar * 100)}%` }} />
-            </div>
-          )}
+        <div className={cn("nums flex items-center justify-between gap-2 rounded-xl px-3.5 py-2.5 text-label font-bold", toneCls[strip.tone])}>
+          <span className="truncate">{strip.main}</span>
+          {strip.side && <span className="shrink-0 text-caption font-semibold opacity-85">{strip.side}</span>}
         </div>
       )}
 
       {short && (
-        <p className="border-t border-border/60 bg-warning/10 px-3 py-1.5 text-caption font-bold text-warning-ink">
-          ⚠ تعداد بیشتر از موجودی است — با ثبت این فاکتور موجودی منفی می‌شود
+        <p className="rounded-xl bg-warning/12 px-3.5 py-2 text-caption font-bold text-warning-ink">
+          تعداد بیشتر از موجودی است — با ثبت این فاکتور موجودی منفی می‌شود
         </p>
       )}
     </div>
@@ -1827,6 +1843,56 @@ function ItemPickerSheet({
     reset()
   }
 
+  // تعداد (شمارندهٔ بزرگ +/−) و قیمت (با حروف) — الگوی فهرست گروهی (نسخهٔ ۷)
+  const qtyPriceBlock = (
+    <>
+      <section>
+        <div className="mb-2 px-1 text-label font-extrabold text-foreground/85">تعداد</div>
+        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card p-2">
+          <div className="flex h-12 items-stretch overflow-hidden rounded-xl bg-muted">
+            <button
+              type="button"
+              aria-label="یکی بیشتر"
+              onClick={() => setQuantity(Math.round((quantity + 1) * 1000) / 1000)}
+              className="grid w-12 shrink-0 place-items-center text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
+            >
+              <Plus className="size-5" strokeWidth={2.6} />
+            </button>
+            <NumberInput
+              value={quantity}
+              onChange={setQuantity}
+              placeholder="۱"
+              allowDecimal
+              className="h-full w-16 min-w-0 rounded-none border-0 bg-transparent px-0 text-center text-xl font-extrabold hover:border-0 focus:ring-0 focus-visible:ring-0"
+            />
+            <button
+              type="button"
+              aria-label="یکی کمتر"
+              disabled={quantity <= 1}
+              onClick={() => setQuantity(Math.max(1, Math.round((quantity - 1) * 1000) / 1000))}
+              className="grid w-12 shrink-0 place-items-center text-primary transition-colors hover:bg-primary/10 active:bg-primary/15 disabled:text-muted-foreground/40"
+            >
+              <Minus className="size-5" strokeWidth={2.6} />
+            </button>
+          </div>
+          <span className="text-[0.95rem] font-bold">{formatUnit(activeUnit)}</span>
+        </div>
+      </section>
+      <section>
+        <div className="mb-2 px-1 text-label font-extrabold text-foreground/85">قیمت هر {formatUnit(activeUnit)}</div>
+        <div className="rounded-2xl border border-border/80 bg-card px-3.5 pb-2.5 pt-1 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/15">
+          <AmountInput
+            bare
+            value={unitPrice}
+            onChange={setPrice}
+            placeholder="قیمت به تومان"
+            className="[&_input]:h-12 [&_input]:text-xl [&_input]:font-extrabold"
+          />
+        </div>
+      </section>
+    </>
+  )
+
   return (
     <BottomSheet
       open={open}
@@ -1837,64 +1903,13 @@ function ItemPickerSheet({
       title={mode === "pick" && selected ? selected.name : "افزودن کالا به فاکتور"}
       description={
         mode === "pick" && selected
-          ? [selected.brand, selected.code && `کد ${selected.code}`, `واحد: ${formatUnit(selected.unit)}`].filter(Boolean).join(" · ")
+          ? [selected.brand, selected.code && `کد ${selected.code}`, `واحد: ${formatUnit(selected.unit)}`].filter(Boolean).join(" | ")
           : undefined
       }
       size="tall"
       footer={
-        <>
-            {(mode === "new" || selected) && (
-        <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-2">
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              {activeUnit === "عدد" ? "تعداد" : `تعداد (${formatUnit(activeUnit)})`}
-            </label>
-            {/* نسخهٔ ۷: شمارندهٔ +/− کنار فیلد عددی (هنوز تایپی هم هست — برای کیلو/اعشار) */}
-            <div className="flex h-12 items-stretch overflow-hidden rounded-2xl border border-input bg-card focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/15">
-              <button
-                type="button"
-                aria-label="یکی بیشتر"
-                onClick={() => setQuantity(Math.round((quantity + 1) * 1000) / 1000)}
-                className="grid w-11 shrink-0 place-items-center text-primary transition-colors hover:bg-primary/8 active:bg-primary/12"
-              >
-                <Plus className="size-4" strokeWidth={2.6} />
-              </button>
-              <NumberInput
-                value={quantity}
-                onChange={setQuantity}
-                placeholder="۱"
-                className="h-full min-w-0 rounded-none border-0 px-1 text-center text-base focus:ring-0 focus-visible:ring-0"
-              />
-              <button
-                type="button"
-                aria-label="یکی کمتر"
-                disabled={quantity <= 1}
-                onClick={() => setQuantity(Math.max(1, Math.round((quantity - 1) * 1000) / 1000))}
-                className="grid w-11 shrink-0 place-items-center text-primary transition-colors hover:bg-primary/8 active:bg-primary/12 disabled:text-muted-foreground/40"
-              >
-                <Minus className="size-4" strokeWidth={2.6} />
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              قیمت هر {formatUnit(activeUnit)} (تومان)
-            </label>
-            <AmountInput value={unitPrice} onChange={setPrice} showWords={false} />
-          </div>
-          {/* موجودی، قیمت‌های مرجع (لمسی) و حاشیه سود / تغییر قیمت — همه در یک کارت */}
-          {mode === "pick" && selected && (
-            <ItemInsight
-              product={selected}
-              invoiceType={invoiceType}
-              quantity={quantity}
-              unitPrice={unitPrice}
-              ownLast={ownLast}
-              onUse={setPrice}
-            />
-          )}
-        </div>
-      )}
+        mode === "new" || selected ? (
+          <>
           <Button
             onClick={addItem}
             disabled={mode === "pick" ? !selected : name.trim().length < 2}
@@ -1910,9 +1925,46 @@ function ItemPickerSheet({
               </>
             )}
           </Button>
-        </>
+          </>
+        ) : undefined
       }
     >
+      {mode === "pick" && selected ? (
+        /* نسخهٔ ۷: بعد از انتخاب، شیت «جزئیات قلم» می‌شود — موجودی، تعداد، قیمت و سود */
+        <div className="space-y-4 pb-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={cn(
+                "nums inline-flex h-7 items-center rounded-full px-2.5 text-caption font-bold",
+                invoiceType === "SALE" && (selected.stock ?? 0) <= 0
+                  ? "bg-destructive/10 text-destructive"
+                  : "bg-income/10 text-income"
+              )}
+            >
+              {(selected.stock ?? 0) <= 0
+                ? "موجودی ندارد"
+                : `${toPersianDigits(Number.isInteger(selected.stock ?? 0) ? String(selected.stock ?? 0) : (selected.stock ?? 0).toFixed(1))} ${formatUnit(selected.unit)} در انبار`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="ms-auto h-7 rounded-full px-2.5 text-label font-bold text-primary transition-colors hover:bg-primary/10"
+            >
+              تغییر کالا
+            </button>
+          </div>
+          {qtyPriceBlock}
+          <ItemInsight
+            product={selected}
+            invoiceType={invoiceType}
+            quantity={quantity}
+            unitPrice={unitPrice}
+            ownLast={ownLast}
+            onUse={setPrice}
+          />
+        </div>
+      ) : (
+      <>
       {/* تب انتخاب/جدید */}
       <div className="mb-3 flex rounded-[0.9rem] bg-muted p-1">
         <button
@@ -1937,7 +1989,7 @@ function ItemPickerSheet({
           )}
         >
           <PackagePlus className="size-3.5" />
-          کالا جدید
+          کالای جدید
         </button>
       </div>
 
@@ -1953,7 +2005,7 @@ function ItemPickerSheet({
               className="field border-transparent bg-muted ps-10 hover:border-transparent"
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="divide-y divide-border/60">
             {filtered.map((p) => {
               // نمایش موجودی زندهٔ انبار کنار هر کالا — در فروش مهم‌تر است
               const stockNum = p.stock ?? 0
@@ -1963,33 +2015,34 @@ function ItemPickerSheet({
                   : toPersianDigits(stockNum.toFixed(1))
               const lowStock = invoiceType === "SALE" && stockNum <= 0
               return (
-                <SheetOption
+                <button
                   key={p.id}
-                  icon={
-                    p.photoId && pickPhotoUrls[p.photoId] ? (
-                      <img
-                        src={pickPhotoUrls[p.photoId]}
-                        alt={p.name}
-                        loading="lazy"
-                        className="size-full rounded-xl object-cover"
-                      />
-                    ) : (
-                      <Package className="size-4" />
-                    )
-                  }
-                  title={[p.name, p.brand].filter(Boolean).join(" — ")}
-                  subtitle={
-                    [
-                      p.code ? `کد ${p.code}` : null,
-                      lowStock ? `موجودی: ندارد!` : `موجودی: ${stockText} ${formatUnit(p.unit)}`,
-                    ]
-                      .filter(Boolean)
-                      .join(" • ") || `واحد: ${formatUnit(p.unit)}`
-                  }
-                  selected={selected?.id === p.id}
+                  type="button"
                   onClick={() => pickProduct(p)}
-                />
-              )
+                  className="flex w-full items-center gap-3 py-2.5 text-start transition-colors hover:bg-accent/40"
+                >
+                  <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-muted text-muted-foreground">
+                    {p.photoId && pickPhotoUrls[p.photoId] ? (
+                      <img src={pickPhotoUrls[p.photoId]} alt={p.name} loading="lazy" className="size-full object-cover" />
+                    ) : (
+                      <Package className="size-5" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold">{[p.name, p.brand].filter(Boolean).join(" — ")}</span>
+                    <span className="nums block truncate text-caption text-muted-foreground">
+                      {p.code ? `کد ${p.code}` : `واحد: ${formatUnit(p.unit)}`}
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      "nums shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                      lowStock ? "bg-destructive/10 text-destructive" : "bg-muted text-foreground/70"
+                    )}
+                  >
+                    {lowStock ? "ناموجود" : `${stockText} ${formatUnit(p.unit)}`}
+                  </span>
+                </button>              )
             })}
             {filtered.length === 0 && (
               <p className="py-4 text-center text-sm text-muted-foreground">
@@ -2116,6 +2169,9 @@ function ItemPickerSheet({
         </div>
       )}
 
+      {mode === "new" && <div className="mt-4 space-y-4">{qtyPriceBlock}</div>}
+      </>
+      )}
     </BottomSheet>
   )
 }

@@ -66,6 +66,7 @@ export function AmountInput({
   className,
   autoFocus,
   onFocus,
+  bare = false,
 }: {
   value: number
   onChange: (n: number) => void
@@ -75,6 +76,8 @@ export function AmountInput({
   className?: string
   autoFocus?: boolean
   onFocus?: () => void
+  /** بدون قاب فیلد — برای ردیف‌های فهرستی (نسخهٔ ۷) */
+  bare?: boolean
 }) {
   const [display, setDisplay] = React.useState("")
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -112,7 +115,12 @@ export function AmountInput({
           onChange={handleChange}
           onFocus={handleFocus}
           placeholder={placeholder || "۰"}
-          className="nums field text-end font-semibold tracking-wide"
+          className={cn(
+            "nums text-end font-semibold tracking-wide",
+            bare
+              ? "h-11 w-full bg-transparent text-[0.95rem] outline-none placeholder:font-medium placeholder:text-muted-foreground/70"
+              : "field"
+          )}
         />
         {suffix && (
           <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-xs text-muted-foreground">

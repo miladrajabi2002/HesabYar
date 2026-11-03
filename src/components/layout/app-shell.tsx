@@ -4,7 +4,7 @@
  * پوستهٔ اصلی حساب‌یار (نسخهٔ ۷)
  *  • دسکتاپ: سایدبار تخت با آیکون‌های خطی تک‌رنگ (فقط آیتم فعال رنگی) + نوار بالا با جستجوی سراسری (Ctrl/⌘ K) و زنگ
  *  • موبایل: هدر جمع‌وجور (عنوان بزرگ + جستجو + زنگ «کار امروز») — بدون لوگو تا محتوا جا داشته باشد
- *  • نوار پایین شناور با دکمهٔ + برجسته؛ نشانگر فعال (قرص پشت آیکون + خط درخشان بالا) با فنر بین آیتم‌ها لیز می‌خورد
+ *  | نوار پایین شناور مینیمال با دکمهٔ + برجسته؛ نشانگر فعال (قرص پشت آیکون) با فنر بین آیتم‌ها لیز می‌خورد
  *    با اسکرول به پایین کنار می‌رود و در صفحات فرم (فاکتور جدید) پنهان است
  *  • زنگ: چک‌های در جریانِ سررسید امروز/گذشته (همان معیار یادآوری صبحگاهی تلگرام) — /api/alerts
  */
@@ -118,6 +118,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href))
   const isFormRoute = FORM_ROUTES.some((r) => pathname.startsWith(r))
+  // صفحات فرم و جزئیات سربرگ اختصاصی خودشان را دارند (بازگشت + عنوان + اقدام‌ها) — هدر عمومی موبایل پنهان است
+  const ownHeader = isFormRoute || /^\/invoices\/(?!new)[^/]+/.test(pathname) || /^\/people\/[^/]+/.test(pathname)
   const navHidden = isFormRoute || (scrolledAway && !moreSheetOpen)
   const moreActive = MORE_ITEMS.some((m) => isActive(m.href)) || moreSheetOpen
 
@@ -198,7 +200,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ───────── محتوا ───────── */}
       <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-[16rem]")}>
         {/* هدر موبایل — جمع‌وجور: عنوان بزرگ + جستجو + زنگ */}
-        <header className="hy-mobile-header sticky top-0 z-30 border-b border-transparent bg-background/88 px-4 pb-2.5 pt-[calc(env(safe-area-inset-top,0px)+0.6rem)] backdrop-blur-xl lg:hidden">
+        <header
+          className={cn(
+            "hy-mobile-header sticky top-0 z-30 bg-background/90 px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+1.15rem)] backdrop-blur-xl lg:hidden",
+            ownHeader && "hidden"
+          )}
+        >
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <AnimatePresence mode="popLayout" initial={false}>
@@ -245,7 +252,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main
           className={cn(
-            "mx-auto w-full max-w-6xl flex-1 px-4 pt-3 sm:px-6 lg:px-8 lg:pb-12 lg:pt-7",
+            "mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-7",
+            ownHeader ? "pt-[calc(env(safe-area-inset-top,0px)+1.15rem)]" : "pt-2",
             isFormRoute ? "pb-32" : "pb-40"
           )}
         >
@@ -259,13 +267,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         initial={false}
         animate={{ y: navHidden ? 150 : 0, opacity: navHidden ? 0 : 1 }}
         transition={{ type: "spring", stiffness: 420, damping: 38 }}
-        className="hy-nav fixed inset-x-3.5 z-40 mx-auto grid h-[4.4rem] max-w-md grid-cols-5 items-center rounded-[1.75rem] px-1.5 [bottom:max(1.15rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+0.35rem))] lg:hidden"
+        className="hy-nav fixed inset-x-4 z-40 mx-auto grid h-16 max-w-md grid-cols-5 items-center rounded-[1.4rem] px-1 [bottom:max(1rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+0.25rem))] lg:hidden"
       >
         <BottomNavItem href="/" label="خانه" active={isActive("/")} />
         <BottomNavItem href="/invoices" label="فاکتورها" active={isActive("/invoices")} />
 
-        {/* دکمهٔ + مرکزی — برجسته، بالاتر از نوار */}
-        <div className="relative flex h-full flex-col items-center justify-end pb-[0.55rem]">
+        {/* دکمهٔ + مرکزی — برجسته و کمی بالاتر از نوار، بدون برچسب */}
+        <div className="relative flex h-full items-center justify-center">
           <motion.button
             type="button"
             onClick={() => {
@@ -273,13 +281,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               router.push("/invoices/new")
             }}
             aria-label="فاکتور جدید"
-            whileTap={reduceMotion ? undefined : { scale: 0.88, rotate: 90 }}
-            transition={{ type: "spring", stiffness: 520, damping: 24 }}
-            className="hy-fab absolute -top-[1.9rem] grid size-[3.9rem] place-items-center rounded-[1.4rem] text-primary-foreground"
+            whileTap={reduceMotion ? undefined : { scale: 0.9, rotate: 90 }}
+            transition={{ type: "spring", stiffness: 520, damping: 26 }}
+            className="hy-fab absolute -top-5 grid size-14 place-items-center rounded-[1.15rem] text-primary-foreground"
           >
-            <IconPlus className="relative size-7" strokeWidth={2.6} />
+            <IconPlus className="relative size-6" strokeWidth={2.6} />
           </motion.button>
-          <span className="text-micro font-bold leading-none text-primary">فاکتور</span>
         </div>
 
         <BottomNavItem href="/calendar" label="تقویم" active={isActive("/calendar")} />
@@ -290,7 +297,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             haptic.tap()
             setMoreSheetOpen(true)
           }}
-          icon={<IconApps active={moreActive} className="size-[1.35rem]" />}
+          icon={<IconApps active={moreActive} className="size-[1.3rem]" />}
         />
       </motion.nav>
 
@@ -324,7 +331,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-bold">{c.personName}</div>
                   <div className="nums text-caption text-muted-foreground">
-                    {c.direction === "RECEIVED" ? "دریافتی" : "صادره"} · {formatJalaliShort(new Date(c.dueDate))}
+                    {c.direction === "RECEIVED" ? "دریافتی" : "صادره"} | {formatJalaliShort(new Date(c.dueDate))}
                   </div>
                 </div>
                 <div className="shrink-0 text-end">
@@ -459,43 +466,31 @@ function SidebarItem({ item, active, count }: { item: NavItem; active: boolean; 
   )
 }
 
-/** نشانگر فعال نوار پایین — قرص پشت آیکون + خط درخشان لبهٔ بالا؛ هر دو با فنر بین آیتم‌ها لیز می‌خورند */
+/** نشانگر فعال نوار پایین — یک قرص کم‌رنگ پشت آیکون که با فنر بین آیتم‌ها لیز می‌خورد */
 function NavIndicator() {
   return (
-    <>
-      <motion.span
-        layoutId="bottom-nav-glow"
-        aria-hidden
-        className="absolute -top-px left-1/2 h-[3px] w-7 -translate-x-1/2 rounded-b-full bg-primary shadow-[0_2px_10px_1px_color-mix(in_srgb,var(--primary)_55%,transparent)]"
-        transition={{ type: "spring", stiffness: 520, damping: 34 }}
-      />
-      <motion.span
-        layoutId="bottom-nav-pill"
-        aria-hidden
-        className="absolute inset-0 rounded-full bg-primary/12"
-        transition={{ type: "spring", stiffness: 520, damping: 34 }}
-      />
-    </>
+    <motion.span
+      layoutId="bottom-nav-pill"
+      aria-hidden
+      className="absolute inset-0 rounded-full bg-primary/10"
+      transition={{ type: "spring", stiffness: 520, damping: 36 }}
+    />
   )
 }
 
 function NavContent({ active, icon, label }: { active: boolean; icon: ReactNode; label: string }) {
   return (
     <>
-      <span className="relative grid h-8 w-14 place-items-center">
+      <span className="relative grid h-7 w-12 place-items-center">
         {active && <NavIndicator />}
-        <motion.span
-          className={cn("relative z-10 transition-colors duration-200", active ? "text-primary" : "text-muted-foreground")}
-          animate={{ y: active ? -1 : 0, scale: active ? 1.06 : 1 }}
-          transition={{ type: "spring", stiffness: 500, damping: 26 }}
-        >
+        <span className={cn("relative z-10 transition-colors duration-200", active ? "text-primary" : "text-muted-foreground")}>
           {icon}
-        </motion.span>
+        </span>
       </span>
       <span
         className={cn(
           "relative z-10 text-micro leading-none transition-colors duration-200",
-          active ? "font-extrabold text-primary" : "font-medium text-muted-foreground"
+          active ? "font-bold text-foreground" : "font-medium text-muted-foreground"
         )}
       >
         {label}
@@ -514,7 +509,7 @@ function BottomNavItem({ href, label, active }: { href: SectionHref; label: stri
       aria-current={active ? "page" : undefined}
       className="group relative flex h-full flex-col items-center justify-center gap-1 active:scale-95"
     >
-      <NavContent active={active} label={label} icon={<Icon active={active} className="size-[1.35rem]" />} />
+      <NavContent active={active} label={label} icon={<Icon active={active} className="size-[1.3rem]" />} />
     </Link>
   )
 }

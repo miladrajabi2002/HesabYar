@@ -319,7 +319,7 @@ export default function AccountsPage() {
           className="h-10 rounded-xl px-4 text-label font-bold"
         >
           <Plus className="size-4" />
-          حساب جدید
+          افزودن حساب
         </Button>
       </div>
 

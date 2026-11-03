@@ -28,6 +28,7 @@ import {
   BadgeMinus,
   IdCard,
   UserRound,
+  ChevronLeft,
 } from "lucide-react"
 import { apiDelete, apiGet, apiPatch } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
@@ -113,6 +114,7 @@ export default function ChecksPage() {
   const [direction, setDirection] = useState<"ALL" | "RECEIVED" | "ISSUED">("ALL")
   const [status, setStatus] = useState<"PENDING" | "CASHED" | "BOUNCED" | "ALL">("PENDING")
   const [actionSheet, setActionSheet] = useState<Check | null>(null)
+  const [showAtt, setShowAtt] = useState(false)
   const [accountSheet, setAccountSheet] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -463,6 +465,7 @@ export default function ChecksPage() {
             { key: "BOUNCED", label: "برگشتی", tone: "var(--destructive)" },
             { key: "ALL", label: "همه" },
           ]}
+          className="sm:max-w-xl"
         />
         <Segmented
           size="sm"
@@ -498,7 +501,7 @@ export default function ChecksPage() {
                     {g.label}
                   </h3>
                   <span className="nums text-caption font-semibold text-muted-foreground">
-                    {toPersianDigits(g.items.length)} چک · {formatTomanCompact(g.sum)}
+                    {toPersianDigits(g.items.length)} چک | {formatTomanCompact(g.sum)}
                   </span>
                 </div>
               )}
@@ -576,7 +579,7 @@ export default function ChecksPage() {
                             <CheckDirectionBadge direction={c.direction} size="sm" />
                           </div>
                           <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
-                            {getBank(c.bankKey).name} · {formatJalaliWithWeekday(new Date(c.dueDate))}
+                            {getBank(c.bankKey).name} | {formatJalaliWithWeekday(new Date(c.dueDate))}
                           </div>
                         </div>
                         <div className="shrink-0 text-end">
@@ -676,7 +679,7 @@ export default function ChecksPage() {
         title={actionSheet ? `چک ${actionSheet.person.name}` : "اقدام روی چک"}
         description={
           actionSheet
-            ? `${actionSheet.direction === "RECEIVED" ? "دریافتی" : "صادره"} · سررسید ${formatJalaliWithWeekday(new Date(actionSheet.dueDate))}`
+            ? `${actionSheet.direction === "RECEIVED" ? "دریافتی" : "صادره"} | سررسید ${formatJalaliWithWeekday(new Date(actionSheet.dueDate))}`
             : ""
         }
       >
@@ -692,7 +695,7 @@ export default function ChecksPage() {
                 </p>
                 <p className="nums truncate text-caption text-muted-foreground">
                   {getBank(actionSheet.bankKey).name}
-                  {actionSheet.serial ? ` · سریال ${actionSheet.serial}` : ""}
+                  {actionSheet.serial ? ` | سریال ${actionSheet.serial}` : ""}
                 </p>
               </div>
               {(() => {
@@ -730,160 +733,153 @@ export default function ChecksPage() {
               </Button>
             </div>
 
-            {/* هشدار چک ثبت‌نشده — پاس/برگشت/لغو قفل است تا ثبت شود */}
             {!actionSheet.isRegistered && (
-              <div className="rounded-2xl border border-warning/40 bg-warning/10 p-3.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-warning-ink">
-                  <BadgeMinus className="size-4 shrink-0" />
-                  این چک هنوز ثبت نشده است
-                </div>
-                <p className="mt-1.5 text-caption leading-relaxed text-muted-foreground">
-                  {actionSheet.direction === "RECEIVED"
-                    ? "چک دریافتی را اول «به نام خودتان» ثبت کنید."
-                    : "چک صادره را اول «به نام مشتری» ثبت کنید."}{" "}
-                  تا وقتی ثبت نشده، پاس/برگشت/لغو ممکن نیست.
-                </p>
-                <Button
-                  onClick={openRegisterSheet}
-                  className="mt-2.5 h-11 w-full rounded-2xl text-xs font-bold"
-                >
-                  <BadgeCheck className="size-4" />
-                  ثبت چک به نام…
-                </Button>
-              </div>
+              <p className="text-center text-caption text-warning-ink">
+                برای پاس یا برگشت، اول چک را در سامانهٔ صیاد ثبت کنید.
+              </p>
             )}
 
-            {actionSheet.isRegistered && (
-              <div className="flex items-center gap-2.5 rounded-2xl border border-income/30 bg-income/[0.06] p-3">
-                <BadgeCheck className="size-5 shrink-0 text-income" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-income">
-                    ثبت‌شده
-                    {actionSheet.direction === "RECEIVED" ? " به نام ما" : " به نام مشتری"}
-                  </p>
-                  <p className="nums mt-0.5 truncate text-caption text-muted-foreground">
-                    {actionSheet.registeredName ?? "—"}
-                    {actionSheet.registeredNationalId
-                      ? ` • کد ملی ${toPersianDigits(actionSheet.registeredNationalId)}`
-                      : ""}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={openRegisterSheet}
-                  className="h-8 shrink-0 rounded-xl px-2.5 text-caption font-bold"
+            {/* فهرست گروهی: ثبت صیاد، عکس چک، فاکتور (نسخهٔ ۷) */}
+            <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/80">
+              <button
+                type="button"
+                onClick={openRegisterSheet}
+                className="flex min-h-[3.25rem] w-full items-center gap-3 px-3.5 text-start transition-colors hover:bg-accent/40"
+              >
+                <BadgeCheck className={cn("size-[1.15rem] shrink-0", actionSheet.isRegistered ? "text-income" : "text-warning-ink")} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold">ثبت در سامانهٔ صیاد</span>
+                  {actionSheet.isRegistered && actionSheet.registeredName && (
+                    <span className="nums block truncate text-caption text-muted-foreground">
+                      به نام {actionSheet.registeredName}
+                      {actionSheet.registeredNationalId ? ` | ${toPersianDigits(actionSheet.registeredNationalId)}` : ""}
+                    </span>
+                  )}
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                    actionSheet.isRegistered ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
+                  )}
                 >
-                  ویرایش
-                </Button>
-              </div>
-            )}
+                  {actionSheet.isRegistered ? "ثبت شده" : "ثبت نشده"}
+                </span>
+                <ChevronLeft className="size-4 shrink-0 text-muted-foreground/60" />
+              </button>
 
-            {/* پیوست‌های تصویری چک (ADV-04) — زیر وضعیت ثبت و بالای گزینه‌های پاس/برگشت/لغو؛ مستقل از isRegistered */}
-            <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-1.5 text-xs font-bold">
-                  <Paperclip className="size-3.5 shrink-0 text-primary" />
-                  <span className="truncate">پیوست‌های چک</span>
-                  <span className="nums shrink-0 rounded-full bg-muted px-1.5 py-px text-micro font-bold text-muted-foreground">
-                    {toPersianDigits(checkAttachments.length)}
-                  </span>
-                  {attLoading && <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="h-8 shrink-0 rounded-xl px-2.5 text-caption font-bold"
-                >
-                  {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
-                  {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
-                </Button>
-              </div>
-
-              {!actionSheet.isRegistered && (
-                <p className="mb-2 rounded-xl bg-warning/10 px-2.5 py-2 text-caption font-medium leading-relaxed text-warning-ink">
-                  عکس چک مستقل از «ثبت» است — حتی اگر چک هنوز ثبت نشده هم می‌توانید همین‌جا عکسش را بگیرید.
-                </p>
-              )}
-
+              <button
+                type="button"
+                onClick={() => setShowAtt((v) => !v)}
+                aria-expanded={showAtt}
+                className="flex min-h-[3.25rem] w-full items-center gap-3 px-3.5 text-start transition-colors hover:bg-accent/40"
+              >
+                <Paperclip className="size-[1.15rem] shrink-0 text-muted-foreground" />
+                <span className="flex-1 text-sm font-semibold">عکس چک</span>
+                <span className="nums text-label text-muted-foreground">
+                  {attLoading ? <Loader2 className="size-3.5 animate-spin" /> : checkAttachments.length ? `${toPersianDigits(checkAttachments.length)} تصویر` : "ندارد"}
+                </span>
+                <ChevronLeft className={cn("size-4 shrink-0 text-muted-foreground/60 transition-transform", showAtt && "-rotate-90")} />
+              </button>
+              {showAtt && (
+                <div className="space-y-2.5 bg-muted/30 p-3">
               {checkAttachments.length === 0 && !attLoading ? (
-                <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-caption leading-relaxed text-muted-foreground">
-                  تصویری پیوست نشده — عکس چک را اضافه کنید تا همین‌جا آرشیو شود.
-                </p>
-              ) : (
-                <div className="grid grid-cols-4 gap-2">
-                  {checkAttachments.map((att) => {
-                    const isImage = att.mime.startsWith("image/")
-                    const url = imgUrls[att.id]
-                    return (
-                      <div
-                        key={att.id}
-                        className="relative aspect-square overflow-hidden rounded-xl border border-border/60 bg-muted/40"
-                      >
-                        {isImage ? (
-                          url ? (
+                    <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-caption leading-relaxed text-muted-foreground">
+                      تصویری پیوست نشده — عکس چک را اضافه کنید تا همین‌جا آرشیو شود.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-2">
+                      {checkAttachments.map((att) => {
+                        const isImage = att.mime.startsWith("image/")
+                        const url = imgUrls[att.id]
+                        return (
+                          <div
+                            key={att.id}
+                            className="relative aspect-square overflow-hidden rounded-xl border border-border/60 bg-muted/40"
+                          >
+                            {isImage ? (
+                              url ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreview(att)}
+                                  aria-label={`پیش‌نمایش ${att.filename}`}
+                                  className="size-full cursor-zoom-in transition-transform duration-150 active:scale-95"
+                                >
+                                  <img src={url} alt={att.filename} className="size-full object-cover" loading="lazy" />
+                                </button>
+                              ) : (
+                                <div
+                                  className="flex size-full items-center justify-center"
+                                  aria-label="در حال بارگذاری پیوست"
+                                >
+                                  <Loader2 className="size-4 animate-spin text-muted-foreground/60" />
+                                </div>
+                              )
+                            ) : (
+                              <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
+                                <FileText className="size-5 text-muted-foreground" />
+                                <span className="w-full truncate text-micro text-muted-foreground">
+                                  {att.filename}
+                                </span>
+                              </div>
+                            )}
                             <button
                               type="button"
-                              onClick={() => setPreview(att)}
-                              aria-label={`پیش‌نمایش ${att.filename}`}
-                              className="size-full cursor-zoom-in transition-transform duration-150 active:scale-95"
+                              onClick={() => removeAttachment(att)}
+                              aria-label={`حذف تصویر ${att.filename}`}
+                              className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
                             >
-                              <img src={url} alt={att.filename} className="size-full object-cover" loading="lazy" />
+                              <X className="size-3" strokeWidth={2.4} />
                             </button>
-                          ) : (
-                            <div
-                              className="flex size-full items-center justify-center"
-                              aria-label="در حال بارگذاری پیوست"
-                            >
-                              <Loader2 className="size-4 animate-spin text-muted-foreground/60" />
-                            </div>
-                          )
-                        ) : (
-                          <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
-                            <FileText className="size-5 text-muted-foreground" />
-                            <span className="w-full truncate text-micro text-muted-foreground">
-                              {att.filename}
-                            </span>
                           </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => removeAttachment(att)}
-                          aria-label={`حذف تصویر ${att.filename}`}
-                          className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
-                        >
-                          <X className="size-3" strokeWidth={2.4} />
-                        </button>
-                      </div>
-                    )
-                  })}
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="h-10 w-full rounded-xl text-label font-bold"
+                  >
+                    {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
+                    {uploading ? "در حال بارگذاری…" : "افزودن عکس چک"}
+                  </Button>
                 </div>
               )}
 
-              {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => onPickImages(e.target.files)}
-                aria-hidden="true"
-                tabIndex={-1}
-              />
+              {actionSheet.invoice && (
+                <Link
+                  href={`/invoices/${actionSheet.invoice.id}`}
+                  className="flex min-h-[3.25rem] w-full items-center gap-3 px-3.5 transition-colors hover:bg-accent/40"
+                >
+                  <FileText className="size-[1.15rem] shrink-0 text-muted-foreground" />
+                  <span className="nums flex-1 text-sm font-semibold">فاکتور #{toPersianDigits(actionSheet.invoice.number)}</span>
+                  <ChevronLeft className="size-4 shrink-0 text-muted-foreground/60" />
+                </Link>
+              )}
             </div>
+              {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => onPickImages(e.target.files)}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
 
             {/* لغو — جدا و پایین، دور از دو اقدام اصلی */}
             <button
               type="button"
               onClick={() => (actionSheet.isRegistered ? cancelCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل لغو نیست"))}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-label font-bold text-destructive transition-colors hover:bg-destructive/8"
+              className="flex min-h-[3.25rem] w-full items-center gap-3 rounded-2xl border border-border/80 px-3.5 text-sm font-bold text-destructive transition-colors hover:bg-destructive/5"
             >
-              <XCircle className="size-4" />
-              لغو و باطل کردن چک
+              <XCircle className="size-[1.15rem]" />
+              لغو چک
             </button>
           </div>
         )}
