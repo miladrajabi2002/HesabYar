@@ -11,8 +11,7 @@
  *  • هر بار فقط یک ردیف باز است؛ اسکرول، لمس جای دیگر یا لمس خود ردیف آن را می‌بندد. روی ماوس/ترک‌پد
  *    کاری نمی‌کند، پس هر اکشن باید در منو یا صفحهٔ جزئیات ردیف هم باشد.
  *  • با `hint`، اولین ردیفی که کامل روی صفحه است هر بار که صفحه باز می‌شود اکشن‌هایش را کمی نشان
- *    می‌دهد — مگر اینجا قبلاً ردیفی را کشیده باشند. با اولین کشیدن واقعی، این در localStorage
- *    (کلید hesabyar:swipe-learned) ذخیره می‌شود و اشاره دیگر هیچ‌جا پخش نمی‌شود.
+ *    می‌دهد؛ اگر در همان بازدید خودشان ردیفی را بکشند، دیگر در آن صفحه اشاره نمی‌کند.
  *  • بعد از اکشن، ردیف `removes` بیرون می‌لغزد و جمع می‌شود تا فهرست پیش از تازه‌سازی بسته شود؛ بقیهٔ
  *    ردیف‌ها با فنر برمی‌گردند و آیکون اکشن برای تأیید یک تپش کوچک می‌زند.
  */
@@ -46,7 +45,6 @@ const HINT_PEEK = 56
 const RAIL_TUCK = 28
 /** ردیف حذف‌شده‌ای که بعد از این مدت هنوز در فهرست است برمی‌گردد تا جای خالی نماند */
 const REMOVE_FALLBACK = 5000
-const LEARNED_KEY = "hesabyar:swipe-learned"
 
 const TONE: Record<NonNullable<SwipeAction["tone"]>, string> = {
   danger: "bg-destructive text-destructive-foreground",
@@ -67,22 +65,9 @@ let hintClaimed = false
 /** همهٔ ردیف‌های hint‌دارِ mount‌شده، تا بالاترینِ روی صفحه اشاره کند */
 const hintedRows = new Set<HTMLElement>()
 
-/** کاربر قبلاً یک ردیف را کشیده؟ بدون دسترسی به حافظه، اشاره پخش نمی‌شود */
-function learned() {
-  try {
-    return localStorage.getItem(LEARNED_KEY) === "1"
-  } catch {
-    return true
-  }
-}
-
+/** کاربر در همین صفحه ردیفی را کشید؛ اشارهٔ این بازدید دیگر لازم نیست */
 function markLearned() {
   hintClaimed = true
-  try {
-    localStorage.setItem(LEARNED_KEY, "1")
-  } catch {
-    /* ignore */
-  }
 }
 
 function fullyVisible(element: HTMLElement) {
@@ -396,14 +381,14 @@ export function SwipeRow({
       pending = false
       hintClaimed = false
     }
-    const observer = reduceMotion || hintClaimed || learned() ? null : new IntersectionObserver(([entry]) => {
+    const observer = reduceMotion || hintClaimed ? null : new IntersectionObserver(([entry]) => {
       if (!entry?.isIntersecting || entry.intersectionRatio < 0.9 || hintClaimed) return
       if (rowAboveIsVisible(root)) return
       hintClaimed = true
       pending = true
       observer?.disconnect()
       timer = window.setTimeout(() => {
-        if (document.hidden || learned() || stateRef.current.openSide || stateRef.current.busy || x.get() !== 0) {
+        if (document.hidden || stateRef.current.openSide || stateRef.current.busy || x.get() !== 0) {
           release()
           return
         }
