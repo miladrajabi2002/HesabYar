@@ -41,6 +41,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfirm } from "@/components/ui/confirm"
+import { deferDelete } from "@/components/ui/undo-toast"
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { itemsGrossProfit } from "@/lib/finance-math"
 
@@ -153,6 +155,7 @@ async function fetchAttachmentObjectUrl(id: string): Promise<string> {
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const queryClient = useQueryClient()
+  const router = useRouter()
   const { confirm } = useConfirm()
 
   const { data, isLoading } = useQuery({
@@ -303,39 +306,17 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const remove = async () => {
-    const qty = inv.items.reduce((sum, it) => sum + it.quantity, 0)
-    const consequences: string[] = [
-      isSale
-        ? `${toPersianDigits(qty)} واحد کالا به انبار برمی‌گردد`
-        : `${toPersianDigits(qty)} واحد کالا از موجودی انبار کم می‌شود`,
-    ]
-    if (inv.credit > 0)
-      consequences.push(
-        isSale
-          ? `طلب شما از ${inv.person.name} ${formatToman(inv.credit)} کم می‌شود`
-          : `بدهی شما به ${inv.person.name} ${formatToman(inv.credit)} کم می‌شود`
-      )
-    if (inv.paidCash > 0) consequences.push(`پرداخت نقدی ${formatToman(inv.paidCash)} از گردش حساب حذف می‌شود`)
-    if (inv.checks.length > 0) consequences.push(`${toPersianDigits(inv.checks.length)} چک این فاکتور هم حذف می‌شود`)
-    consequences.push("این کار قابل برگشت نیست")
-    const okRemove = await confirm({
-      title: `فاکتور ${toPersianDigits(inv.number)} حذف شود؟`,
-      consequences,
-      confirmText: "حذف فاکتور",
-      tone: "danger",
+  // حذف بدون پنجرهٔ تأیید: به فهرست برمی‌گردد و ۷ ثانیه فرصت «بازگردانی» دارد (X1)
+  const remove = () => {
+    const credit = inv.credit > 0 ? ` | ${isSale ? "طلب" : "بدهی"} ${formatToman(inv.credit)} کم شد` : ""
+    deferDelete({
+      id: inv.id,
+      message: `فاکتور ${toPersianDigits(inv.number)} حذف شد`,
+      description: `${toPersianDigits(inv.items.length)} قلم ${isSale ? "به انبار برگشت" : "از انبار کم شد"}${credit}`,
+      commit: () => apiDelete(`/api/invoices/${inv.id}`),
+      onCommitted: () => queryClient.invalidateQueries(),
     })
-    if (!okRemove) return
-    try {
-      await apiDelete(`/api/invoices/${inv.id}`)
-      toast.success(`فاکتور ${toPersianDigits(inv.number)} حذف شد`, {
-        description: isSale ? `${toPersianDigits(qty)} واحد کالا به انبار برگشت` : `${toPersianDigits(qty)} واحد کالا از انبار کم شد`,
-      })
-      await queryClient.invalidateQueries()
-      window.location.href = "/invoices"
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "حذف ناموفق بود")
-    }
+    router.push("/invoices")
   }
 
   /* ── افزودن پیوست تصویری ── */

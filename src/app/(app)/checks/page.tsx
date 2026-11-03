@@ -527,12 +527,12 @@ export default function ChecksPage() {
                     <SwipeRow
                       hint={swipeable}
                       disabled={!swipeable}
-                      trailing={[
+                      leading={[
                         {
                           key: "cash",
                           label: c.direction === "RECEIVED" ? "پاس شد" : "پرداخت شد",
-                          icon: <CheckCircle2 className="size-4" />,
-                          color: "var(--income)",
+                          icon: CheckCircle2,
+                          tone: "ok",
                           onAction: () => {
                             if (!c.isRegistered) {
                               toast.error("چک ثبت‌نشده قابل پاس شدن نیست — اول ثبتش کنید")
@@ -544,12 +544,12 @@ export default function ChecksPage() {
                           },
                         },
                       ]}
-                      leading={[
+                      trailing={[
                         {
                           key: "bounce",
                           label: "برگشت",
-                          icon: <Ban className="size-4" />,
-                          color: "var(--destructive)",
+                          icon: Ban,
+                          tone: "danger",
                           onAction: async () => {
                             if (!c.isRegistered) {
                               toast.error("چک ثبت‌نشده قابل برگشت نیست — اول ثبتش کنید")

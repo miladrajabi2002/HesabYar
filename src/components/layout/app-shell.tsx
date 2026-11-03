@@ -201,7 +201,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* هدر موبایل — جمع‌وجور: عنوان بزرگ + جستجو + زنگ */}
         <header
           className={cn(
-            "hy-mobile-header sticky top-0 z-30 bg-background/90 px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+1.15rem)] backdrop-blur-xl lg:hidden",
+            "hy-mobile-header sticky top-0 z-30 bg-background/90 px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+1.6rem)] backdrop-blur-xl lg:hidden",
             ownHeader && "hidden"
           )}
         >
@@ -242,7 +242,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main
           className={cn(
             "mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-7",
-            ownHeader ? "pt-[calc(env(safe-area-inset-top,0px)+1.15rem)]" : "pt-2",
+            ownHeader ? "pt-[calc(env(safe-area-inset-top,0px)+1.6rem)]" : "pt-2",
             isFormRoute ? "pb-32" : "pb-40"
           )}
         >

@@ -32,18 +32,15 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import {
   UserPlus,
-  Users,
   Plus,
   Trash2,
   PackagePlus,
   Banknote,
-  PlusCircle,
   CheckSquare2,
   FileText,
   Loader2,
   Search,
   Package,
-  Building2,
   Pencil,
   GripVertical,
   Sparkles,
@@ -56,7 +53,6 @@ import {
   X,
   ArrowRight,
   Clock3,
-  ChevronDown,
   Check,
   Minus,
   ChevronLeft,
@@ -68,6 +64,7 @@ import { jalaliDayKey } from "@/lib/jalali"
 import { normalizeDigits } from "@/lib/digits"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { PersonFields } from "@/components/people/person-fields"
+import { ProductFields } from "@/components/products/product-fields"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { Sparkline } from "@/components/charts/finance-charts"
 import { AmountInput } from "@/components/ui/amount-input"
@@ -76,13 +73,13 @@ import { JalaliDateField, todayKey } from "@/components/ui/jalali-date-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { BANKS, getBank } from "@/lib/banks"
-import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
+import { formatUnit } from "@/lib/units"
 import { cn } from "@/lib/utils"
 import { useTelegram, useTelegramBackButton, useTelegramMainButton } from "@/hooks/use-telegram"
 import { SuccessCelebration } from "@/components/ui/success-celebration"
 import { useConfirm } from "@/components/ui/confirm"
 import { Segmented } from "@/components/ui/segmented"
-import { InvoiceTypeMark, InvoiceTypePill } from "@/components/ui/type-mark"
+import { InvoiceTypePill } from "@/components/ui/type-mark"
 import { BalanceAvatar, ROLE_LABELS } from "@/components/ui/role-avatar"
 
 // ───────── تایپ‌ها ─────────
@@ -349,7 +346,6 @@ function NewInvoicePageInner() {
   // شیت‌ها
   const [personSheet, setPersonSheet] = useState(false)
   const [personFormSheet, setPersonFormSheet] = useState(false)
-  const [mixedMode, setMixedMode] = useState(false)
   const [quickName, setQuickName] = useState("")
   const [itemSheet, setItemSheet] = useState(false)
   const [accountSheet, setAccountSheet] = useState(false)
@@ -413,17 +409,6 @@ function NewInvoicePageInner() {
   const excess = Math.max(0, paidCash + checkTotal - total)
   // مبلغی که هنوز نه نقد شده نه چک
   const remaining = Math.max(0, total - paidCash - checkTotal)
-  // حالت تسویه برای سوییچ بالای بخش (نسخهٔ ۷): «ترکیبی» انتخاب صریح کاربر است، بقیه از مقادیر به دست می‌آید
-  const payMode: "cash" | "check" | "credit" | "mixed" = mixedMode
-    ? "mixed"
-    : total > 0 && checkTotal === 0 && paidCash >= total
-      ? "cash"
-      : checkTotal > 0 && paidCash === 0
-        ? "check"
-        : paidCash === 0 && checkTotal === 0
-          ? "credit"
-          : "mixed"
-
   /** نقدی = باقی‌مانده (+ انتخاب خودکار حساب وقتی فقط یک حساب داریم) */
   const fillCash = (amount = paidCash + remaining) => {
     setPaidCash(amount)
@@ -438,21 +423,6 @@ function NewInvoicePageInner() {
     setCheckPrefill(amount)
     setCheckSheet(true)
   }
-  /** انتخاب سریع روش پرداخت */
-  const quickPay = (kind: "cash" | "check" | "credit") => {
-    if (kind === "cash") {
-      setChecks([])
-      fillCash(total)
-    } else if (kind === "check") {
-      setPaidCash(0)
-      openCheckSheet(Math.max(0, total - checkTotal))
-    } else {
-      setPaidCash(0)
-      setChecks([])
-      haptic.tap()
-    }
-  }
-
   // ───────── خروج / انصراف ─────────
   const { confirm } = useConfirm()
   const leave = async () => {
@@ -856,7 +826,7 @@ function NewInvoicePageInner() {
           )}
         </section>
 
-        {/* ───────── ۳. تسویه: نقد / چک / نسیه / ترکیبی (نسخهٔ ۷) ───────── */}
+        {/* ───────── ۳. تسویه: نقد + چک، هرچه بماند به حساب شخص (نسخهٔ ۷) ───────── */}
         <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
           <StepHeader
             n={3}
@@ -875,178 +845,167 @@ function NewInvoicePageInner() {
             </p>
           )}
 
-          <Segmented
-            value={payMode}
-            onChange={(k) => {
-              haptic.tap()
-              if (k === "mixed") return setMixedMode(true)
-              setMixedMode(false)
-              quickPay(k)
-            }}
-            options={[
-              { key: "cash", label: "نقد" },
-              { key: "check", label: "چک" },
-              { key: "credit", label: "نسیه" },
-              { key: "mixed", label: "ترکیبی" },
-            ]}
-          />
-
-          {/* نوار تقسیم مبلغ + راهنما */}
+          {/* نوار تقسیم مبلغ: نقد | چک | به حساب شخص */}
           {total > 0 && (
-            <div className="mt-4">
-              <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
+            <div className="mb-3">
+              <div className="flex h-2.5 overflow-hidden rounded-full bg-warning/25">
                 <span className="h-full bg-[color:var(--sale)] transition-[width] duration-500" style={{ width: `${Math.min(100, (paidCash / total) * 100)}%` }} />
-                <span className="h-full bg-warning transition-[width] duration-500" style={{ width: `${Math.min(100, (Math.min(checkTotal, Math.max(0, total - paidCash)) / total) * 100)}%` }} />
+                <span className="h-full bg-primary/45 transition-[width] duration-500" style={{ width: `${Math.min(100, (Math.min(checkTotal, Math.max(0, total - paidCash)) / total) * 100)}%` }} />
               </div>
               <div className="nums mt-2 flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-[color:var(--sale)]" />
-                  نقد <b className="text-foreground">{formatToman(paidCash, false)}</b>
-                </span>
+                {paidCash > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-[color:var(--sale)]" />
+                    نقد <b className="text-foreground">{formatTomanCompact(paidCash)}</b>
+                  </span>
+                )}
                 {checkTotal > 0 && (
                   <span className="flex items-center gap-1.5">
-                    <span className="size-2 rounded-full bg-warning" />
-                    چک <b className="text-foreground">{formatToman(checkTotal, false)}</b>
+                    <span className="size-2 rounded-full bg-primary/45" />
+                    چک <b className="text-foreground">{formatTomanCompact(checkTotal)}</b>
                   </span>
                 )}
                 {credit > 0 && (
                   <span className="flex items-center gap-1.5">
-                    <span className="size-2 rounded-full bg-muted-foreground/30" />
-                    نسیه <b className="text-foreground">{formatToman(credit, false)}</b>
+                    <span className="size-2 rounded-full bg-warning/60" />
+                    نسیه <b className="text-foreground">{formatTomanCompact(credit)}</b>
                   </span>
                 )}
               </div>
             </div>
           )}
 
-          {/* ردیف‌های پرداخت — فهرست گروهی */}
-          {(payMode === "cash" || payMode === "mixed" || payMode === "check" || paidCash > 0 || checks.length > 0) && (
-            <div className="mt-3 divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/80">
-              {(payMode === "cash" || payMode === "mixed" || paidCash > 0) && (
-                <div className="flex min-h-[3.4rem] items-center gap-3 px-3.5">
+          <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/80">
+            {/* نقد / کارت‌به‌کارت — همیشه دیده می‌شود؛ خالی = نقدی ندارد */}
+            <div className="flex min-h-[3.6rem] items-center gap-3 px-3.5">
+              <button
+                type="button"
+                onClick={() => setAccountSheet(true)}
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
+              >
+                {account ? (
+                  <BankLogo bankKey={account.bankKey} size={32} />
+                ) : (
+                  <span className="grid size-8 shrink-0 place-items-center rounded-[30%] bg-sale/10 text-sale">
+                    <Banknote className="size-4" />
+                  </span>
+                )}
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">نقد / کارت‌به‌کارت</span>
+                  <span
+                    className={cn(
+                      "block truncate text-caption",
+                      !account && paidCash > 0 ? "font-bold text-warning-ink" : "text-muted-foreground"
+                    )}
+                  >
+                    {account ? account.name : "انتخاب حساب ›"}
+                  </span>
+                </span>
+              </button>
+              <div className="w-32 shrink-0">
+                <AmountInput bare value={paidCash} onChange={setPaidCash} placeholder="ندارد" showWords={false} className="[&_input]:text-left" />
+              </div>
+            </div>
+
+            {/* چک‌ها */}
+            <AnimatePresence initial={false}>
+              {checks.map((c, idx) => (
+                <motion.div
+                  key={c.id ?? `${idx}-${c.amount}-${c.dueDate}`}
+                  layout
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex min-h-[3.6rem] items-center gap-2.5 px-3.5 py-2">
+                    <BankLogo bankKey={c.bankKey} size={32} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold">چک</span>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-0.5 text-caption font-bold leading-4",
+                            c.isRegistered ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
+                          )}
+                        >
+                          {c.isRegistered ? "ثبت‌شده" : "ثبت‌نشده"}
+                        </span>
+                        {c.photo && <Paperclip className="size-3 shrink-0 text-muted-foreground" />}
+                      </div>
+                      <div className="nums truncate text-caption text-muted-foreground">
+                        سررسید {toPersianDigits(c.dueDate.replace(/-/g, "/"))}
+                        {c.serial ? ` | ${toPersianDigits(c.serial)}` : ""}
+                      </div>
+                    </div>
+                    <span className="nums shrink-0 text-body font-semibold">{formatToman(c.amount, false)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setChecks(checks.filter((_, i) => i !== idx))}
+                      className="-me-1.5 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      aria-label="حذف چک"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {/* مانده و نتیجه: «نقد کن / چک بگیر» یا خودش به حساب شخص می‌رود */}
+            {total === 0 ? (
+              <div className="flex min-h-[3.25rem] items-center gap-2 px-3.5 text-label text-muted-foreground">
+                <Clock3 className="size-4" />
+                اول کالا اضافه کنید
+              </div>
+            ) : remaining > 0 ? (
+              <div className="bg-warning/[0.07] px-3.5 py-3">
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="nums text-label font-extrabold text-warning-ink">
+                      مانده <AnimatedNumber value={remaining} /> <span className="font-semibold">تومان</span>
+                    </div>
+                    <div className="line-clamp-2 text-caption text-muted-foreground">
+                      نسیه — به حساب {person ? `«${person.name}»` : personTypeLabel}
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setAccountSheet(true)}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
+                    onClick={() => fillCash()}
+                    className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-card px-3 text-label font-bold text-foreground ring-1 ring-border transition-colors hover:bg-accent"
                   >
-                    {account ? (
-                      <BankLogo bankKey={account.bankKey} size={30} />
-                    ) : (
-                      <span className="grid size-[1.875rem] shrink-0 place-items-center rounded-lg bg-sale/10 text-sale">
-                        <Banknote className="size-4" />
-                      </span>
-                    )}
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold">نقد / کارت‌به‌کارت</span>
-                      <span
-                        className={cn(
-                          "block truncate text-caption",
-                          account ? "text-muted-foreground" : paidCash > 0 ? "font-bold text-warning-ink" : "text-muted-foreground"
-                        )}
-                      >
-                        {account ? account.name : "انتخاب حساب ›"}
-                      </span>
-                    </span>
+                    <Plus className="size-3.5" />
+                    نقد
                   </button>
-                  <div className="w-36 shrink-0">
-                    <AmountInput bare value={paidCash} onChange={setPaidCash} placeholder="مبلغ" showWords={false} />
-                  </div>
-                </div>
-              )}
-              {payMode === "mixed" && remaining > 0 && (
-                <button
-                  type="button"
-                  onClick={() => fillCash()}
-                  className="nums flex min-h-11 w-full items-center gap-2 px-3.5 text-label font-bold text-primary transition-colors hover:bg-accent/40"
-                >
-                  <Plus className="size-4" />
-                  باقی‌مانده را نقد کن
-                  <span className="ms-auto font-semibold text-muted-foreground">{formatToman(remaining, false)}</span>
-                </button>
-              )}
-              <AnimatePresence initial={false}>
-                {checks.map((c, idx) => (
-                  <motion.div
-                    key={c.id ?? `${idx}-${c.amount}-${c.dueDate}`}
-                    layout
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
+                  <button
+                    type="button"
+                    onClick={() => openCheckSheet()}
+                    className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-card px-3 text-label font-bold text-foreground ring-1 ring-border transition-colors hover:bg-accent"
                   >
-                    <div className="flex min-h-[3.4rem] items-center gap-2.5 px-3.5 py-2">
-                      <BankLogo bankKey={c.bankKey} size={30} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="nums text-sm font-bold">{formatToman(c.amount, false)}</span>
-                          <span
-                            className={cn(
-                              "shrink-0 rounded-full px-2 py-0.5 text-caption font-bold leading-4",
-                              c.isRegistered ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
-                            )}
-                          >
-                            {c.isRegistered ? "ثبت‌شده" : "ثبت‌نشده"}
-                          </span>
-                          {c.photo && <Paperclip className="size-3 shrink-0 text-muted-foreground" />}
-                        </div>
-                        <div className="nums truncate text-caption text-muted-foreground">
-                          چک{c.serial ? ` ${c.serial}` : ""} | سررسید {toPersianDigits(c.dueDate.replace(/-/g, "/"))}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setChecks(checks.filter((_, i) => i !== idx))}
-                        className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        aria-label="حذف چک"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-              {(payMode === "check" || payMode === "mixed" || checks.length > 0) && (
+                    <Plus className="size-3.5" />
+                    چک
+                  </button>
+                </div>
+              </div>
+            ) : excess > 0 ? (
+              <div className="nums flex min-h-[3.25rem] items-center gap-2 bg-primary/[0.06] px-3.5 text-label font-bold text-primary">
+                <Clock3 className="size-4" />
+                <span className="min-w-0 flex-1 truncate">مازاد — علی‌الحساب «{person?.name ?? personTypeLabel}»</span>
+                <AnimatedNumber value={excess} />
+              </div>
+            ) : (
+              <div className="flex min-h-[3.25rem] items-center gap-2 bg-income/[0.07] px-3.5 text-label font-bold text-income">
+                <CheckCircle2 className="size-4" />
+                <span className="flex-1">تسویه کامل</span>
                 <button
                   type="button"
-                  onClick={() => openCheckSheet()}
-                  className="nums flex min-h-[3.25rem] w-full items-center gap-2 px-3.5 text-sm font-bold text-primary transition-colors hover:bg-accent/40"
+                  onClick={() => openCheckSheet(0)}
+                  className="text-caption font-bold text-muted-foreground hover:text-foreground"
                 >
-                  <Plus className="size-4" />
-                  افزودن چک
-                  {remaining > 0 && (
-                    <span className="ms-auto text-caption font-semibold text-muted-foreground">
-                      {formatToman(remaining, false)} مانده
-                    </span>
-                  )}
+                  + چک دیگر
                 </button>
-              )}
-            </div>
-          )}
-
-          {/* نتیجه */}
-          <div
-            className={cn(
-              "nums mt-3 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-label font-bold",
-              total === 0
-                ? "bg-muted/60 text-muted-foreground"
-                : credit > 0
-                  ? "bg-warning/12 text-warning-ink"
-                  : excess > 0
-                    ? "bg-primary/8 text-primary"
-                    : "bg-income/10 text-income"
+              </div>
             )}
-          >
-            {total > 0 && credit === 0 && excess === 0 ? <CheckCircle2 className="size-4" /> : <Clock3 className="size-4" />}
-            <span className="min-w-0 flex-1 truncate">
-              {total === 0
-                ? "اول کالا اضافه کنید"
-                : credit > 0
-                  ? `نسیه — به حساب «${person?.name ?? personTypeLabel}»`
-                  : excess > 0
-                    ? "مازاد پرداخت — علی‌الحساب شخص"
-                    : "تسویه کامل"}
-            </span>
-            {(credit > 0 || excess > 0) && <AnimatedNumber value={excess > 0 ? excess : credit} />}
           </div>
         </section>
 
@@ -1073,6 +1032,7 @@ function NewInvoicePageInner() {
                     }}
                     placeholder="ندارد"
                     showWords={false}
+                    className="[&_input]:text-left"
                   />
                 </span>
               </label>
@@ -1086,7 +1046,7 @@ function NewInvoicePageInner() {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="اختیاری"
-                className="h-11 min-w-0 flex-1 bg-transparent text-end text-sm outline-none placeholder:text-muted-foreground/70"
+                className="h-11 min-w-0 flex-1 bg-transparent text-left text-body outline-none placeholder:font-medium placeholder:text-muted-foreground/70"
               />
             </label>
           </div>
@@ -1548,156 +1508,220 @@ function QuickPersonSheet({
   )
 }
 
-// ═══════════════ کارت اطلاعات کالا (داخل شیت افزودن قلم) ═══════════════
+// ═══════════════ پیشنهاد قیمت و کارت سود (داخل شیت افزودن قلم) ═══════════════
+/** قیمت گرد و خوانا: بالای یک میلیون به ده‌هزار، بالای ده‌هزار به هزار */
+function roundPrice(v: number) {
+  const step = v >= 1_000_000 ? 10_000 : v >= 10_000 ? 1_000 : 1
+  return Math.round(v / step) * step
+}
+
+/** قیمت تمام‌شدهٔ هر واحد: میانگین خرید (با موجودی اولیه) یا آخرین خرید */
+const costOf = (p: Product) => p.avgCostPrice || p.lastPurchasePrice || 0
+
 /**
- * یک کارت به‌جای چند نوار جدا: ردیف کاشی‌ها (موجودی، تمام‌شده، قیمت‌های مرجع — قیمت‌ها لمسی‌اند
- * و قیمت واحد را پر می‌کنند) + نوار وضعیت رنگی (حاشیه سود در فروش، تغییر قیمت در خرید، کمبود موجودی).
+ * چیپ‌های پیشنهاد قیمت — زیر ورودی قیمت، داخل همان گروه. لمس هر چیپ = همان قیمت.
+ * فروش: با همین شخص، آخرین فروش و قیمت با حاشیه سود ۱۰/۲۰/۳۰٪ روی تمام‌شده
+ * خرید: خرید قبلی از همین شخص یا آخرین خرید
  */
-function ItemInsight({
+function PriceSuggestions({
+  product,
+  invoiceType,
+  unitPrice,
+  ownLast,
+  onUse,
+}: {
+  product: Product
+  invoiceType: "SALE" | "PURCHASE"
+  unitPrice: number
+  /** آخرین قیمت همین کالا با همین شخص (۰ = ندارد) */
+  ownLast: number
+  onUse: (v: number) => void
+}) {
+  const isSale = invoiceType === "SALE"
+  const cost = costOf(product)
+  const chips: { key: string; label: string; price: number }[] = []
+  if (isSale) {
+    if (ownLast > 0) chips.push({ key: "own", label: "با همین شخص", price: ownLast })
+    const lastSale = product.lastSalePrice ?? 0
+    if (lastSale > 0 && lastSale !== ownLast) chips.push({ key: "last", label: "آخرین فروش", price: lastSale })
+    if (cost > 0)
+      for (const m of [10, 20, 30])
+        chips.push({ key: `m${m}`, label: `سود ${toPersianDigits(m)}٪`, price: roundPrice(cost / (1 - m / 100)) })
+  } else {
+    if (ownLast > 0) chips.push({ key: "own", label: "خرید قبلی از او", price: ownLast })
+    const lastPurchase = product.lastPurchasePrice ?? 0
+    if (lastPurchase > 0 && lastPurchase !== ownLast) chips.push({ key: "last", label: "آخرین خرید", price: lastPurchase })
+  }
+  if (chips.length === 0) return null
+  return (
+    <div className="border-t border-border/70 pb-3 pt-2.5">
+      <div className="mb-2 px-3.5 text-caption font-bold text-muted-foreground">پیشنهاد قیمت</div>
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-3.5">
+        {chips.map((c) => {
+          const active = unitPrice === c.price
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => onUse(c.price)}
+              aria-pressed={active}
+              className={cn(
+                "flex shrink-0 flex-col items-start rounded-xl px-3 py-1.5 text-start transition-colors",
+                active ? "bg-primary text-primary-foreground" : "bg-primary/8 text-secondary-foreground hover:bg-primary/12"
+              )}
+            >
+              <span className={cn("text-caption font-semibold", active ? "opacity-85" : "text-muted-foreground")}>{c.label}</span>
+              <span className="nums text-label font-extrabold">{formatTomanCompact(c.price)}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/** ردیف «برچسب ……… مقدار» داخل کارت سود */
+function InsightRow({ label, value, strong, tone }: { label: string; value: string; strong?: boolean; tone?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+      <span className="text-label text-muted-foreground">{label}</span>
+      <span className={cn("nums text-label", strong ? "font-extrabold" : "font-bold", tone)}>{value}</span>
+    </div>
+  )
+}
+
+/**
+ * کارت سود (فروش) یا مقایسهٔ قیمت (خرید) — همیشه دیده می‌شود تا قیمت تمام‌شده و سود
+ * قبل از زدن قیمت هم معلوم باشد؛ با قیمت، حاشیه و سود همین قلم زنده محاسبه می‌شود.
+ */
+function ProfitCard({
   product,
   invoiceType,
   quantity,
   unitPrice,
   ownLast,
-  onUse,
-  part,
   trend,
 }: {
   product: Product
   invoiceType: "SALE" | "PURCHASE"
   quantity: number
   unitPrice: number
-  /** آخرین قیمت همین کالا با همین شخص (۰ = ندارد) */
   ownLast: number
-  onUse: (v: number) => void
-  /** «chips» = قیمت‌های مرجع لمسی (داخل گروه قیمت) | «status» = نوار سود و هشدار موجودی */
-  part: "chips" | "status"
   /** روند قیمت خرید (قدیمی → جدید) برای مینی‌نمودار */
-  trend?: number[]
+  trend: number[]
 }) {
-  const isSale = invoiceType === "SALE"
-  const stock = product.stock ?? 0
   const unit = formatUnit(product.unit)
-  const cost = product.avgCostPrice || product.lastPurchasePrice || 0
-  const lastSale = product.lastSalePrice ?? 0
-  const lastPurchase = product.lastPurchasePrice ?? 0
+  const cost = costOf(product)
+  const qty = quantity > 0 ? quantity : 1
+  const showTrend = trend.length >= 2
 
-  type Tile = { key: string; label: string; value: string; tone?: string; price?: number }
-  // موجودی بالای شیت جدا نمایش داده می‌شود؛ اینجا فقط قیمت‌های مرجع
-  const tiles: Tile[] = []
-  if (isSale) {
-    if (cost > 0) tiles.push({ key: "cost", label: "تمام‌شده", value: formatToman(cost, false) })
-    if (ownLast > 0) tiles.push({ key: "own", label: "با همین شخص", value: formatToman(ownLast, false), price: ownLast })
-    if (lastSale > 0 && lastSale !== ownLast)
-      tiles.push({ key: "last", label: "آخرین فروش", value: formatToman(lastSale, false), price: lastSale })
-  } else {
-    const ref = ownLast || lastPurchase
-    if (ref > 0)
-      tiles.push({ key: "ref", label: ownLast ? "خرید قبلی از او" : "آخرین خرید", value: formatToman(ref, false), price: ref })
-    if (lastSale > 0) tiles.push({ key: "sale", label: "آخرین فروش", value: formatToman(lastSale, false) })
-  }
-
-  // نوار وضعیت
-  let strip: { tone: "good" | "warn" | "bad" | "muted"; main: string; side?: string; bar?: number } | null = null
-  if (isSale && cost > 0 && unitPrice > 0) {
-    const margin = ((unitPrice - cost) / unitPrice) * 100
-    const perUnit = unitPrice - cost
-    strip =
-      perUnit < 0
-        ? { tone: "bad", main: "زیر قیمت تمام‌شده می‌فروشید!", side: `ضرر هر ${unit}: ${formatToman(-perUnit, false)}` }
-        : {
-            tone: margin < 5 ? "warn" : "good",
-            main: `حاشیه سود ${toPersianDigits(Math.round(margin))}٪`,
-            side: `سود هر ${unit}: ${formatToman(perUnit, false)}`,
-            // پر شدن نوار: ۴۰٪ حاشیه و بیشتر = پر
-            bar: Math.min(1, margin / 40),
-          }
-  } else if (!isSale && unitPrice > 0) {
-    const ref = ownLast || lastPurchase
-    if (ref > 0) {
-      const diff = ((unitPrice - ref) / ref) * 100
-      const pct = Math.round(Math.abs(diff))
-      strip =
-        pct < 1
-          ? { tone: "muted", main: "همان قیمت خرید قبلی" }
-          : diff > 0
-            ? { tone: pct >= 10 ? "bad" : "warn", main: `▲ ${toPersianDigits(pct)}٪ گران‌تر از خرید قبلی`, side: pct >= 10 ? "قیمت را بررسی کنید" : undefined }
-            : { tone: "good", main: `▼ ${toPersianDigits(pct)}٪ ارزان‌تر از خرید قبلی` }
+  if (invoiceType === "SALE") {
+    if (cost <= 0) {
+      return (
+        <p className="rounded-2xl bg-muted/60 px-3.5 py-3 text-caption leading-5 text-muted-foreground">
+          این کالا هنوز قیمت خرید ندارد؛ بعد از اولین فاکتور خرید (یا ثبت موجودی اولیه با قیمت) سود هر فروش اینجا حساب می‌شود.
+        </p>
+      )
     }
-  }
-  const short = isSale && quantity > stock
-
-  const toneCls = {
-    good: "bg-income/10 text-income",
-    warn: "bg-warning/10 text-warning-ink",
-    bad: "bg-destructive/10 text-destructive",
-    muted: "bg-muted/60 text-muted-foreground",
-  }
-
-  // نسخهٔ ۷ (B3): چیپ‌های قیمت مرجع داخل گروه قیمت (لمس = همان قیمت)
-  if (part === "chips") {
-    if (tiles.length === 0) return null
+    const perUnit = unitPrice - cost
+    const margin = unitPrice > 0 ? (perUnit / unitPrice) * 100 : 0
+    const tone = unitPrice <= 0 ? "muted" : perUnit < 0 ? "bad" : margin < 5 ? "warn" : "good"
+    const toneText = { good: "text-income", warn: "text-warning-ink", bad: "text-destructive", muted: "text-muted-foreground" }[tone]
+    const toneBar = { good: "bg-income", warn: "bg-warning", bad: "bg-destructive", muted: "bg-muted-foreground/30" }[tone]
     return (
-        <div className="flex flex-wrap gap-1.5 border-t border-border/70 px-3.5 pb-3 pt-2.5">
-          {tiles.map((t) => {
-            const active = t.price !== undefined && unitPrice === t.price
-            const body = (
-              <>
-                <span className="font-medium opacity-80">{t.label}</span>
-                <span className={cn("nums font-extrabold", t.tone)}>{t.value}</span>
-                {active && <CheckCircle2 className="size-3.5 shrink-0" />}
-              </>
-            )
-            return t.price !== undefined ? (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => onUse(t.price!)}
-                aria-label={`استفاده از قیمت ${t.label}`}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-caption transition-colors",
-                  active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-secondary-foreground hover:bg-primary/15"
-                )}
-              >
-                {body}
-              </button>
-            ) : (
-              <span key={t.key} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-muted px-3 text-caption text-foreground/80">
-                {body}
-              </span>
-            )
-          })}
-        </div>
-    )
-  }
-
-  const showTrend = !!trend && trend.length >= 2
-  return (
-    <div className="space-y-2">
-      {strip && (
-        <div className={cn("nums flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-label font-bold", toneCls[strip.tone])}>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate">{strip.side ? `${strip.side} | ${strip.main}` : strip.main}</span>
-          </span>
-          {showTrend && (
-            <span className="w-24 shrink-0" title="روند قیمت خرید">
-              <Sparkline values={trend!} muted color="currentColor" height={22} />
+      <section>
+        <div className="mb-2 flex items-baseline justify-between px-1">
+          <span className="text-label font-extrabold text-foreground/85">سود این قلم</span>
+          {unitPrice > 0 && (
+            <span className={cn("nums text-label font-extrabold", toneText)}>
+              {perUnit < 0 ? "زیر قیمت تمام‌شده!" : `حاشیه ${toPersianDigits(Math.round(margin))}٪`}
             </span>
           )}
         </div>
-      )}
-      {showTrend && (
-        <p className="px-1 text-caption text-muted-foreground">
-          نمودار کوچک: روند قیمت خرید {formatUnit(product.unit)} در {toPersianDigits(trend!.length)} خرید اخیر
-        </p>
-      )}
+        <div className="overflow-hidden rounded-2xl border border-border/80 bg-card">
+          <div className="px-3.5 pt-3">
+            <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+              <span
+                className={cn("h-full rounded-full transition-[width] duration-500", toneBar)}
+                // نوار پر = ۴۰٪ حاشیه یا بیشتر
+                style={{ width: `${unitPrice > 0 ? Math.max(4, Math.min(100, (Math.max(0, margin) / 40) * 100)) : 0}%` }}
+              />
+            </div>
+          </div>
+          <div className="divide-y divide-border/60">
+            <InsightRow label={`تمام‌شدهٔ هر ${unit}`} value={formatToman(cost)} />
+            {unitPrice > 0 ? (
+              <>
+                <InsightRow
+                  label={perUnit < 0 ? `ضرر هر ${unit}` : `سود هر ${unit}`}
+                  value={formatToman(Math.abs(perUnit))}
+                  tone={toneText}
+                />
+                {qty > 1 && (
+                  <InsightRow
+                    label={`${perUnit < 0 ? "ضرر" : "سود"} ${toPersianDigits(qty)} ${unit}`}
+                    value={formatToman(Math.abs(Math.round(perUnit * qty)))}
+                    strong
+                    tone={toneText}
+                  />
+                )}
+              </>
+            ) : (
+              <p className="px-3.5 py-2.5 text-caption text-muted-foreground">قیمت فروش را بزنید یا یکی از پیشنهادها را لمس کنید</p>
+            )}
+          </div>
+        </div>
+      </section>
+    )
+  }
 
-      {short && (
-        <p className="rounded-xl bg-warning/12 px-3.5 py-2 text-caption font-bold text-warning-ink">
-          تعداد بیشتر از موجودی است — با ثبت این فاکتور موجودی منفی می‌شود
-        </p>
-      )}
-    </div>
+  // خرید: مقایسه با خرید قبلی + روند
+  const ref = ownLast || product.lastPurchasePrice || 0
+  const lastSale = product.lastSalePrice ?? 0
+  if (ref <= 0 && lastSale <= 0) return null
+  const diff = ref > 0 && unitPrice > 0 ? ((unitPrice - ref) / ref) * 100 : null
+  const pct = diff === null ? 0 : Math.round(Math.abs(diff))
+  const resaleMargin = lastSale > 0 && unitPrice > 0 ? ((lastSale - unitPrice) / lastSale) * 100 : null
+  return (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between px-1">
+        <span className="text-label font-extrabold text-foreground/85">مقایسهٔ قیمت</span>
+        {diff !== null && (
+          <span
+            className={cn(
+              "nums text-label font-extrabold",
+              pct < 1 ? "text-muted-foreground" : diff > 0 ? (pct >= 10 ? "text-destructive" : "text-warning-ink") : "text-income"
+            )}
+          >
+            {pct < 1 ? "همان قیمت قبلی" : `${diff > 0 ? "▲" : "▼"} ${toPersianDigits(pct)}٪ ${diff > 0 ? "گران‌تر" : "ارزان‌تر"}`}
+          </span>
+        )}
+      </div>
+      <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/80 bg-card">
+        {ref > 0 && (
+          <div className="flex items-center gap-3 px-3.5 py-2.5">
+            <span className="flex-1 text-label text-muted-foreground">{ownLast ? "خرید قبلی از همین شخص" : "آخرین خرید"}</span>
+            {showTrend && (
+              <span className="w-20 shrink-0 text-primary" title="روند قیمت خرید">
+                <Sparkline values={trend} muted color="currentColor" height={20} />
+              </span>
+            )}
+            <span className="nums text-label font-bold">{formatToman(ref)}</span>
+          </div>
+        )}
+        {lastSale > 0 && (
+          <InsightRow
+            label="آخرین فروش"
+            value={
+              resaleMargin !== null
+                ? `${formatToman(lastSale)} | سود ${toPersianDigits(Math.round(resaleMargin))}٪`
+                : formatToman(lastSale)
+            }
+            tone={resaleMargin !== null && resaleMargin < 0 ? "text-destructive" : undefined}
+          />
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -1725,7 +1749,7 @@ function ItemPickerSheet({
   const [mode, setMode] = useState<"pick" | "new">("pick")
   const [q, setQ] = useState("")
   const [selected, setSelected] = useState<Product | null>(null)
-  const [quantity, setQuantity] = useState(0)
+  const [quantity, setQuantity] = useState(1)
   const [unitPrice, setUnitPrice] = useState(0)
   // تا وقتی کاربر خودش قیمت را نزده، قیمت پیشنهادی (آخرین قیمت) جایگزین می‌شود
   const priceTouched = useRef(false)
@@ -1736,7 +1760,7 @@ function ItemPickerSheet({
   const [unit, setUnit] = useState<string>("عدد")
   // واحد مؤثر برای برچسب تعداد: در حالت کالا جدید واحد انتخابی، در حالت انتخاب واحد خود کالا
   const activeUnit = mode === "new" ? unit : (selected?.unit ?? "عدد")
-  // کالا جدید
+  // کالا جدید — همان فیلدهای فرم کالا (ProductFields)
   const [name, setName] = useState("")
   const [brand, setBrand] = useState("")
   const [code, setCode] = useState("")
@@ -1745,6 +1769,8 @@ function ItemPickerSheet({
   const photoInputRef = useRef<HTMLInputElement>(null)
   const [pendingPhotos, setPendingPhotos] = useState<{ file: File; url: string }[]>([])
   const pendingPhotoUrlsRef = useRef<string[]>([])
+  const [adding, setAdding] = useState(false)
+  const { haptic } = useTelegram()
 
   /** آزادسازی پیش‌نمایش‌های محلی هنگام ترک صفحه */
   useEffect(() => {
@@ -1763,11 +1789,11 @@ function ItemPickerSheet({
     staleTime: 30_000,
   })
   const ownLast = (invoiceType === "SALE" ? ownPrice?.sale : ownPrice?.purchase) ?? 0
-  // روند قیمت خرید همین کالا (برای مینی‌نمودار کنار سود هر واحد)
+  // روند قیمت خرید همین کالا (برای مینی‌نمودار مقایسهٔ قیمت)
   const { data: productDetail } = useQuery({
     queryKey: ["product", selected?.id],
     queryFn: () => apiGet<{ priceHistory: { date: string; type: string; unitPrice: number }[] }>(`/api/products/${selected!.id}`),
-    enabled: open && mode === "pick" && !!selected,
+    enabled: open && mode === "pick" && !!selected && invoiceType === "PURCHASE",
     staleTime: 60_000,
   })
   const purchaseTrend = (productDetail?.priceHistory ?? [])
@@ -1795,11 +1821,12 @@ function ItemPickerSheet({
     setMode("pick")
     setQ("")
     setSelected(null)
-    setQuantity(0)
+    setQuantity(1)
     setUnitPrice(0)
     setName("")
     setBrand("")
     setCode("")
+    setUnit("عدد")
     setPendingPhotos([])
   }
 
@@ -1808,9 +1835,15 @@ function ItemPickerSheet({
   const filtered = products.filter(
     (p) => !q || matches(p.name) || matches(p.brand) || matches(p.code)
   )
-  // بندانگشتی عکس کالاها موجود در تب انتخاب (ADV-05)
+  // بندانگشتی عکس کالاها موجود در فهرست (ADV-05)
   const pickPhotoIds = filtered.map((p) => p.photoId).filter((x): x is string => !!x)
   const pickPhotoUrls = useAttachmentUrls(pickPhotoIds)
+
+  const startNew = () => {
+    setName(q.trim().length >= 2 ? q.trim() : "")
+    setMode("new")
+    haptic.tap()
+  }
 
   const addItem = async () => {
     if (quantity <= 0) return toast.error("تعداد را وارد کنید")
@@ -1822,6 +1855,7 @@ function ItemPickerSheet({
 
     if (mode === "new") {
       if (name.trim().length < 2) return toast.error("نام کالا را وارد کنید")
+      setAdding(true)
       try {
         const r = await apiPost<{ product: Product }>("/api/products", {
           name: name.trim(),
@@ -1849,13 +1883,14 @@ function ItemPickerSheet({
               /* عکس این یکی آپلود نشد — بقیه ادامه می‌یابند */
             }
           }
-          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس کالا پیوست شد`)
           if (okCount < pendingPhotos.length) toast.error("برخی عکس‌ها آپلود نشدند")
           setPendingPhotos([])
-          await queryClient.invalidateQueries({ queryKey: ["products"] })
         }
+        await queryClient.invalidateQueries({ queryKey: ["products"] })
       } catch (e) {
         return toast.error(e instanceof Error ? e.message : "خطا در ثبت کالا")
+      } finally {
+        setAdding(false)
       }
     } else {
       if (!selected) return toast.error("کالا را انتخاب کنید")
@@ -1910,35 +1945,45 @@ function ItemPickerSheet({
             </button>
           </div>
           <span className="text-body font-bold">{formatUnit(activeUnit)}</span>
+          {mode === "pick" && selected && invoiceType === "SALE" && quantity > (selected.stock ?? 0) && (
+            <span className="ms-auto text-end text-caption font-bold leading-5 text-warning-ink">
+              بیشتر از
+              <br />
+              موجودی
+            </span>
+          )}
         </div>
       </section>
       <section>
         <div className="mb-2 px-1 text-label font-extrabold text-foreground/85">قیمت هر {formatUnit(activeUnit)}</div>
-        <div className="rounded-2xl border border-border/80 bg-card px-3.5 pb-2.5 pt-1 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/15">
-          <AmountInput
-            bare
-            value={unitPrice}
-            onChange={setPrice}
-            placeholder="قیمت به تومان"
-            className="[&_input]:h-12 [&_input]:text-xl [&_input]:font-extrabold"
-          />
+        <div className="overflow-hidden rounded-2xl border border-border/80 bg-card focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/15">
+          <div className="px-3.5 pb-2.5 pt-1">
+            <AmountInput
+              bare
+              value={unitPrice}
+              onChange={setPrice}
+              placeholder="قیمت به تومان"
+              className="[&_input]:h-12 [&_input]:text-xl [&_input]:font-extrabold"
+            />
+          </div>
           {mode === "pick" && selected && (
-            <div className="-mx-3.5 mt-2">
-              <ItemInsight
-                part="chips"
-                product={selected}
-                invoiceType={invoiceType}
-                quantity={quantity}
-                unitPrice={unitPrice}
-                ownLast={ownLast}
-                onUse={setPrice}
-              />
-            </div>
+            <PriceSuggestions
+              product={selected}
+              invoiceType={invoiceType}
+              unitPrice={unitPrice}
+              ownLast={ownLast}
+              onUse={setPrice}
+            />
           )}
         </div>
       </section>
     </>
   )
+
+  const stockOf = (p: Product) => {
+    const n = p.stock ?? 0
+    return toPersianDigits(Number.isInteger(n) ? String(n) : n.toFixed(1))
+  }
 
   return (
     <BottomSheet
@@ -1947,22 +1992,23 @@ function ItemPickerSheet({
         reset()
         onClose()
       }}
-      title={mode === "pick" && selected ? selected.name : "افزودن کالا به فاکتور"}
+      title={mode === "new" ? "کالای جدید" : selected ? selected.name : "افزودن کالا به فاکتور"}
       description={
-        mode === "pick" && selected
-          ? [selected.brand, selected.code && `کد ${selected.code}`, `واحد: ${formatUnit(selected.unit)}`].filter(Boolean).join(" | ")
-          : undefined
+        mode === "new"
+          ? "ساخته می‌شود و همین حالا به فاکتور اضافه می‌شود"
+          : selected
+            ? [selected.brand, selected.code && `کد ${selected.code}`].filter(Boolean).join(" | ") || undefined
+            : `${toPersianDigits(products.length)} کالا، موجودی هر کدام کنار نامش`
       }
       size="tall"
       footer={
         mode === "new" || selected ? (
-          <>
           <Button
             onClick={addItem}
-            disabled={mode === "pick" ? !selected : name.trim().length < 2}
+            disabled={adding || (mode === "pick" ? !selected : name.trim().length < 2)}
             className="h-[3.25rem] w-full rounded-2xl text-body font-bold"
           >
-            <Plus className="size-4" />
+            {adding ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
             افزودن به فاکتور
             {quantity > 0 && unitPrice > 0 && (
               <>
@@ -1972,105 +2018,150 @@ function ItemPickerSheet({
               </>
             )}
           </Button>
-          </>
         ) : undefined
       }
     >
-      {mode === "pick" && selected ? (
+      {mode === "new" ? (
+        <div className="space-y-5 pb-1">
+          <button
+            type="button"
+            onClick={() => setMode("pick")}
+            className="flex items-center gap-1 text-label font-bold text-primary"
+          >
+            <ArrowRight className="size-4" />
+            انتخاب از کالاهای ثبت‌شده
+          </button>
+          <ProductFields
+            name={name}
+            setName={setName}
+            brand={brand}
+            setBrand={setBrand}
+            code={code}
+            setCode={setCode}
+            unit={unit}
+            setUnit={setUnit}
+            onPickPhoto={() => photoInputRef.current?.click()}
+            photos={pendingPhotos.map((p, i) => ({
+              key: `new-photo-${i}`,
+              url: p.url,
+              onRemove: () => setPendingPhotos((prev) => prev.filter((_, j) => j !== i)),
+            }))}
+            autoFocusName={!name}
+          />
+          {qtyPriceBlock}
+          {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith("image/"))
+              if (files.length === 0) {
+                toast.error("فقط تصویر (JPG/PNG/WebP) مجاز است")
+              } else {
+                const picked = files.map((file) => {
+                  const url = URL.createObjectURL(file)
+                  pendingPhotoUrlsRef.current.push(url)
+                  return { file, url }
+                })
+                setPendingPhotos((prev) => [...prev, ...picked])
+              }
+              if (photoInputRef.current) photoInputRef.current.value = ""
+            }}
+            aria-hidden="true"
+            tabIndex={-1}
+          />
+        </div>
+      ) : selected ? (
         /* نسخهٔ ۷: بعد از انتخاب، شیت «جزئیات قلم» می‌شود — موجودی، تعداد، قیمت و سود */
-        <div className="space-y-4 pb-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span
-              className={cn(
-                "nums inline-flex h-7 items-center rounded-full px-2.5 text-caption font-bold",
-                invoiceType === "SALE" && (selected.stock ?? 0) <= 0
-                  ? "bg-destructive/10 text-destructive"
-                  : "bg-income/10 text-income"
+        <div className="space-y-5 pb-1">
+          <div className="flex items-center gap-3 rounded-2xl bg-muted/60 px-3 py-2.5">
+            <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-card text-muted-foreground">
+              {selected.photoId && pickPhotoUrls[selected.photoId] ? (
+                <img src={pickPhotoUrls[selected.photoId]} alt="" className="size-full object-cover" />
+              ) : (
+                <Package className="size-5" />
               )}
-            >
-              {(selected.stock ?? 0) <= 0
-                ? "موجودی ندارد"
-                : `${toPersianDigits(Number.isInteger(selected.stock ?? 0) ? String(selected.stock ?? 0) : (selected.stock ?? 0).toFixed(1))} ${formatUnit(selected.unit)} در انبار`}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span
+                className={cn(
+                  "nums block text-label font-bold",
+                  invoiceType === "SALE" && (selected.stock ?? 0) <= 0 ? "text-destructive" : "text-foreground"
+                )}
+              >
+                {(selected.stock ?? 0) <= 0 ? "ناموجود در انبار" : `${stockOf(selected)} ${formatUnit(selected.unit)} در انبار`}
+              </span>
+              <span className="block text-caption text-muted-foreground">واحد: {formatUnit(selected.unit)}</span>
             </span>
             <button
               type="button"
               onClick={() => setSelected(null)}
-              className="ms-auto h-7 rounded-full px-2.5 text-label font-bold text-primary transition-colors hover:bg-primary/10"
+              className="shrink-0 rounded-xl px-2.5 py-2 text-label font-bold text-primary hover:bg-primary/10"
             >
               تغییر کالا
             </button>
           </div>
           {qtyPriceBlock}
-          <ItemInsight
-            part="status"
-            trend={purchaseTrend}
+          <ProfitCard
             product={selected}
             invoiceType={invoiceType}
             quantity={quantity}
             unitPrice={unitPrice}
             ownLast={ownLast}
-            onUse={setPrice}
+            trend={purchaseTrend}
           />
         </div>
       ) : (
-      <>
-      {/* تب انتخاب/جدید */}
-      <div className="mb-3 flex rounded-md bg-muted p-1">
-        <button
-          type="button"
-          onClick={() => {
-            setMode("pick")
-            setSelected(null)
-          }}
-          className={cn(
-            "h-9 flex-1 rounded-sm text-label font-bold transition-all",
-            mode === "pick" ? "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]" : "text-muted-foreground"
-          )}
-        >
-          انتخاب از کالاها
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("new")}
-          className={cn(
-            "flex h-9 flex-1 items-center justify-center gap-1 rounded-sm text-label font-bold transition-all",
-            mode === "new" ? "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]" : "text-muted-foreground"
-          )}
-        >
-          <PackagePlus className="size-3.5" />
-          کالای جدید
-        </button>
-      </div>
-
-      {mode === "pick" ? (
         <>
-          <div className="relative mb-3">
-            <Search className="absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
-            <input
-              autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="نام کالا، برند یا کد"
-              className="field border-transparent bg-muted ps-10 hover:border-transparent"
-            />
+          {/* هم‌الگوی شیت انتخاب شخص: جستجو + «کالای جدید» ردیف اول فهرست */}
+          <div className="sticky -top-2 z-10 -mx-5 -mt-2 bg-card px-5 pb-2 pt-2">
+            <div className="relative">
+              <Search className="absolute inset-y-0 start-3.5 my-auto size-4 text-muted-foreground" />
+              <input
+                autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="نام کالا، برند یا کد"
+                className="field border-transparent bg-muted ps-10 hover:border-transparent"
+              />
+            </div>
           </div>
           <div className="divide-y divide-border/60">
+            <button
+              type="button"
+              onClick={startNew}
+              className="flex w-full items-center gap-3 py-2.5 text-start transition-colors hover:bg-accent/40"
+            >
+              <span className="grid size-11 shrink-0 place-items-center rounded-[32%] bg-primary/10 text-primary">
+                <PackagePlus className="size-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-primary">
+                  {q.trim().length >= 2 ? `«${q.trim()}» را اضافه کن` : "کالای جدید"}
+                </span>
+                <span className="block text-caption text-muted-foreground">نام و واحد کافی است، بقیه بعداً</span>
+              </span>
+            </button>
+          </div>
+          {filtered.length > 0 && (
+            <div className="mb-0.5 mt-3 px-0.5 text-caption font-bold text-muted-foreground">
+              {q ? "نتیجهٔ جستجو" : "کالاها"}
+            </div>
+          )}
+          <div className="divide-y divide-border/60">
             {filtered.map((p) => {
-              // نمایش موجودی زندهٔ انبار کنار هر کالا — در فروش مهم‌تر است
-              const stockNum = p.stock ?? 0
-              const stockText =
-                Number.isInteger(stockNum)
-                  ? toPersianDigits(String(stockNum))
-                  : toPersianDigits(stockNum.toFixed(1))
-              const lowStock = invoiceType === "SALE" && stockNum <= 0
+              const out = (p.stock ?? 0) <= 0
               return (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => pickProduct(p)}
-                  className="flex w-full items-center gap-3 py-2.5 text-start transition-colors hover:bg-accent/40"
+                  className="flex w-full items-center gap-3 py-2.5 text-start transition-colors hover:bg-accent/40 active:bg-accent/60"
                 >
-                  <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-muted text-muted-foreground">
+                  <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-[32%] bg-muted text-muted-foreground">
                     {p.photoId && pickPhotoUrls[p.photoId] ? (
                       <img src={pickPhotoUrls[p.photoId]} alt={p.name} loading="lazy" className="size-full object-cover" />
                     ) : (
@@ -2079,147 +2170,37 @@ function ItemPickerSheet({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold">{[p.name, p.brand].filter(Boolean).join(" — ")}</span>
-                    <span className="nums block truncate text-caption text-muted-foreground">
-                      {p.code ? `کد ${p.code}` : `واحد: ${formatUnit(p.unit)}`}
+                    <span className="nums mt-0.5 block truncate text-caption text-muted-foreground">
+                      {[
+                        p.code ? `کد ${p.code}` : null,
+                        invoiceType === "SALE"
+                          ? p.lastSalePrice
+                            ? `فروش ${formatTomanCompact(p.lastSalePrice)}`
+                            : null
+                          : p.lastPurchasePrice
+                            ? `خرید ${formatTomanCompact(p.lastPurchasePrice)}`
+                            : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" | ") || `واحد: ${formatUnit(p.unit)}`}
                     </span>
                   </span>
                   <span
                     className={cn(
                       "nums shrink-0 rounded-full px-2 py-0.5 text-caption font-bold leading-4",
-                      lowStock ? "bg-destructive/10 text-destructive" : "bg-muted text-foreground/70"
+                      out ? "bg-destructive/10 text-destructive" : "bg-muted text-foreground/70"
                     )}
                   >
-                    {lowStock ? "ناموجود" : `${stockText} ${formatUnit(p.unit)}`}
+                    {out ? "ناموجود" : `${stockOf(p)} ${formatUnit(p.unit)}`}
                   </span>
-                </button>              )
-            })}
-            {filtered.length === 0 && (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                کالا موجود نیست — از تب «کالا جدید» بسازید
-              </p>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              نام کالا *
-            </label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="مثلاً الکترود E6013 قطر ۳.۲"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1.5 block text-label font-bold text-foreground/80">
-                برند (اختیاری)
-              </label>
-              <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="اصفهان" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-label font-bold text-foreground/80">
-                کد کالا (اختیاری)
-              </label>
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="E60-32" />
-            </div>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">واحد</label>
-            <div className="flex flex-wrap gap-1.5">
-              {PRODUCT_UNITS.map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  onClick={() => setUnit(u)}
-                  className={cn(
-                    "rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors",
-                    unit === u
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/40"
-                  )}
-                >
-                  {formatUnit(u)}
                 </button>
-              ))}
-            </div>
+              )
+            })}
           </div>
-          {/* عکس کالا (ADV-05) — اختیاری؛ با افزودن کالا پیوست می‌شود */}
-          <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5">
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-caption font-medium text-muted-foreground">
-                <ImagePlus className="size-3.5" />
-                عکس کالا (اختیاری)
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => photoInputRef.current?.click()}
-                className="h-8 shrink-0 rounded-xl px-2.5 text-caption font-bold"
-              >
-                <ImagePlus className="size-3.5" />
-                انتخاب تصویر
-              </Button>
-            </div>
-            {pendingPhotos.length === 0 ? (
-              <p className="rounded-xl bg-muted/40 px-2.5 py-3 text-center text-caption leading-relaxed text-muted-foreground">
-                عکسی انتخاب نشده — با ثبت کالا، عکس در لیست کالاها هم آرشیو می‌شود.
-              </p>
-            ) : (
-              <div className="grid grid-cols-4 gap-2">
-                {pendingPhotos.map((p, i) => (
-                  <div
-                    key={`new-photo-${i}`}
-                    className="relative aspect-square overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/5"
-                  >
-                    <img src={p.url} alt={p.file.name} className="size-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setPendingPhotos((prev) => prev.filter((_, j) => j !== i))}
-                      aria-label="حذف عکس"
-                      className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
-                    >
-                      <X className="size-3" strokeWidth={2.4} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []).filter((f) =>
-                  f.type.startsWith("image/")
-                )
-                if (files.length === 0) {
-                  toast.error("فقط تصویر (JPG/PNG/WebP) مجاز است")
-                } else {
-                  const items = files.map((file) => {
-                    const url = URL.createObjectURL(file)
-                    pendingPhotoUrlsRef.current.push(url)
-                    return { file, url }
-                  })
-                  setPendingPhotos((prev) => [...prev, ...items])
-                }
-                if (photoInputRef.current) photoInputRef.current.value = ""
-              }}
-              aria-hidden="true"
-              tabIndex={-1}
-            />
-          </div>
-        </div>
-      )}
-
-      {mode === "new" && <div className="mt-4 space-y-4">{qtyPriceBlock}</div>}
-      </>
+          {filtered.length === 0 && q && (
+            <p className="py-6 text-center text-label text-muted-foreground">کالایی با «{q}» پیدا نشد — از ردیف اول بسازید</p>
+          )}
+        </>
       )}
     </BottomSheet>
   )

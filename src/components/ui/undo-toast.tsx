@@ -9,6 +9,7 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Undo2 } from "lucide-react"
 import { toPersianDigits } from "@/lib/money"
+import { useUIStore } from "@/lib/ui-store"
 
 function Countdown({ ms }: { ms: number }) {
   const [left, setLeft] = useState(Math.ceil(ms / 1000))
@@ -48,6 +49,71 @@ export function showUndoToast(options: {
       ) as unknown as string,
       onClick: () => {
         void options.onUndo()
+      },
+    },
+  })
+}
+
+// حذف‌های در انتظار — اگر صفحه بسته شود، همان لحظه نهایی می‌شوند
+const pendingCommits = new Map<string, () => void>()
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => pendingCommits.forEach((commit) => commit()))
+}
+
+/**
+ * حذف با فرصت بازگردانی (X1): ردیف فوراً پنهان می‌شود و اعلان شمارش معکوس می‌آید؛
+ * حذف واقعی (commit) فقط وقتی اجرا می‌شود که فرصت تمام شود یا اعلان کنار زده شود.
+ */
+export function deferDelete(options: {
+  id: string
+  message: string
+  description?: string
+  commit: () => Promise<unknown>
+  /** بعد از حذف واقعی (مثلاً invalidate کوئری‌ها) */
+  onCommitted?: () => void | Promise<void>
+  duration?: number
+}) {
+  const { setPendingDelete } = useUIStore.getState()
+  const duration = options.duration ?? 7000
+  let settled = false
+  setPendingDelete(options.id, true)
+
+  const commit = () => {
+    if (settled) return
+    settled = true
+    pendingCommits.delete(options.id)
+    options
+      .commit()
+      .then(async () => {
+        await options.onCommitted?.()
+        setPendingDelete(options.id, false)
+      })
+      .catch((e: unknown) => {
+        setPendingDelete(options.id, false)
+        toast.error(e instanceof Error ? e.message : "حذف ناموفق بود")
+      })
+  }
+  pendingCommits.set(options.id, commit)
+
+  toast(options.message, {
+    duration,
+    description: options.description,
+    icon: <Countdown ms={duration} />,
+    onAutoClose: commit,
+    onDismiss: commit,
+    action: {
+      label: (
+        <span className="flex items-center gap-1 font-bold">
+          <Undo2 className="size-3.5" />
+          بازگردانی
+        </span>
+      ) as unknown as string,
+      onClick: () => {
+        if (settled) return
+        settled = true
+        pendingCommits.delete(options.id)
+        setPendingDelete(options.id, false)
+        toast.success("بازگردانی شد")
       },
     },
   })

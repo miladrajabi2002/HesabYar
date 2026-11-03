@@ -1,532 +1,539 @@
 "use client"
 
 /**
- * ردیف قابل کشیدن (سوایپ) — موبایل، با رفتاری شبیه iOS Mail
- *  • کشیدن به چپ → اکشن‌های trailing از لبهٔ راست بیرون می‌آیند (مثل پاس / تسویه)
- *  • کشیدن به راست → اکشن‌های leading از لبهٔ چپ بیرون می‌آیند (مثل حذف / برگشت)
- *  | ردیف ۱:۱ با انگشت حرکت می‌کند؛ سمتی که اکشن ندارد فقط کمی کش می‌آید (rubber-band)
- *  | عبور از نیمهٔ عرض → اولین اکشن «مسلح» می‌شود: پهن می‌شود، آیکون به لبهٔ ردیف می‌چسبد و لرزش کوتاه
- *    رها کردن در این حالت اکشن را اجرا می‌کند؛ برگشتن پیش از رها کردن لغوش می‌کند
- *  | رها کردن با سرعت انگشت (flick) ادامه پیدا می‌کند — فنر با همان سرعت شروع می‌شود، نه از صفر
- *  | تا پایان اکشن (مثلاً پنجرهٔ تأیید حذف) رنگ اکشن پشت ردیف می‌ماند، بعد ردیف برمی‌گردد
- *  | قفل جهت: حرکت عمودی به اسکرول صفحه سپرده می‌شود و ردیف تکان نمی‌خورد
- *  | با باز شدن یک ردیف یا لمس هر جای دیگر، ردیف باز بسته می‌شود؛ لمس روی ردیف باز فقط آن را می‌بندد
- *  • در دسکتاپ (اشاره‌گر دقیق) کشیدن غیرفعال است و ردیف مثل قبل کلیک می‌خورد
- *  • اشارهٔ کشیدن (swipe hint): وقتی لیست باز می‌شود، ۰٫۷ ثانیه بعد اولین ردیفی که کامل روی صفحه است
- *    حدود ۵۶px کنار می‌رود تا کمی از دکمهٔ اکشن دیده شود و برمی‌گردد. هر بازدید یک بار، در کل حداکثر ۳ بار؛
- *    با اولین کشیدن واقعی کاربر برای همیشه خاموش می‌شود. شمارش در localStorage با کلید hesabyar:swipe-hint.
- *    با «کاهش حرکت» گوشی یا روی دستگاه بدون صفحهٔ لمسی پخش نمی‌شود. برای فعال‌سازی در هر لیست، به ردیف‌ها hint بدهید
- *    (همهٔ ردیف‌ها می‌توانند hint داشته باشند؛ خودش اولین ردیف کامل‌دیده را انتخاب می‌کند).
- *    برای دیدن دوباره هنگام تست، کلید hesabyar:swipe-hint را از localStorage پاک کنید.
+ * ردیف قابل کشیدن (سوایپ) برای فهرست‌ها روی صفحهٔ لمسی، به سبک Mail
+ *  • موقعیت‌ها منطقی‌اند و در فارسی آینه می‌شوند: کشیدن چپ→راست اکشن‌های `trailing` را از لبهٔ چپ
+ *    بیرون می‌آورد و کشیدن راست→چپ اکشن‌های `leading` را از لبهٔ راست.
+ *  • رها کردن بعد از نیمهٔ سینی → سینی باز می‌ماند؛ کشیدن بلند (بیش از FULL_SWIPE عرض ردیف) اولین اکشن
+ *    همان سمت را مستقیم اجرا می‌کند و هنگام مسلح شدن یک لرزش کوتاه می‌دهد.
+ *  • حرکت فقط وقتی گرفته می‌شود که آشکارا افقی باشد، پس با اسکرول عمودی درگیر نمی‌شود؛ لمسی که از
+ *    لبهٔ صفحه شروع شود به حرکت «برگشت» مرورگر سپرده می‌شود.
+ *  • هر بار فقط یک ردیف باز است؛ اسکرول، لمس جای دیگر یا لمس خود ردیف آن را می‌بندد. روی ماوس/ترک‌پد
+ *    کاری نمی‌کند، پس هر اکشن باید در منو یا صفحهٔ جزئیات ردیف هم باشد.
+ *  • با `hint`، اولین ردیفی که کامل روی صفحه است هر بار که صفحه باز می‌شود اکشن‌هایش را کمی نشان
+ *    می‌دهد — مگر اینجا قبلاً ردیفی را کشیده باشند. با اولین کشیدن واقعی، این در localStorage
+ *    (کلید hesabyar:swipe-learned) ذخیره می‌شود و اشاره دیگر هیچ‌جا پخش نمی‌شود.
+ *  • بعد از اکشن، ردیف `removes` بیرون می‌لغزد و جمع می‌شود تا فهرست پیش از تازه‌سازی بسته شود؛ بقیهٔ
+ *    ردیف‌ها با فنر برمی‌گردند و آیکون اکشن برای تأیید یک تپش کوچک می‌زند.
  */
-import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
-import {
-  animate,
-  motion,
-  useMotionValue,
-  useReducedMotion,
-  useTransform,
-  type MotionValue,
-} from "framer-motion"
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion"
+import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTelegram } from "@/hooks/use-telegram"
 
 export interface SwipeAction {
   key: string
   label: string
-  icon: ReactNode
-  /** رنگ پس‌زمینه (CSS) */
-  color: string
-  onAction: () => void | Promise<unknown>
+  icon: LucideIcon
+  tone?: "danger" | "brand" | "ok" | "warning" | "supplier" | "neutral"
+  /** ردیف بعد از موفقیت از فهرست می‌رود (حذف) */
+  removes?: boolean
+  /** اگر شکست خورد `false` برگردانید تا ردیف `removes` برگردد */
+  onAction: () => void | boolean | Promise<unknown>
 }
 
-const ACTION_W = 76
-/** فاصلهٔ لازم پیش از تشخیص جهت */
-const SLOP = 8
-/** نسبت عرض برای مسلح شدن / خلع سلاح (هیسترزیس تا مرز لرزش نزند) */
-const ARM_AT = 0.5
-const DISARM_AT = 0.44
-/** سرعت (px/s) که رها کردن را «پرتاب» حساب می‌کند */
-const FLICK_V = 550
+const ACTION_WIDTH = 76
+const LOCK_DISTANCE = 8
+const EDGE_GUARD = 20
+const FULL_SWIPE = 0.6
+const OPEN_VELOCITY = 450 // px/s
+const SNAP = { type: "spring" as const, stiffness: 560, damping: 44, mass: 0.7 }
+/** برگشت بعد از اکشنی که ردیف را حذف نمی‌کند: کمی نرم‌تر، تا «انجام شد» خوانده شود */
+const RETURN = { type: "spring" as const, stiffness: 380, damping: 30, mass: 0.8 }
+const HINT_PEEK = 56
+/** سینی تا این اندازه زیر ردیف ادامه دارد تا گوشه‌های گرد ردیف هیچ‌وقت شکاف نشان ندهند */
+const RAIL_TUCK = 28
+/** ردیف حذف‌شده‌ای که بعد از این مدت هنوز در فهرست است برمی‌گردد تا جای خالی نماند */
+const REMOVE_FALLBACK = 5000
+const LEARNED_KEY = "hesabyar:swipe-learned"
 
-const SPRING = { type: "spring", stiffness: 430, damping: 40, mass: 1, restDelta: 0.5 } as const
-const ARM_SPRING = { type: "spring", stiffness: 620, damping: 34 } as const
+const TONE: Record<NonNullable<SwipeAction["tone"]>, string> = {
+  danger: "bg-destructive text-destructive-foreground",
+  brand: "bg-primary text-primary-foreground",
+  ok: "bg-income text-white",
+  warning: "bg-warning text-warning-foreground",
+  supplier: "bg-[var(--role-supplier)] text-white",
+  neutral: "bg-muted-foreground text-background",
+}
 
-const openRows = typeof window !== "undefined" ? new EventTarget() : null
+/** ردیف باز فعلی، تا باز شدن ردیف دیگر آن را ببندد */
+let openRow: { close: () => void } | null = null
+/**
+ * هر صفحه یک اشاره، که اولین ردیفِ hint‌دار داخل دید (یا کشیدن خود کاربر) آن را برمی‌دارد. وقتی همهٔ
+ * ردیف‌های hint‌دار unmount شدند، یعنی از صفحه رفته‌اند، آزاد می‌شود تا برگشتن دوباره اشاره کند.
+ */
+let hintClaimed = false
+/** همهٔ ردیف‌های hint‌دارِ mount‌شده، تا بالاترینِ روی صفحه اشاره کند */
+const hintedRows = new Set<HTMLElement>()
 
-// ───────── اشارهٔ کشیدن (swipe hint) ─────────
-const HINT_KEY = "hesabyar:swipe-hint"
-const HINT_MAX = 3
-const HINT_DELAY = 700
-const HINT_DISTANCE = 56
-/** فضای پایین صفحه که نوار شناور موبایل می‌پوشاند */
-const HINT_BOTTOM_INSET = 96
-
-type HintState = { count: number; done: boolean }
-let hintPlayedThisVisit = false
-let hintTimer: ReturnType<typeof setTimeout> | null = null
-const hintCandidates = new Map<string, { el: () => HTMLElement | null; play: () => void }>()
-
-function readHint(): HintState | null {
+/** کاربر قبلاً یک ردیف را کشیده؟ بدون دسترسی به حافظه، اشاره پخش نمی‌شود */
+function learned() {
   try {
-    const v = JSON.parse(localStorage.getItem(HINT_KEY) || "{}") as Partial<HintState>
-    return { count: Number(v.count) || 0, done: !!v.done }
+    return localStorage.getItem(LEARNED_KEY) === "1"
   } catch {
-    return null // بدون دسترسی به حافظه، اشاره پخش نمی‌شود
+    return true
   }
 }
 
-function writeHint(v: HintState) {
+function markLearned() {
+  hintClaimed = true
   try {
-    localStorage.setItem(HINT_KEY, JSON.stringify(v))
+    localStorage.setItem(LEARNED_KEY, "1")
   } catch {
     /* ignore */
   }
 }
 
-/** کاربر خودش یک ردیف را کشید → اشاره برای همیشه خاموش */
-function markSwiped() {
-  const h = readHint()
-  if (h && !h.done) writeHint({ ...h, done: true })
+function fullyVisible(element: HTMLElement) {
+  const rect = element.getBoundingClientRect()
+  return rect.height > 0 && rect.top >= 0 && rect.bottom <= window.innerHeight
 }
 
-/** بعد از ۰٫۷ ثانیه، بالاترین ردیفِ کامل‌دیده را انتخاب و اشاره را پخش کن */
-function scheduleHint() {
-  if (hintTimer || hintPlayedThisVisit) return
-  hintTimer = setTimeout(() => {
-    hintTimer = null
-    if (hintPlayedThisVisit) return
-    const h = readHint()
-    if (!h || h.done || h.count >= HINT_MAX) return
-    let best: { top: number; play: () => void } | null = null
-    for (const c of hintCandidates.values()) {
-      const r = c.el()?.getBoundingClientRect()
-      if (!r || r.height === 0 || r.top < 0 || r.bottom > window.innerHeight - HINT_BOTTOM_INSET) continue
-      if (!best || r.top < best.top) best = { top: r.top, play: c.play }
-    }
-    if (!best) return
-    hintPlayedThisVisit = true
-    writeHint({ count: h.count + 1, done: false })
-    best.play()
-  }, HINT_DELAY)
-}
-
-/** کش‌آمدن پلاستیکی: هرچه بیشتر بکشی، کمتر جلو می‌رود و هرگز از dim رد نمی‌شود */
-function rubber(over: number, dim: number) {
-  return (1 - 1 / ((over * 0.55) / dim + 1)) * dim
+/** ردیف hint‌دار دیگری بالاتر از این، کامل روی صفحه است؟ پس او اول است */
+function rowAboveIsVisible(element: HTMLElement) {
+  for (const other of hintedRows) {
+    if (other === element) continue
+    const above = other.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING
+    if (above && fullyVisible(other)) return true
+  }
+  return false
 }
 
 function useCoarsePointer() {
   const [coarse, setCoarse] = useState(false)
   useEffect(() => {
-    const mq = window.matchMedia("(pointer: coarse)")
-    const update = () => setCoarse(mq.matches)
+    const media = window.matchMedia("(pointer: coarse)")
+    const update = () => setCoarse(media.matches)
     update()
-    mq.addEventListener("change", update)
-    return () => mq.removeEventListener("change", update)
+    media.addEventListener("change", update)
+    return () => media.removeEventListener("change", update)
   }, [])
   return coarse
 }
 
-type Side = "lead" | "trail"
-
-interface Gesture {
-  id: number
-  startX: number
-  startY: number
-  from: number
-  lock: "x" | "y" | null
-  samples: { t: number; x: number }[]
-}
-
 export function SwipeRow({
-  children,
   leading = [],
   trailing = [],
-  className,
-  hint = false,
   disabled = false,
-  fullSwipe = true,
+  hint = false,
+  className,
+  children,
 }: {
-  children: ReactNode
-  /** با کشیدن ردیف به راست، از لبهٔ چپ دیده می‌شود */
+  /** ابتدای سطر (در فارسی لبهٔ راست) — با کشیدن راست→چپ */
   leading?: SwipeAction[]
-  /** با کشیدن ردیف به چپ، از لبهٔ راست دیده می‌شود */
+  /** انتهای سطر (در فارسی لبهٔ چپ) — با کشیدن چپ→راست */
   trailing?: SwipeAction[]
-  className?: string
-  /** اشارهٔ یک‌باره برای آموزش حرکت */
-  hint?: boolean
   disabled?: boolean
-  /** کشیدن کامل، اولین اکشن هر سمت را اجرا کند */
-  fullSwipe?: boolean
+  /** اشارهٔ کوتاه به اکشن‌ها وقتی ردیف دیده شد، برای آموزش حرکت */
+  hint?: boolean
+  /** شکل ردیف (گردی، حاشیه) — سینی‌ها با همین بریده می‌شوند */
+  className?: string
+  children: ReactNode
 }) {
-  const id = useId()
   const coarse = useCoarsePointer()
-  const reduce = useReducedMotion()
+  const reduceMotion = useReducedMotion()
   const { webApp } = useTelegram()
+  const rootRef = useRef<HTMLDivElement>(null)
   const x = useMotionValue(0)
-  /** ۰ تا ۱ — حالت مسلح (با فنر، تا جابه‌جایی آیکون نرم باشد) */
-  const armed = useMotionValue(0)
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const gestureRef = useRef<Gesture | null>(null)
-  const armedRef = useRef(false)
-  const openRef = useRef(false)
-  const busyRef = useRef(false)
-  const suppressClickRef = useRef(false)
-  const [side, setSide] = useState<Side | null>(null)
-  const [open, setOpen] = useState(false)
-  const enabled = coarse && !disabled && (leading.length > 0 || trailing.length > 0)
+  const [rtl, setRtl] = useState(false)
+  const [openSide, setOpenSide] = useState<"leading" | "trailing" | null>(null)
+  const [armed, setArmed] = useState<"leading" | "trailing" | null>(null)
+  const [busy, setBusy] = useState(false)
+  /** سمتی که اکشنش همین الان اجرا شد، تا آیکونش هنگام برگشت ردیف تپش بزند */
+  const [confirmed, setConfirmed] = useState<"leading" | "trailing" | null>(null)
+  // ردیف تا پایان اکشن خودش قابل کشیدن می‌ماند، حتی اگر اکشن در میانه غیرفعالش کند (پاس شدن چک)،
+  // تا انیمیشن برگشت نیمه‌کاره نماند.
+  const enabled = coarse && (!disabled || busy) && (leading.length > 0 || trailing.length > 0)
 
-  const leadW = leading.length * ACTION_W
-  const trailW = trailing.length * ACTION_W
-
-  // فقط سمتی که دیده می‌شود رندر شود (تغییر علامت x به‌ندرت رخ می‌دهد)
-  useEffect(
-    () =>
-      x.on("change", (v) => {
-        const next: Side | null = v > 0.5 ? "lead" : v < -0.5 ? "trail" : null
-        setSide((s) => (s === next ? s : next))
-      }),
-    [x]
-  )
-
-  const tick = (strong = false) => {
-    const h = webApp?.HapticFeedback
-    if (h) h.impactOccurred(strong ? "medium" : "light")
-    else navigator.vibrate?.(strong ? 14 : 8)
+  // سمت فیزیکی هر سینی منطقی: x مثبت لبهٔ چپ را نشان می‌دهد.
+  const sideForX = (value: number): "leading" | "trailing" | null => {
+    if (value === 0) return null
+    const revealsLeft = value > 0
+    return revealsLeft === rtl ? "trailing" : "leading"
   }
-
-  const setArmed = (on: boolean, silent = false) => {
-    if (armedRef.current === on) return
-    armedRef.current = on
-    if (!silent) tick()
-    animate(armed, on ? 1 : 0, reduce ? { duration: 0 } : ARM_SPRING)
-  }
-
-  const width = () => wrapRef.current?.offsetWidth ?? 360
-
-  const settle = (to: number, velocity = 0) => {
-    const wasOpen = openRef.current
-    openRef.current = to !== 0
-    setOpen(to !== 0)
-    if (to === 0) setArmed(false, true)
-    if (to !== 0 && !wasOpen) openRows?.dispatchEvent(new CustomEvent("open", { detail: id }))
-    return animate(x, to, reduce ? { duration: 0.15 } : { ...SPRING, velocity })
-  }
-
-  // بستن وقتی ردیف دیگری باز شد
-  useEffect(() => {
-    const onOpen = (e: Event) => {
-      if ((e as CustomEvent).detail !== id && (openRef.current || x.get() !== 0) && !busyRef.current) {
-        openRef.current = false
-        setOpen(false)
-        animate(x, 0, SPRING)
-      }
-    }
-    openRows?.addEventListener("open", onOpen)
-    return () => openRows?.removeEventListener("open", onOpen)
-  }, [id, x])
-
-  // لمس هر جای دیگر صفحه (از جمله شروع اسکرول) → بستن
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: PointerEvent) => {
-      if (busyRef.current) return
-      if (wrapRef.current?.contains(e.target as Node)) return
-      openRef.current = false
-      setOpen(false)
-      animate(x, 0, SPRING)
-    }
-    document.addEventListener("pointerdown", onDown, true)
-    return () => document.removeEventListener("pointerdown", onDown, true)
-  }, [open, x])
-
-  // اشارهٔ کشیدن — این ردیف نامزد می‌شود؛ هماهنگ‌کننده اولین ردیف کامل‌دیده را انتخاب می‌کند
-  useEffect(() => {
-    if (!hint || !enabled || reduce) return
-    if (!window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints === 0) return
-    hintCandidates.set(id, {
-      el: () => wrapRef.current,
-      play: async () => {
-        const dir = trailW ? -1 : 1
-        await animate(x, dir * HINT_DISTANCE, { duration: 0.38, ease: [0.22, 1, 0.36, 1] })
-        await new Promise((r) => setTimeout(r, 260))
-        if (gestureRef.current || openRef.current) return
-        await animate(x, 0, { type: "spring", stiffness: 320, damping: 28 })
+  const signFor = (side: "leading" | "trailing") => ((side === "trailing") === rtl ? 1 : -1)
+  const stateRef = useRef({ leading, trailing, rtl, openSide, busy, reduceMotion })
+  useLayoutEffect(() => {
+    stateRef.current = { leading, trailing, rtl, openSide, busy, reduceMotion }
+  })
+  const actionsFor = (side: "leading" | "trailing") => (side === "leading" ? stateRef.current.leading : stateRef.current.trailing)
+  // شناسهٔ ثابت برای ثبت ردیف باز، که بستن و جاانداختن ردیف را هم خودش دارد.
+  const [handle] = useState(() => {
+    const row = {
+      settle(target: number, side: "leading" | "trailing" | null) {
+        setOpenSide(side)
+        animate(x, target, stateRef.current.reduceMotion ? { duration: 0 } : SNAP)
+        if (side) {
+          // حرکت را خودشان پیدا کردند؛ اشاره دیگر لازم نیست.
+          markLearned()
+          if (openRow && openRow !== row) openRow.close()
+          openRow = row
+        } else if (openRow === row) {
+          openRow = null
+        }
       },
-    })
-    scheduleHint()
-    return () => {
-      hintCandidates.delete(id)
+      close() {
+        setArmed(null)
+        row.settle(0, null)
+      },
     }
-  }, [hint, enabled, reduce, trailW, x, id])
+    return row
+  })
+  const settle = handle.settle
 
-  /** فاصلهٔ خام انگشت → جابه‌جایی نمایشی ردیف */
-  const resolve = (raw: number) => {
-    const s = Math.sign(raw)
-    const a = Math.abs(raw)
-    const actions = s > 0 ? leading : trailing
-    const openW = s > 0 ? leadW : trailW
-    if (!actions.length) return s * rubber(a, 36)
-    const w = width()
-    const limit = fullSwipe ? w - 12 : openW
-    const dim = fullSwipe ? 24 : openW * 0.5
-    return s * (a <= limit ? a : limit + rubber(a - limit, dim))
+  const tick = () => {
+    const haptic = webApp?.HapticFeedback
+    if (haptic) haptic.impactOccurred("light")
+    else navigator.vibrate?.(10)
   }
 
-  const velocity = (g: Gesture) => {
-    const now = performance.now()
-    const recent = g.samples.filter((p) => now - p.t < 100)
-    if (recent.length < 2) return 0
-    const first = recent[0]
-    const last = recent[recent.length - 1]
-    const dt = last.t - first.t
-    return dt > 0 ? ((last.x - first.x) / dt) * 1000 : 0
-  }
-
-  const commit = async (a: SwipeAction, dir: number, v: number) => {
-    busyRef.current = true
-    armedRef.current = true
-    tick(true)
-    // ردیف تا لبه می‌رود و رنگ اکشن کل ردیف را می‌پوشاند
-    animate(armed, 1, ARM_SPRING)
-    await animate(
-      x,
-      dir * width(),
-      reduce ? { duration: 0.12 } : { type: "spring", stiffness: 520, damping: 46, velocity: v, restDelta: 1 }
-    )
+  async function perform(action: SwipeAction) {
     try {
-      await a.onAction()
-    } finally {
-      // اگر ردیف حذف شد، این‌ها روی نمونهٔ از بین‌رفته بی‌اثرند
-      await new Promise((r) => setTimeout(r, 120))
-      busyRef.current = false
-      settle(0)
+      return (await action.onAction()) !== false
+    } catch {
+      return false
     }
   }
 
-  const run = async (a: SwipeAction) => {
-    busyRef.current = true
-    try {
-      await a.onAction()
-    } finally {
-      busyRef.current = false
-      settle(0)
+  async function run(action: SwipeAction, side: "leading" | "trailing") {
+    if (stateRef.current.busy) return
+    setBusy(true)
+    markLearned()
+    if (openRow === handle) openRow = null
+    const root = rootRef.current
+
+    if (!action.removes || !root) {
+      // ردیف هم‌زمان با اجرای اکشن با فنر برمی‌گردد؛ تپش آیکون می‌گوید انجام شد.
+      setArmed(null)
+      setOpenSide(null)
+      setConfirmed(side)
+      await Promise.all([animate(x, 0, reduceMotion ? { duration: 0 } : RETURN), perform(action)])
+      setConfirmed(null)
+      setBusy(false)
+      return
     }
+
+    // اکشن اول هنگام بیرون رفتن ردیف کل سینی را پر می‌کند، بعد ردیف جمع می‌شود
+    // تا فهرست پیش از تازه‌سازی بسته شود.
+    setArmed(side)
+    const height = root.offsetHeight
+    await animate(x, signFor(side) * root.offsetWidth, reduceMotion ? { duration: 0 } : { duration: 0.2, ease: [0.4, 0, 1, 1] })
+    const fold = animate(root, { height: [height, 0], opacity: [1, 0] }, { duration: reduceMotion ? 0 : 0.26, ease: [0.32, 0.72, 0, 1] })
+    const [ok] = await Promise.all([perform(action), fold])
+    if (ok) {
+      await new Promise((resolve) => window.setTimeout(resolve, REMOVE_FALLBACK))
+      // معمولاً تا الان تازه‌سازی آن را برداشته؛ وگرنه برش گردان.
+      if (!root.isConnected) return
+    }
+    setArmed(null)
+    setOpenSide(null)
+    x.set(0)
+    await animate(root, { height: [0, root.scrollHeight], opacity: [0, 1] }, { duration: reduceMotion ? 0 : 0.26, ease: [0.32, 0.72, 0, 1] })
+    root.style.height = ""
+    setBusy(false)
   }
 
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (busyRef.current || (e.pointerType === "mouse" && e.button !== 0)) return
-    x.stop()
-    suppressClickRef.current = openRef.current
-    gestureRef.current = {
-      id: e.pointerId,
-      startX: e.clientX,
-      startY: e.clientY,
-      from: x.get(),
-      lock: null,
-      samples: [{ t: performance.now(), x: e.clientX }],
-    }
-  }
+  useEffect(() => {
+    setRtl(getComputedStyle(rootRef.current ?? document.documentElement).direction === "rtl")
+  }, [])
 
-  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const g = gestureRef.current
-    if (!g || g.id !== e.pointerId || g.lock === "y") return
-    const dx = e.clientX - g.startX
-    const dy = e.clientY - g.startY
-    if (!g.lock) {
-      if (Math.hypot(dx, dy) < SLOP) return
-      if (Math.abs(dx) < Math.abs(dy) * 1.2) {
-        g.lock = "y"
+  useEffect(() => {
+    const root = rootRef.current
+    if (!enabled || !root) return
+
+    let start: { x: number; y: number; offset: number; t: number } | null = null
+    let mode: "pending" | "horizontal" | "vertical" = "pending"
+    let lastX = 0
+    let lastT = 0
+    let velocity = 0
+    let suppressClick = false
+
+    const railWidth = (side: "leading" | "trailing") => actionsFor(side).length * ACTION_WIDTH
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || stateRef.current.busy) return
+      const touch = event.touches[0]
+      if (touch.clientX < EDGE_GUARD || touch.clientX > window.innerWidth - EDGE_GUARD) return
+      // ردیف را وسط حرکت (فنر یا اشاره) بگیر، نه اینکه با آن بجنگی.
+      x.stop()
+      start = { x: touch.clientX, y: touch.clientY, offset: x.get(), t: performance.now() }
+      mode = "pending"
+      lastX = touch.clientX
+      lastT = start.t
+      velocity = 0
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (!start) return
+      const touch = event.touches[0]
+      if (!touch) return
+      const dx = touch.clientX - start.x
+      const dy = touch.clientY - start.y
+      if (mode === "pending") {
+        if (Math.hypot(dx, dy) < LOCK_DISTANCE) return
+        mode = Math.abs(dx) > Math.abs(dy) * 1.2 ? "horizontal" : "vertical"
+        if (mode === "vertical") {
+          start = null
+          return
+        }
+        markLearned()
+        if (openRow && openRow !== handle) openRow.close()
+      }
+      if (mode !== "horizontal") return
+      if (event.cancelable) event.preventDefault()
+
+      const now = performance.now()
+      velocity = ((touch.clientX - lastX) / Math.max(1, now - lastT)) * 1000
+      lastX = touch.clientX
+      lastT = now
+
+      let next = start.offset + dx
+      const side = sideForX(next)
+      const width = root.offsetWidth
+      if (!side || actionsFor(side).length === 0) {
+        next = Math.sign(next) * Math.min(16, Math.abs(next) * 0.15)
+      } else if (Math.abs(next) > width * 0.92) {
+        next = Math.sign(next) * width * 0.92
+      }
+      x.set(next)
+
+      const nextArmed = side && actionsFor(side).length > 0 && Math.abs(next) > width * FULL_SWIPE ? side : null
+      setArmed((current) => {
+        if (current !== nextArmed && nextArmed) tick()
+        return nextArmed
+      })
+    }
+
+    const onTouchEnd = () => {
+      if (!start) return
+      const wasHorizontal = mode === "horizontal"
+      start = null
+      if (!wasHorizontal) return
+      suppressClick = true
+      window.setTimeout(() => { suppressClick = false }, 400)
+
+      const offset = x.get()
+      const side = sideForX(offset)
+      const width = root.offsetWidth
+      if (!side || actionsFor(side).length === 0) {
+        handle.close()
         return
       }
-      g.lock = "x"
-      markSwiped()
-      suppressClickRef.current = true
-      e.currentTarget.setPointerCapture(e.pointerId)
-      wrapRef.current?.setAttribute("data-dragging", "")
-      openRows?.dispatchEvent(new CustomEvent("open", { detail: id }))
-      // از نقطهٔ فعلی شروع کن تا ردیف به اندازهٔ SLOP نپرد
-      g.startX = e.clientX
-    }
-    const now = performance.now()
-    g.samples.push({ t: now, x: e.clientX })
-    if (g.samples.length > 8) g.samples.shift()
-
-    const next = resolve(g.from + (e.clientX - g.startX))
-    x.set(next)
-
-    if (fullSwipe) {
-      const actions = next > 0 ? leading : trailing
-      const ratio = Math.abs(next) / width()
-      if (!actions.length) setArmed(false)
-      else if (!armedRef.current && ratio >= ARM_AT) setArmed(true)
-      else if (armedRef.current && ratio < DISARM_AT) setArmed(false)
-    }
-  }
-
-  const onPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const g = gestureRef.current
-    if (!g || g.id !== e.pointerId) return
-    gestureRef.current = null
-    wrapRef.current?.removeAttribute("data-dragging")
-    if (g.lock !== "x") return
-
-    const off = x.get()
-    const v = e.type === "pointercancel" ? 0 : velocity(g)
-
-    if (armedRef.current) {
-      const a = off > 0 ? leading[0] : trailing[0]
-      if (a) return void commit(a, Math.sign(off), v)
+      const first = actionsFor(side)[0]
+      if (Math.abs(offset) > width * FULL_SWIPE && first) {
+        void run(first, side)
+        return
+      }
+      const rail = railWidth(side)
+      const towardOpen = Math.sign(velocity) === Math.sign(offset)
+      if (Math.abs(offset) > rail / 2 || (towardOpen && Math.abs(velocity) > OPEN_VELOCITY)) {
+        setArmed(null)
+        settle(signFor(side) * rail, side)
+      } else {
+        handle.close()
+      }
     }
 
-    const toward = (target: number) => settle(target, v)
-    // پرتاب: جهت سرعت تصمیم می‌گیرد
-    if (Math.abs(v) > FLICK_V) {
-      if (off > 0) return void toward(v > 0 && leadW ? leadW : 0)
-      if (off < 0) return void toward(v < 0 && trailW ? -trailW : 0)
+    // لمس روی ردیف باز فقط آن را می‌بندد و مقصد ردیف را باز نمی‌کند.
+    const onClickCapture = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest("[data-swipe-action]")) return
+      if (suppressClick || stateRef.current.openSide) {
+        event.preventDefault()
+        event.stopPropagation()
+        suppressClick = false
+        if (stateRef.current.openSide) handle.close()
+      }
     }
-    if (off > leadW / 2 && leadW) return void toward(leadW)
-    if (off < -trailW / 2 && trailW) return void toward(-trailW)
-    toward(0)
-  }
+
+    root.addEventListener("touchstart", onTouchStart, { passive: true })
+    root.addEventListener("touchmove", onTouchMove, { passive: false })
+    root.addEventListener("touchend", onTouchEnd)
+    root.addEventListener("touchcancel", onTouchEnd)
+    root.addEventListener("click", onClickCapture, true)
+    return () => {
+      root.removeEventListener("touchstart", onTouchStart)
+      root.removeEventListener("touchmove", onTouchMove)
+      root.removeEventListener("touchend", onTouchEnd)
+      root.removeEventListener("touchcancel", onTouchEnd)
+      root.removeEventListener("click", onClickCapture, true)
+    }
+    // هندلرها آخرین پراپ‌ها را از stateRef می‌خوانند.
+  }, [enabled, rtl])
+
+  // اسکرول یا لمس هر جای دیگر، ردیف باز را می‌بندد.
+  useEffect(() => {
+    if (!openSide) return
+    const onScroll = () => handle.close()
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) handle.close()
+    }
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true })
+    document.addEventListener("pointerdown", onPointerDown, true)
+    return () => {
+      window.removeEventListener("scroll", onScroll, { capture: true })
+      document.removeEventListener("pointerdown", onPointerDown, true)
+    }
+  }, [openSide])
+
+  useEffect(() => () => {
+    if (openRow === handle) openRow = null
+  }, [handle])
+
+  // اشاره: ردیف را وقتی داخل دید آمد کمی به سمت سینی اولش ببر و برگردان.
+  useEffect(() => {
+    const root = rootRef.current
+    if (!enabled || !hint || !root) return
+    // حتی اگر این ردیف اشاره نکند ثبت می‌شود، تا صفحه فقط با رفتن آخرین ردیف hint‌دار «ترک‌شده» حساب شود.
+    hintedRows.add(root)
+    const side = stateRef.current.leading.length ? "leading" : "trailing"
+    let timer = 0
+    // برداشته شده ولی هنوز پخش نشده. ردیفی که دوباره رندر یا unmount شود یا نتواند پخش کند آن را پس
+    // می‌دهد، تا تازه‌سازی زندهٔ فهرست یا رندر دوباره در ۰٫۷ ثانیهٔ اول اشارهٔ صفحه را نبلعد.
+    let pending = false
+    const release = () => {
+      if (!pending) return
+      pending = false
+      hintClaimed = false
+    }
+    const observer = reduceMotion || hintClaimed || learned() ? null : new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting || entry.intersectionRatio < 0.9 || hintClaimed) return
+      if (rowAboveIsVisible(root)) return
+      hintClaimed = true
+      pending = true
+      observer?.disconnect()
+      timer = window.setTimeout(() => {
+        if (document.hidden || learned() || stateRef.current.openSide || stateRef.current.busy || x.get() !== 0) {
+          release()
+          return
+        }
+        pending = false
+        const peek = signFor(side) * HINT_PEEK
+        void animate(x, [0, peek, peek, 0], { duration: 1.1, times: [0, 0.32, 0.55, 1], ease: [0.32, 0.72, 0, 1] })
+      }, 700)
+    }, { threshold: 0.9 })
+    observer?.observe(root)
+    return () => {
+      hintedRows.delete(root)
+      observer?.disconnect()
+      window.clearTimeout(timer)
+      release()
+      // آخرین ردیف hint‌دار رفت: از صفحه رفته‌اند، پس صفحهٔ بعد دوباره اشاره می‌کند.
+      if (hintedRows.size === 0) hintClaimed = false
+    }
+  }, [enabled, hint, reduceMotion, rtl])
 
   if (!enabled) return <div className={className}>{children}</div>
 
   return (
-    <div
-      ref={wrapRef}
-      className={cn("relative isolate overflow-hidden data-[dragging]:select-none", className)}
-    >
-      {side === "lead" && leading.length > 0 && (
-        <ActionTray actions={leading} edge="left" x={x} armed={armed} open={open} onRun={run} />
-      )}
-      {side === "trail" && trailing.length > 0 && (
-        <ActionTray actions={trailing} edge="right" x={x} armed={armed} open={open} onRun={run} />
-      )}
-
-      <motion.div
-        style={{ x, touchAction: "pan-y" }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerEnd}
-        onPointerCancel={onPointerEnd}
-        onClickCapture={(e) => {
-          // کلیک بعد از کشیدن یا روی ردیف باز → فقط بستن
-          if (suppressClickRef.current || openRef.current || busyRef.current) {
-            e.preventDefault()
-            e.stopPropagation()
-            if (openRef.current && !busyRef.current) settle(0)
-          }
-          suppressClickRef.current = false
-        }}
-        className="relative z-10 will-change-transform"
-      >
+    <div ref={rootRef} className={cn("relative isolate overflow-hidden", className)}>
+      {(["leading", "trailing"] as const).map((side) => {
+        const actions = side === "leading" ? leading : trailing
+        if (!actions.length) return null
+        // leading در ابتدای سطر، trailing در انتهای سطر.
+        return (
+          <Rail
+            key={side}
+            side={side}
+            actions={actions}
+            x={x}
+            rtl={rtl}
+            open={openSide === side}
+            armed={armed === side}
+            confirmed={confirmed === side}
+            onRun={(action) => void run(action, side)}
+          />
+        )
+      })}
+      <motion.div style={{ x }} className="relative z-10 touch-pan-y bg-inherit">
         {children}
       </motion.div>
     </div>
   )
 }
 
-/**
- * سینی اکشن‌های یک سمت. اولین اکشن کنار لبه است.
- * عرض هر دکمه = سهم مساوی از فاصلهٔ باز شده؛ در حالت مسلح دکمهٔ اول همه را می‌گیرد.
- */
-function ActionTray({
+function Rail({
+  side,
   actions,
-  edge,
   x,
-  armed,
+  rtl,
   open,
+  armed,
+  confirmed,
   onRun,
 }: {
+  side: "leading" | "trailing"
   actions: SwipeAction[]
-  edge: "left" | "right"
   x: MotionValue<number>
-  armed: MotionValue<number>
+  rtl: boolean
   open: boolean
-  onRun: (a: SwipeAction) => void
+  armed: boolean
+  confirmed: boolean
+  onRun: (action: SwipeAction) => void
 }) {
-  return (
-    <div className="absolute inset-0" aria-hidden={!open}>
-      {actions.map((a, i) => (
-        <ActionButton
-          key={a.key}
-          action={a}
-          index={i}
-          count={actions.length}
-          edge={edge}
-          x={x}
-          armed={armed}
-          open={open}
-          onClick={() => onRun(a)}
-        />
-      ))}
-    </div>
-  )
-}
+  const reduceMotion = useReducedMotion()
+  // فقط وقتی ردیف به سمت این سینی می‌رود دیده می‌شود.
+  const onLeft = (side === "trailing") === rtl
+  const opacity = useTransform(x, (value) => ((onLeft ? value > 0 : value < 0) ? 1 : 0))
+  const width = useTransform(x, (value) => Math.max(actions.length * ACTION_WIDTH, Math.abs(value)) + RAIL_TUCK)
+  const first = actions[0]
+  // نوار زیر ردیف به اکشنِ نزدیک‌تر به ردیف می‌چسبد.
+  const edge = armed ? first : actions[actions.length - 1]
 
-function ActionButton({
-  action,
-  index,
-  count,
-  edge,
-  x,
-  armed,
-  open,
-  onClick,
-}: {
-  action: SwipeAction
-  index: number
-  count: number
-  edge: "left" | "right"
-  x: MotionValue<number>
-  armed: MotionValue<number>
-  open: boolean
-  onClick: () => void
-}) {
-  const share = (d: number, k: number, i: number) => {
-    const even = d / count
-    if (i === 0) return even + (d - even) * k
-    return even * (1 - k)
-  }
-  // عرض این دکمه و فاصله‌اش از لبه
-  const w = useTransform([x, armed], ([xv, k]: number[]) => share(Math.abs(xv), k, index))
-  const offset = useTransform([x, armed], ([xv, k]: number[]) => {
-    let o = 0
-    for (let j = 0; j < index; j++) o += share(Math.abs(xv), k, j)
-    return o
-  })
-  // مرکز محتوا از لبهٔ بیرونی دکمه: تا وقتی باریک است وسط، بعد ثابت کنار لبه، در حالت مسلح چسبیده به ردیف
-  const shift = useTransform([w, armed], ([wv, k]: number[]) => {
-    const rest = Math.min(wv / 2, ACTION_W / 2)
-    const stuck = index === 0 ? Math.max(rest, wv - ACTION_W / 2) : rest
-    const c = rest + (stuck - rest) * k
-    return (edge === "left" ? 1 : -1) * (c - ACTION_W / 2)
-  })
-  const opacity = useTransform(w, [14, ACTION_W * 0.7], [0, 1])
-  const scale = useTransform([w, armed], ([wv, k]: number[]) => {
-    const p = Math.min(1, Math.max(0, (wv - 14) / (ACTION_W * 0.7 - 14)))
-    return 0.55 + 0.45 * p + (index === 0 ? 0.1 * k : 0)
-  })
-
+  // چیدمان فیزیکی (dir="ltr") تا اکشن اول همیشه کنار لبهٔ صفحه باشد. بعد از عرض خود سینی، دکمه‌ها با
+  // کشیدن پهن می‌شوند تا پشت ردیف شکافی باز نشود؛ در حالت مسلح دکمهٔ اول همه را می‌گیرد. سینی به اندازهٔ
+  // RAIL_TUCK زیر ردیف ادامه دارد (با رنگ اکشن لبه) تا گوشه‌های گرد ردیف روی رنگ بنشینند نه صفحه.
   return (
-    <motion.button
-      type="button"
-      tabIndex={open ? 0 : -1}
-      onClick={onClick}
-      style={{ width: w, background: action.color, ...(edge === "left" ? { left: offset } : { right: offset }) }}
-      className="absolute inset-y-0 overflow-hidden text-white active:brightness-90"
+    <motion.div
+      aria-hidden={!open}
+      dir="ltr"
+      style={{ opacity, width, [onLeft ? "paddingRight" : "paddingLeft"]: RAIL_TUCK }}
+      className={cn(
+        "absolute inset-y-0 flex",
+        onLeft ? "left-0 flex-row" : "right-0 flex-row-reverse",
+        edge && TONE[edge.tone ?? "neutral"],
+      )}
     >
-      <motion.span
-        style={{ x: shift, opacity, width: ACTION_W, ...(edge === "left" ? { left: 0 } : { right: 0 }) }}
-        className="absolute inset-y-0 flex flex-col items-center justify-center gap-1"
-      >
-        <motion.span style={{ scale }} className="grid size-9 place-items-center rounded-full bg-white/20">
-          {action.icon}
-        </motion.span>
-        <span className="whitespace-nowrap text-caption font-bold">{action.label}</span>
-      </motion.span>
-    </motion.button>
+      {actions.map((action, index) => {
+        const Icon = action.icon
+        const flex = armed ? (index === 0 ? "1 1 0px" : "0 0 0px") : `1 1 ${ACTION_WIDTH}px`
+        return (
+          <button
+            key={action.key}
+            type="button"
+            data-swipe-action=""
+            tabIndex={open ? 0 : -1}
+            onClick={(event) => {
+              event.stopPropagation()
+              onRun(action)
+            }}
+            className={cn(
+              "flex h-full min-w-0 overflow-hidden transition-[flex] duration-200 ease-out",
+              // برچسب هنگام پهن شدن دکمه کنار لبهٔ ردیف می‌ماند.
+              onLeft ? "justify-end" : "justify-start",
+              TONE[action.tone ?? "neutral"],
+            )}
+            style={{ flex }}
+          >
+            <span
+              dir="auto"
+              className="flex h-full shrink-0 flex-col items-center justify-center gap-1 px-2 text-caption font-bold"
+              style={{ width: ACTION_WIDTH }}
+            >
+              {/* وقتی رها کردن اجرایش می‌کند کمی بزرگ می‌شود؛ بعد از اجرا تپش می‌زند. */}
+              <motion.span
+                className="flex"
+                animate={{ scale: index > 0 || reduceMotion ? 1 : confirmed ? [1, 1.32, 1] : armed ? 1.18 : 1 }}
+                transition={confirmed ? { duration: 0.36, times: [0, 0.4, 1], ease: [0.32, 0.72, 0, 1] } : SNAP}
+              >
+                <Icon className="size-5" aria-hidden="true" />
+              </motion.span>
+              <span className="max-w-full truncate">{action.label}</span>
+            </span>
+          </button>
+        )
+      })}
+      {armed && first && <span className="sr-only">{first.label}</span>}
+    </motion.div>
   )
 }

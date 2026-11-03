@@ -270,23 +270,23 @@ function PeoplePageInner() {
             >
               <SwipeRow
                 hint
-                trailing={[
+                leading={[
                   {
                     key: "settle",
                     label: p.balance < 0 ? "پرداخت" : "دریافت",
-                    icon: <HandCoins className="size-4" />,
-                    color: p.balance < 0 ? "var(--role-supplier)" : "var(--warning)",
+                    icon: HandCoins,
+                    tone: p.balance < 0 ? "supplier" : "warning",
                     onAction: () => router.push(`/people/${p.id}?settle=${p.balance < 0 ? "PAY" : "RECEIVE"}`),
                   },
                 ]}
-                leading={
+                trailing={
                   p.phone
                     ? [
                         {
                           key: "call",
                           label: "تماس",
-                          icon: <Phone className="size-4" />,
-                          color: "var(--sale)",
+                          icon: Phone,
+                          tone: "ok",
                           onAction: () => {
                             window.location.href = `tel:${toLatinDigits(p.phone!)}`
                           },

@@ -36,7 +36,8 @@ import { ListSkeleton } from "@/components/ui/page-skeletons"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ErrorState } from "@/components/ui/error-state"
 import { useTelegram } from "@/hooks/use-telegram"
-import { useConfirm } from "@/components/ui/confirm"
+import { deferDelete } from "@/components/ui/undo-toast"
+import { useUIStore } from "@/lib/ui-store"
 import { Segmented, FilterChip } from "@/components/ui/segmented"
 import { SwipeRow } from "@/components/ui/swipe-row"
 import { InvoiceTypeMark, InvoiceTypePill } from "@/components/ui/type-mark"
@@ -76,7 +77,7 @@ function InvoicesPageInner() {
   const { haptic } = useTelegram()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { confirm } = useConfirm()
+  const pendingDeletes = useUIStore((s) => s.pendingDeletes)
   const [type, setType] = useState<"ALL" | "SALE" | "PURCHASE">("ALL")
   const [personId, setPersonId] = useState<string | null>(searchParams.get("person"))
   const [personName, setPersonName] = useState<string | null>(null)
@@ -119,7 +120,8 @@ function InvoicesPageInner() {
     enabled: personSheet,
   })
 
-  const invoices = data?.invoices ?? []
+  // X1: فاکتوری که حذفش منتظر پایان فرصت «بازگردانی» است پنهان می‌ماند
+  const invoices = (data?.invoices ?? []).filter((inv) => !pendingDeletes.includes(inv.id))
   const total = data?.total ?? 0
   const overdue = data?.overdue
   const hasMore = page * PAGE_SIZE < total
@@ -165,34 +167,20 @@ function InvoicesPageInner() {
     }
   }
 
-  // کشیدن ردیف → حذف (با تأیید)
-  const removeInvoice = async (inv: Invoice) => {
+  // کشیدن ردیف → حذف بدون پنجرهٔ تأیید، با ۷ ثانیه فرصت «بازگردانی» (X1)
+  const removeInvoice = (inv: Invoice) => {
     haptic.warning()
-    const okRemove = await confirm({
-      title: `فاکتور ${toPersianDigits(inv.number)} حذف شود؟`,
-      consequences: [
-        `فاکتور ${inv.type === "SALE" ? "فروش" : "خرید"} «${inv.person.name}» با همهٔ اقلام، چک‌ها و تسویه‌هایش حذف می‌شود`,
-        inv.type === "SALE" ? "کالاهای آن به انبار برمی‌گردد" : "کالاهای آن از موجودی انبار کم می‌شود",
-        "این کار قابل برگشت نیست",
-      ],
-      confirmText: "حذف فاکتور",
-      tone: "danger",
+    const qty = inv.items.length
+    deferDelete({
+      id: inv.id,
+      message: `فاکتور ${toPersianDigits(inv.number)} حذف شد`,
+      description:
+        inv.type === "SALE"
+          ? `${toPersianDigits(qty)} قلم به انبار برگشت`
+          : `${toPersianDigits(qty)} قلم از انبار کم شد`,
+      commit: () => apiDelete(`/api/invoices/${inv.id}`),
+      onCommitted: () => queryClient.invalidateQueries(),
     })
-    if (!okRemove) return
-    try {
-      await apiDelete(`/api/invoices/${inv.id}`)
-      haptic.success()
-      const qty = inv.items.reduce((a, it) => a + it.quantity, 0)
-      toast.success(`فاکتور ${toPersianDigits(inv.number)} حذف شد`, {
-        description:
-          inv.type === "SALE"
-            ? `${toPersianDigits(qty)} واحد کالا به انبار برگشت`
-            : `${toPersianDigits(qty)} واحد کالا از انبار کم شد`,
-      })
-      await queryClient.invalidateQueries()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "حذف ناموفق بود")
-    }
   }
 
   const hasFilters = !!(debouncedQ || personId || type !== "ALL" || overdueOnly)
@@ -373,8 +361,8 @@ function InvoicesPageInner() {
           description={
             hasFilters
               ? [
-                  debouncedQ && "املای نام یا شماره را بررسی کنید.",
-                  type !== "ALL" && `فیلتر «${type === "SALE" ? "فروش" : "خرید"}» فعال است.`,
+                  debouncedQ && !suggestion && "املای نام یا شماره را بررسی کنید.",
+                  type !== "ALL" && `فیلتر «${type === "SALE" ? "فروش" : "خرید"}» هم فعال است.`,
                   personId && "فیلتر شخص فعال است.",
                   overdueOnly && "فقط نسیه‌های معوق نمایش داده می‌شوند.",
                 ]
@@ -501,21 +489,23 @@ function InvoicesPageInner() {
                       >
                         <SwipeRow
                           hint
-                          trailing={[
+                          leading={[
                             {
                               key: "edit",
                               label: "ویرایش",
-                              icon: <Pencil className="size-4" />,
-                              color: "var(--primary)",
+                              icon: Pencil,
+                              tone: "brand",
                               onAction: () => router.push(`/invoices/new?edit=${inv.id}`),
                             },
                           ]}
-                          leading={[
+                          trailing={[
                             {
                               key: "delete",
                               label: "حذف",
-                              icon: <Trash2 className="size-4" />,
-                              color: "var(--destructive)",
+                              icon: Trash2,
+                              tone: "danger",
+                              // تا پایان فرصت «بازگردانی» از فهرست پنهان می‌ماند
+                              removes: true,
                               onAction: () => removeInvoice(inv),
                             },
                           ]}

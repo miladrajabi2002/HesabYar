@@ -25,23 +25,21 @@ import {
   Download,
   ImagePlus,
   FileText,
-  X,
 } from "lucide-react"
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort } from "@/lib/jalali"
-import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
-import { AmountInput } from "@/components/ui/amount-input"
+import { formatUnit } from "@/lib/units"
 import { EmptyState } from "@/components/ui/empty-state"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Attachment, postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import { Segmented } from "@/components/ui/segmented"
 import { usePageSub } from "@/components/layout/page-header"
 import { PriceHistoryChart, type PricePoint } from "@/components/charts/price-history-chart"
+import { ProductFields } from "@/components/products/product-fields"
 
 interface Product {
   id: string
@@ -270,190 +268,58 @@ function ProductForm({
       <BottomSheet
       open={open}
       onClose={onClose}
-      title={editing ? "ویرایش کالا" : "کالا جدید"}
+      title={editing ? "ویرایش کالا" : "کالای جدید"}
       size="tall"
       footer={
         <Button onClick={submit} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-          ذخیره
+          {editing ? "ذخیرهٔ تغییرات" : "ذخیرهٔ کالا"}
         </Button>
       }
     >
-      <div className="space-y-3">
-        <div>
-          <label className="mb-1.5 block text-label font-bold text-foreground/80">نام کالا *</label>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="مثلاً الکترود E7018 قطر ۳.۲"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">برند</label>
-            <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="اصفهان" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">کد کالا</label>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="E70-32" />
-          </div>
-        </div>
-        <div>
-          <label className="mb-1.5 block text-label font-bold text-foreground/80">واحد شمارش</label>
-          <div className="flex flex-wrap gap-1.5">
-            {PRODUCT_UNITS.map((u) => (
-              <button
-                key={u}
-                type="button"
-                onClick={() => setUnit(u)}
-                className={cn(
-                  "rounded-xl border px-3.5 py-2 text-xs font-medium transition-colors",
-                  unit === u
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:border-primary/40"
-                )}
-              >
-                {formatUnit(u)}
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* عکس کالا (ADV-05) — اختیاری و مستقل از هر وضعیت */}
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5">
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-caption font-medium text-muted-foreground">
-              <ImagePlus className="size-3.5" />
-              عکس کالا (اختیاری)
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => photoInputRef.current?.click()}
-              disabled={uploading}
-              className="h-8 shrink-0 rounded-xl px-2.5 text-caption font-bold"
-            >
-              {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
-              {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
-            </Button>
-          </div>
-          <p className="mb-2 text-caption leading-relaxed text-muted-foreground">
-            عکس در لیست کالاها و هنگام انتخاب کالا در فاکتور نمایش داده می‌شود — اجباری نیست.
-            {editing ? "" : " بعد از ذخیرهٔ کالا پیوست می‌شود."}
-          </p>
-
-          {savedPhotos.length === 0 && pending.length === 0 ? (
-            <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-caption text-muted-foreground">
-              هنوز عکسی ندارد — می‌توانید همین‌جا عکس کالا را بگیرید یا انتخاب کنید.
-            </p>
-          ) : (
-            <div className="grid grid-cols-4 gap-2">
-              {savedPhotos.map((att) => {
-                const isImage = att.mime.startsWith("image/")
-                const url = savedUrls[att.id]
-                return (
-                  <div
-                    key={att.id}
-                    className="relative aspect-square overflow-hidden rounded-xl border border-border/60 bg-muted/40"
-                  >
-                    {isImage ? (
-                      url ? (
-                        <button
-                          type="button"
-                          onClick={() => setPreview({ url, filename: att.filename, size: att.size })}
-                          aria-label={`پیش‌نمایش ${att.filename}`}
-                          className="size-full cursor-zoom-in"
-                        >
-                          <img src={url} alt={att.filename} className="size-full object-cover" loading="lazy" />
-                        </button>
-                      ) : (
-                        <div className="flex size-full items-center justify-center" aria-label="در حال بارگذاری عکس">
-                          <Loader2 className="size-4 animate-spin text-muted-foreground/60" />
-                        </div>
-                      )
-                    ) : (
-                      <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
-                        <FileText className="size-5 text-muted-foreground" />
-                        <span className="w-full truncate text-caption text-muted-foreground">{att.filename}</span>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeSavedPhoto(att)}
-                      aria-label={`حذف عکس ${att.filename}`}
-                      className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
-                    >
-                      <X className="size-3" strokeWidth={2.4} />
-                    </button>
-                  </div>
-                )
-              })}
-              {pending.map((p, i) => (
-                <div
-                  key={`pending-${i}`}
-                  className="relative aspect-square overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/5"
-                >
-                  <img src={p.url} alt={p.file.name} className="size-full object-cover" />
-                  <span className="absolute inset-x-0 bottom-0 bg-primary/80 py-px text-center text-caption font-bold text-white">
-                    جدید
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPending((prev) => prev.filter((_, j) => j !== i))}
-                    aria-label="حذف از صف"
-                    className="absolute end-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition-colors hover:bg-destructive"
-                  >
-                    <X className="size-3" strokeWidth={2.4} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => onPickPhotos(e.target.files)}
-            aria-hidden="true"
-            tabIndex={-1}
-          />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-label font-bold text-foreground/80">
-            موجودی اولیه انبار
-          </label>
-          <Input
-            value={initialStock}
-            onChange={(e) => setInitialStock(e.target.value)}
-            inputMode="decimal"
-            placeholder="مثلاً ۵۰ — اختیاری"
-          />
-          <p className="mt-1.5 text-caption leading-relaxed text-muted-foreground">
-            اگر از این کالا الان در انبار دارید، تعدادش را وارد کنید تا به موجودی انبار اضافه شود؛ بعد از این،
-            موجودی با فاکتورهای خرید و فروش به‌روز می‌شود.
-          </p>
-        </div>
-        {Number(initialStock.replace(/[^\d.-]/g, "")) > 0 && (
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              قیمت خرید هر واحد (تومان)
-            </label>
-            <AmountInput
-              value={initialStockCost}
-              onChange={setInitialStockCost}
-              placeholder="مثلاً ۵۰۰٬۰۰۰"
-              showWords={false}
-            />
-            <p className="mt-1.5 text-caption leading-relaxed text-muted-foreground">
-              قیمت خرید هر واحد از موجودی اولیه — برای محاسبه صحیح سود موقع فروش این کالاها
-            </p>
-          </div>
-        )}
-      </div>
+      <ProductFields
+        name={name}
+        setName={setName}
+        brand={brand}
+        setBrand={setBrand}
+        code={code}
+        setCode={setCode}
+        unit={unit}
+        setUnit={setUnit}
+        uploading={uploading}
+        onPickPhoto={() => photoInputRef.current?.click()}
+        photos={[
+          ...savedPhotos
+            .filter((a) => a.mime.startsWith("image/"))
+            .map((att) => ({
+              key: att.id,
+              url: savedUrls[att.id],
+              onRemove: () => void removeSavedPhoto(att),
+              onOpen: savedUrls[att.id]
+                ? () => setPreview({ url: savedUrls[att.id], filename: att.filename, size: att.size })
+                : undefined,
+            })),
+          ...pending.map((p, i) => ({
+            key: `pending-${i}`,
+            url: p.url,
+            isNew: true,
+            onRemove: () => setPending((prev) => prev.filter((_, j) => j !== i)),
+          })),
+        ]}
+        opening={{ stock: initialStock, setStock: setInitialStock, cost: initialStockCost, setCost: setInitialStockCost }}
+        autoFocusName={!editing}
+      />
+      {/* ورودی مخفی انتخاب تصویر (دوربین یا گالری) */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => onPickPhotos(e.target.files)}
+        aria-hidden="true"
+        tabIndex={-1}
+      />
     </BottomSheet>
 
       {/* پیش‌نمایش عکس کالا */}
@@ -767,7 +633,7 @@ export default function ProductsPage() {
   )
   const lowCount = allProducts.filter((p) => p.stock <= 0 || stockState(p) === "low").length
   const productsSub = data
-    ? `${toPersianDigits(allProducts.length)} کالا${lowCount ? ` | ${toPersianDigits(lowCount)} کم‌موجود یا تمام` : ""}`
+    ? `${toPersianDigits(allProducts.length)} کالا${lowCount ? ` | ${toPersianDigits(lowCount)} کم یا ناموجود` : ""}`
     : null
   usePageSub(productsSub)
 
@@ -841,7 +707,7 @@ export default function ProductsPage() {
           options={[
             { key: "all", label: "همه", count: allProducts.length },
             { key: "low", label: "کم‌موجود", tone: "var(--warning-ink)", count: allProducts.filter((p) => stockState(p) === "low").length },
-            { key: "out", label: "تمام‌شده", tone: "var(--destructive)", count: allProducts.filter((p) => p.stock <= 0).length },
+            { key: "out", label: "ناموجود", tone: "var(--destructive)", count: allProducts.filter((p) => p.stock <= 0).length },
           ]}
           className="mt-2 sm:max-w-sm"
         />
@@ -927,7 +793,7 @@ export default function ProductsPage() {
                           st === "out" ? "bg-destructive/10 text-destructive" : st === "low" ? "bg-warning/15 text-warning-ink" : "bg-income/10 text-income"
                         )}
                       >
-                        {st === "out" ? "تمام شده" : st === "low" ? "کم" : "کافی"}
+                        {st === "out" ? "ناموجود" : st === "low" ? "رو به اتمام" : "موجود"}
                       </span>
                     )
                   })()}

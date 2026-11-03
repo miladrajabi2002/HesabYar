@@ -6,7 +6,7 @@
  * دسکتاپ: پیش‌فرض «کشو» — پنل کناری که از لبهٔ چپ صفحه (انتهای خط در RTL) باز می‌شود
  *   (الگوی SideSheet پروژهٔ vignet)؛ برای تأیید‌های کوچک «dialog» وسط صفحه
  */
-import { Fragment, ReactNode, useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
+import { Fragment, ReactNode, useCallback, useEffect, useId, useRef, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 import { AnimatePresence, motion, useDragControls, useReducedMotion, type PanInfo } from "framer-motion"
 import { X } from "lucide-react"
@@ -22,6 +22,14 @@ const FOCUSABLE = [
   '[contenteditable="true"]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ")
+
+const DESKTOP_QUERY = "(min-width: 1024px)"
+function subscribeDesktop(cb: () => void) {
+  const media = window.matchMedia(DESKTOP_QUERY)
+  media.addEventListener("change", cb)
+  return () => media.removeEventListener("change", cb)
+}
+const getDesktop = () => window.matchMedia(DESKTOP_QUERY).matches
 
 const sheetVariants = {
   hidden: { y: "100%" },
@@ -83,7 +91,6 @@ export function BottomSheet({
   const panelRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const onCloseRef = useRef(onClose)
-  const [isDesktop, setIsDesktop] = useState(false)
   const reduceMotion = useReducedMotion()
   // MO-04: درگ واقعی برای بستن — فقط از دستگیره شروع می‌شود تا اسکرول محتوا سالم بماند
   const dragControls = useDragControls()
@@ -102,22 +109,14 @@ export function BottomSheet({
     () => true,
     () => false
   )
+  // دسکتاپ بودن همان رندر اول خوانده می‌شود: شیت‌هایی که تازه mount می‌شوند (فرم کالا/حساب)
+  // قبلاً یک فریم به شکل باتم‌شیت موبایل بالا می‌آمدند و وسط انیمیشن به کشو تبدیل می‌شدند
+  const isDesktop = useSyncExternalStore(subscribeDesktop, getDesktop, () => false)
 
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
 
-  useEffect(() => {
-    if (desktopMode === "hidden") return
-    const media = window.matchMedia("(min-width: 1024px)")
-    const update = () => setIsDesktop(media.matches)
-    const rafId = window.requestAnimationFrame(update)
-    media.addEventListener("change", update)
-    return () => {
-      window.cancelAnimationFrame(rafId)
-      media.removeEventListener("change", update)
-    }
-  }, [desktopMode])
 
   useEffect(() => {
     if (!open) return

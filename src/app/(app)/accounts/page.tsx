@@ -3,7 +3,7 @@
 /**
  * حساب‌های بانکی — فقط بانک؛ لوگوی رسمی + رنگ برند خودکار + انتقال بین‌حساب
  */
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
@@ -15,11 +15,13 @@ import {
   Archive,
   ArrowDownLeft,
   ArrowUpRight,
-  ChevronLeft,
+  Nfc,
+  Copy,
+  Trash2,
 } from "lucide-react"
-import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, toLatinDigits, toPersianDigits } from "@/lib/money"
-import { BANKS, getBank } from "@/lib/banks"
+import { BANKS, bankFromCard, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { EmptyState } from "@/components/ui/empty-state"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
@@ -31,6 +33,7 @@ import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatJalaliShort } from "@/lib/jalali"
+import { useConfirm } from "@/components/ui/confirm"
 
 interface Account {
   id: string
@@ -55,6 +58,126 @@ function maskNumber(raw: string | null): string | null {
   const d = toLatinDigits(raw ?? "").replace(/[^0-9]/g, "")
   if (d.length < 8) return null
   return toPersianDigits(`${d.slice(0, 4)} ${d.slice(4, 8)} •••• ${d.slice(-4)}`)
+}
+
+/** شمارهٔ کامل در گروه‌های چهارتایی — کارت: «۶۱۰۴ ۳۳۷۵ …»، شبا: «IR12 3456 …» */
+function groupNumber(raw: string | null): string | null {
+  const v = toLatinDigits(raw ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "")
+  if (!v) return null
+  return toPersianDigits(v.replace(/(.{4})(?=.)/g, "$1 "))
+}
+
+/** رو‌ی کارت بانکی به رنگ بانک — در فهرست حساب‌ها (دکمه) و بالای کشوی جزئیات (نمایشی) */
+function BankCardFace({ account: a, onClick }: { account: Account; onClick?: () => void }) {
+  const bank = getBank(a.bankKey)
+  const masked = maskNumber(a.cardNumber) ?? maskNumber(a.accountNumber)
+  const Tag = onClick ? "button" : "div"
+  return (
+    <Tag
+      {...(onClick ? { type: "button" as const, onClick, "aria-label": `${a.name} — جزئیات` } : {})}
+      className={cn(
+        "relative isolate flex aspect-[1.586/1] flex-col overflow-hidden rounded-3xl p-4 text-start text-white",
+        onClick &&
+          "w-[84%] max-w-[22rem] shrink-0 snap-start transition-[filter] hover:brightness-105 sm:w-[46%] lg:w-auto lg:max-w-none"
+      )}
+      style={{
+        background: `linear-gradient(140deg, color-mix(in srgb, ${bank.color} 82%, white) 0%, ${bank.color} 48%, color-mix(in srgb, ${bank.color} 68%, black) 100%)`,
+        boxShadow: `0 14px 28px -16px color-mix(in srgb, ${bank.color} 70%, black)`,
+      }}
+    >
+      {/* نقش پس‌زمینهٔ کارت بانکی: دو دایرهٔ محو */}
+      <span aria-hidden className="pointer-events-none absolute -left-14 -top-24 -z-10 size-60 rounded-full bg-white/[0.08]" />
+      <span aria-hidden className="pointer-events-none absolute -bottom-28 -left-4 -z-10 size-60 rounded-full border-[2rem] border-white/[0.06]" />
+      <div className="flex items-center gap-2.5">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white shadow-sm">
+          <BankLogo bankKey={a.bankKey} size={32} showBg={false} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-label font-extrabold">{bank.name}</span>
+          <span className="block truncate text-caption text-white/75">{a.name}</span>
+        </span>
+        <Nfc className="size-6 shrink-0 text-white/70" strokeWidth={1.8} />
+      </div>
+      <div className="mt-auto flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-caption text-white/70">موجودی</p>
+          <p className="nums truncate text-title font-black leading-tight tracking-tight">
+            {formatToman(a.balance, false)}
+            <span className="ms-1 text-caption font-semibold tracking-normal text-white/70">تومان</span>
+          </p>
+        </div>
+        {/* تراشهٔ کارت */}
+        <svg viewBox="0 0 40 30" className="h-8 w-[2.6rem] shrink-0" aria-hidden>
+          <defs>
+            <linearGradient id={`chip-${a.id}${onClick ? "" : "-d"}`} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="#f6e3a1" />
+              <stop offset="0.5" stopColor="#d9b75a" />
+              <stop offset="1" stopColor="#b8913a" />
+            </linearGradient>
+          </defs>
+          <rect x="0.5" y="0.5" width="39" height="29" rx="6" fill={`url(#chip-${a.id}${onClick ? "" : "-d"})`} stroke="rgb(0 0 0 / .18)" />
+          <path d="M14 0.5v29M26 0.5v29M0.5 10h13.5M26 10h13.5M0.5 20h13.5M26 20h13.5M14 15h12" stroke="rgb(90 64 10 / .45)" strokeWidth="1" fill="none" />
+        </svg>
+      </div>
+      <p className="nums mt-2.5 truncate text-left text-body font-bold tracking-[0.14em] text-white/90" dir="ltr">
+        {masked ?? "•••• •••• •••• ••••"}
+      </p>
+    </Tag>
+  )
+}
+
+/** ردیف گردش حساب — در «گردش اخیر» صفحه و کشوی جزئیات */
+function TxRow({ t, sub }: { t: Account["recent"][number]; sub: string }) {
+  const isIn = t.direction === "IN"
+  return (
+    <div className="flex min-h-[3.75rem] items-center gap-3 px-4 py-2.5">
+      <span
+        className={cn(
+          "grid size-10 shrink-0 place-items-center rounded-xl",
+          isIn ? "bg-sale/10 text-sale" : "bg-purchase/10 text-purchase"
+        )}
+      >
+        {isIn ? <ArrowDownLeft className="size-[1.15rem]" /> : <ArrowUpRight className="size-[1.15rem]" />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold">{toPersianDigits(t.description || TX_LABEL[t.type] || t.type)}</p>
+        <p className="nums truncate text-caption text-muted-foreground">{sub}</p>
+      </div>
+      <span dir="ltr" className={cn("nums shrink-0 text-sm font-extrabold", isIn ? "text-sale" : "text-foreground")}>
+        {isIn ? "+" : "−"}
+        {formatToman(t.amount, false)}
+      </span>
+    </div>
+  )
+}
+
+/** ردیف «برچسب — مقدار» جزئیات حساب، با دکمهٔ کپی اختیاری */
+function DetailRow({ label, value, copy }: { label: string; value: ReactNode; copy?: string }) {
+  return (
+    <div className="flex min-h-[3.25rem] items-center gap-3 px-4 py-2">
+      <span className="shrink-0 text-label text-muted-foreground">{label}</span>
+      <span className="nums ms-auto min-w-0 truncate text-sm font-bold" dir="ltr">
+        {value}
+      </span>
+      {copy && (
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(copy)
+              toast.success(`${label} کپی شد`)
+            } catch {
+              toast.error("کپی ناموفق بود")
+            }
+          }}
+          aria-label={`کپی ${label}`}
+          className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <Copy className="size-4" />
+        </button>
+      )}
+    </div>
+  )
 }
 
 const TX_LABEL: Record<string, string> = {
@@ -202,7 +325,12 @@ function AccountForm({
           </label>
           <Input
             value={cardNumber}
-            onChange={(e) => setCardNumber(e.target.value)}
+            onChange={(e) => {
+              setCardNumber(e.target.value)
+              // بانک از شش رقم اول کارت تشخیص داده می‌شود
+              const detected = bankFromCard(e.target.value)
+              if (detected && detected !== bankKey) setBankKey(detected)
+            }}
             dir="ltr"
             inputMode="numeric"
             placeholder="۶۲۸۰…"
@@ -258,6 +386,7 @@ export default function AccountsPage() {
   const [editing, setEditing] = useState<Account | null>(null)
   const [transferSheet, setTransferSheet] = useState(false)
   const [actionFor, setActionFor] = useState<Account | null>(null)
+  const { confirm } = useConfirm()
 
   const { data, isLoading } = useQuery({
     queryKey: ["accounts"],
@@ -321,6 +450,28 @@ export default function AccountsPage() {
     }
   }
 
+  const [deleting, setDeleting] = useState(false)
+  const remove = async (a: Account) => {
+    const yes = await confirm({
+      title: `حذف حساب «${a.name}»`,
+      description: "حساب برای همیشه پاک می‌شود و برگشت ندارد",
+      confirmText: "حذف حساب",
+      tone: "danger",
+    })
+    if (!yes) return
+    setDeleting(true)
+    try {
+      await apiDelete(`/api/accounts/${a.id}`)
+      setActionFor(null)
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] })
+      toast.success("حساب حذف شد")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "خطا در حذف")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   // گردش اخیر همهٔ حساب‌ها، جدیدترین اول
   const activity = accounts
     .flatMap((a) => a.recent.map((t) => ({ ...t, accountName: a.name })))
@@ -361,7 +512,7 @@ export default function AccountsPage() {
       {isLoading ? (
         <div className="flex gap-2.5 overflow-hidden lg:grid lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-[8.5rem] w-[82%] shrink-0 rounded-3xl lg:w-auto" />
+            <Skeleton key={i} className="aspect-[1.586/1] w-[84%] max-w-[22rem] shrink-0 rounded-3xl lg:w-auto lg:max-w-none" />
           ))}
         </div>
       ) : accounts.length === 0 ? (
@@ -376,41 +527,9 @@ export default function AccountsPage() {
         <>
           {/* کارت هر حساب به رنگ بانک — موبایل: ردیف افقی لغزان | دسکتاپ: سه‌ستونه */}
           <div className="-mx-4 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0">
-            {accounts.map((a) => {
-              const bank = getBank(a.bankKey)
-              const masked = maskNumber(a.cardNumber) ?? maskNumber(a.accountNumber)
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => setActionFor(a)}
-                  aria-label={`${a.name} — گزینه‌ها`}
-                  className="flex min-h-[8.5rem] w-[82%] shrink-0 snap-start flex-col justify-between rounded-3xl p-4 text-start text-white transition-[filter] hover:brightness-105 sm:w-[46%] lg:w-auto"
-                  style={{
-                    background: `radial-gradient(120% 90% at 100% 0%, rgb(255 255 255 / 0.16), transparent 55%), linear-gradient(135deg, color-mix(in srgb, ${bank.color} 92%, white), color-mix(in srgb, ${bank.color} 70%, black))`,
-                  }}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white">
-                      <BankLogo bankKey={a.bankKey} size={34} showBg={false} />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-label font-bold">{a.name}</span>
-                    <span className="shrink-0 text-caption text-white/75">{bank.name.replace(/^بانک /, "")}</span>
-                  </div>
-                  <div>
-                    <p className="nums truncate text-xl font-black tracking-tight">
-                      {formatToman(a.balance, false)}
-                      <span className="ms-1 text-caption font-semibold tracking-normal text-white/70">تومان</span>
-                    </p>
-                    {masked && (
-                      <p className="nums truncate text-caption text-white/80" dir="ltr" style={{ textAlign: "right" }}>
-                        {masked}
-                      </p>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
+            {accounts.map((a) => (
+              <BankCardFace key={a.id} account={a} onClick={() => setActionFor(a)} />
+            ))}
           </div>
 
           <h2 className="mx-1 mb-2 mt-5 text-label font-extrabold text-foreground/80">گردش اخیر</h2>
@@ -419,73 +538,112 @@ export default function AccountsPage() {
               <p className="px-4 py-6 text-center text-label text-muted-foreground">هنوز گردشی ثبت نشده است</p>
             ) : (
               <div className="divide-y divide-border/70">
-                {activity.map((t) => {
-                  const isIn = t.direction === "IN"
-                  return (
-                    <div key={t.id} className="flex min-h-[3.75rem] items-center gap-3 px-4 py-2.5">
-                      <span
-                        className={cn(
-                          "grid size-10 shrink-0 place-items-center rounded-xl",
-                          isIn ? "bg-sale/10 text-sale" : "bg-purchase/10 text-purchase"
-                        )}
-                      >
-                        {isIn ? <ArrowDownLeft className="size-[1.15rem]" /> : <ArrowUpRight className="size-[1.15rem]" />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold">{toPersianDigits(t.description || TX_LABEL[t.type] || t.type)}</p>
-                        <p className="nums truncate text-caption text-muted-foreground">
-                          {t.accountName} | {TX_LABEL[t.type] ?? t.type} | {formatJalaliShort(new Date(t.date))}
-                        </p>
-                      </div>
-                      <span dir="ltr" className={cn("nums shrink-0 text-sm font-extrabold", isIn ? "text-sale" : "text-foreground")}>
-                        {isIn ? "+" : "−"}
-                        {formatToman(t.amount, false)}
-                      </span>
-                    </div>
-                  )
-                })}
+                {activity.map((t) => (
+                  <TxRow
+                    key={t.id}
+                    t={t}
+                    sub={`${t.accountName} | ${TX_LABEL[t.type] ?? t.type} | ${formatJalaliShort(new Date(t.date))}`}
+                  />
+                ))}
               </div>
             )}
           </div>
         </>
       )}
 
-      {/* شیت گزینه‌های حساب — ویرایش / بایگانی */}
+      {/* کشوی جزئیات حساب — دسکتاپ از کنار، موبایل از پایین: کارت، مشخصات، گردش، ویرایش/بایگانی/حذف */}
       <BottomSheet
         open={!!actionFor}
         onClose={() => setActionFor(null)}
         title={actionFor?.name}
-        description={actionFor ? `${getBank(actionFor.bankKey).name} | موجودی ${formatToman(actionFor.balance)}` : undefined}
-        desktopMode="dialog"
+        description={actionFor ? getBank(actionFor.bankKey).name : undefined}
+        size="tall"
+        footer={
+          actionFor && (
+            <div className="grid gap-2">
+              <Button
+                onClick={() => {
+                  setEditing(actionFor)
+                  setActionFor(null)
+                  setFormSheet(true)
+                }}
+                className="h-12 w-full rounded-2xl font-bold"
+              >
+                <Pencil className="size-4" />
+                ویرایش حساب
+              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const a = actionFor
+                    setActionFor(null)
+                    archive(a)
+                  }}
+                  className="h-11 rounded-2xl font-bold"
+                >
+                  <Archive className="size-4" />
+                  بایگانی
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={actionFor.recent.length > 0 || deleting}
+                  title={actionFor.recent.length > 0 ? "حساب گردش‌دار فقط بایگانی می‌شود" : undefined}
+                  onClick={() => remove(actionFor)}
+                  className="h-11 rounded-2xl font-bold text-destructive hover:bg-destructive/5 hover:text-destructive"
+                >
+                  {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                  حذف
+                </Button>
+              </div>
+              {actionFor.recent.length > 0 && (
+                <p className="text-center text-caption text-muted-foreground">
+                  این حساب گردش دارد؛ حذف نمی‌شود ولی بایگانی برگشت‌پذیر است
+                </p>
+              )}
+            </div>
+          )
+        }
       >
-        <div className="overflow-hidden rounded-2xl border border-border">
-          <button
-            type="button"
-            onClick={() => {
-              setEditing(actionFor)
-              setActionFor(null)
-              setFormSheet(true)
-            }}
-            className="flex h-[3.25rem] w-full items-center gap-3 px-4 text-sm font-semibold transition-colors hover:bg-accent/60"
-          >
-            <Pencil className="size-[1.1rem] text-muted-foreground" />
-            ویرایش حساب
-            <ChevronLeft className="ms-auto size-4 text-muted-foreground" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const a = actionFor
-              setActionFor(null)
-              if (a) archive(a)
-            }}
-            className="flex h-[3.25rem] w-full items-center gap-3 border-t border-border px-4 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/5"
-          >
-            <Archive className="size-[1.1rem]" />
-            بایگانی حساب
-            <span className="ms-auto text-caption font-medium text-muted-foreground">قابل بازگردانی</span>
-          </button>
-        </div>
+        {actionFor && (
+          <div className="space-y-4">
+            <BankCardFace account={actionFor} />
+
+            <div className="divide-y divide-border/70 overflow-hidden rounded-2xl border border-border">
+              <DetailRow label="موجودی" value={formatToman(actionFor.balance)} />
+              <DetailRow label="مانده اولیه" value={formatToman(actionFor.initialBalance)} />
+              <DetailRow
+                label="شماره کارت"
+                value={groupNumber(actionFor.cardNumber) ?? "—"}
+                copy={actionFor.cardNumber ? toLatinDigits(actionFor.cardNumber).replace(/[^0-9]/g, "") : undefined}
+              />
+              <DetailRow
+                label="شبا"
+                value={groupNumber(actionFor.accountNumber) ?? "—"}
+                copy={actionFor.accountNumber ?? undefined}
+              />
+            </div>
+
+            <div>
+              <h3 className="mx-1 mb-2 text-label font-extrabold text-foreground/80">گردش اخیر این حساب</h3>
+              <div className="overflow-hidden rounded-2xl border border-border">
+                {actionFor.recent.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-label text-muted-foreground">هنوز گردشی ثبت نشده است</p>
+                ) : (
+                  <div className="divide-y divide-border/70">
+                    {actionFor.recent.map((t) => (
+                      <TxRow
+                        key={t.id}
+                        t={t}
+                        sub={`${TX_LABEL[t.type] ?? t.type} | ${formatJalaliShort(new Date(t.date))}`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </BottomSheet>
 
       {/* فرم حساب */}
