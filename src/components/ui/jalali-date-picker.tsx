@@ -108,7 +108,7 @@ export function JalaliDatePicker({
         </button>
       </div>
 
-      <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[0.7rem] font-medium text-muted-foreground">
+      <div className="mt-3 grid grid-cols-7 gap-1 text-center text-caption font-medium text-muted-foreground">
         {WEEKDAY_HEADS.map((w, i) => (
           <span key={i} className="py-1">
             {w}

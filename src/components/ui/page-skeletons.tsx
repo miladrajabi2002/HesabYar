@@ -9,23 +9,34 @@ import { Skeleton } from "@/components/ui/skeleton"
 export function DashboardSkeleton() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="در حال بارگذاری داشبورد">
-      {/* قهرمان */}
-      <div className="hero-gradient flex h-40 items-center justify-between rounded-3xl p-5 opacity-80 sm:p-6">
-        <div className="space-y-2.5">
-          <Skeleton className="h-3 w-20 bg-white/20" />
-          <Skeleton className="h-9 w-52 bg-white/25" />
-          <Skeleton className="h-3 w-36 bg-white/20" />
-        </div>
-        <Skeleton className="h-10 w-28 rounded-2xl bg-white/20" />
-      </div>
-      {/* KPIها */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-2xl border border-border/70 bg-card p-3.5 shadow-card sm:p-4">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="mt-2 h-7 w-28" />
+      {/* قهرمان + میانبرها | کاشی‌ها — هم‌شکل داشبورد نسخهٔ ۷ */}
+      <div className="grid items-start gap-4 lg:grid-cols-[1.15fr_1fr]">
+        <div>
+          <div className="hero-solid space-y-2.5 rounded-[1.4rem] p-5 opacity-80 sm:p-6">
+            <Skeleton className="h-3 w-20 bg-white/20" />
+            <Skeleton className="h-9 w-52 bg-white/25" />
+            <Skeleton className="h-3 w-36 bg-white/20" />
+            <div className="grid grid-cols-3 gap-3 pt-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 bg-white/15" />
+              ))}
+            </div>
           </div>
-        ))}
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[4.6rem] rounded-2xl" />
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-[1.15rem] border border-border/80 bg-card p-3.5 sm:p-4">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="mt-2 h-7 w-28" />
+              <Skeleton className="mt-2 h-3 w-20" />
+            </div>
+          ))}
+        </div>
       </div>
       {/* نمودار + ستون کنار */}
       <div className="grid items-start gap-4 lg:grid-cols-5">
@@ -67,15 +78,23 @@ export function DashboardSkeleton() {
 
 export function ListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="space-y-2.5" aria-busy="true" aria-label="در حال بارگذاری لیست">
+    // نسخهٔ ۷: هم‌شکل ردیف واقعی — یک کارت با ردیف‌های خط‌دار
+    <div
+      className="divide-y divide-border/60 overflow-hidden rounded-[1.25rem] border border-border/80 bg-card"
+      aria-busy="true"
+      aria-label="در حال بارگذاری لیست"
+    >
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 rounded-3xl border border-border/70 bg-card p-4 shadow-card">
-          <Skeleton className="size-11 rounded-2xl" />
+        <div key={i} className="flex items-center gap-3 px-3.5 py-3">
+          <Skeleton className="size-[2.625rem] rounded-[32%]" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-36" />
             <Skeleton className="h-3 w-24" />
           </div>
-          <Skeleton className="h-5 w-20" />
+          <div className="flex flex-col items-end gap-1.5">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-3.5 w-12 rounded-full" />
+          </div>
         </div>
       ))}
     </div>

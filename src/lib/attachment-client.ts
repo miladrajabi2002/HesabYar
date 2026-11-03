@@ -3,7 +3,7 @@
 /**
  * کلاینت پیوست‌های تصویری — lib/attachment-client.ts
  * آپلود/دانلود پیوست با هدر مینی‌اپ تلگرام (کوکی نشست در تلگرام وجود ندارد)
- * + هوک بارگذاری objectURL برای بندانگشتی‌های لیست (مثل عکس جنس)
+ * + هوک بارگذاری objectURL برای بندانگشتی‌های لیست (مثل عکس کالا)
  */
 
 import { useEffect, useRef, useState } from "react"
@@ -40,7 +40,7 @@ export async function fetchAttachmentObjectUrl(id: string): Promise<string> {
 
 /**
  * هوک بارگذاری تصویر چند پیوست — نقشهٔ id → objectURL
- * برای بندانگشتی‌های لیست (فهرست اجناس، انتخاب جنس در فاکتور و…)
+ * برای بندانگشتی‌های لیست (فهرست کالاها، انتخاب کالا در فاکتور و…)
  */
 export function useAttachmentUrls(ids: string[]): Record<string, string> {
   const key = ids.join("|")

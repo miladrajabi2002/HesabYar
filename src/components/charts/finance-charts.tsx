@@ -178,7 +178,7 @@ export function TrendChart({
         {empty && (
           <div className="absolute inset-0 z-10 grid place-items-center">
             <span
-              className="rounded-full bg-muted px-3 py-1.5 text-[0.7rem] font-medium text-muted-foreground"
+              className="rounded-full bg-muted px-3 py-1.5 text-caption font-medium text-muted-foreground"
               dir="rtl"
             >
               در این بازه {m.label}ی ثبت نشده
@@ -256,7 +256,7 @@ export function TrendChart({
         </ResponsiveContainer>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[0.64rem] text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-caption text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: m.color }} />
           میانگین روزانه
@@ -278,9 +278,9 @@ export function TrendChart({
 function Stat({ label, value, tone, strong }: { label: string; value: string; tone?: string; strong?: boolean }) {
   return (
     <div className="rounded-2xl bg-muted/60 px-2.5 py-2">
-      <div className="truncate text-[0.6rem] text-muted-foreground">{label}</div>
+      <div className="truncate text-micro text-muted-foreground">{label}</div>
       <div
-        className={cn("nums mt-0.5 truncate text-[0.8rem] font-extrabold", strong && "text-[0.88rem]")}
+        className={cn("nums mt-0.5 truncate text-label font-extrabold", strong && "text-[0.88rem]")}
         style={tone ? { color: `color-mix(in srgb, ${tone} 88%, black)` } : undefined}
       >
         {value}
@@ -340,7 +340,7 @@ export function CollectionDonut({ data, className }: { data: Collection; classNa
         <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
           <div>
             <div className="nums text-xl font-black leading-none">{toPersianDigits(collectedPct)}٪</div>
-            <div className="mt-1 text-[0.58rem] font-medium text-muted-foreground">وصول شده</div>
+            <div className="mt-1 text-micro font-medium text-muted-foreground">وصول شده</div>
           </div>
         </div>
       </div>
@@ -355,7 +355,7 @@ export function CollectionDonut({ data, className }: { data: Collection; classNa
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 + i * 0.05 }}
             >
-              <div className="flex items-center justify-between gap-2 text-[0.68rem]">
+              <div className="flex items-center justify-between gap-2 text-caption">
                 <span className="flex items-center gap-1.5 truncate">
                   <span className="size-2 shrink-0 rounded-full" style={{ background: s.color }} />
                   {s.label}
@@ -387,11 +387,14 @@ export function Sparkline({
   color = "var(--primary)",
   height = 28,
   className,
+  muted = false,
 }: {
   values: number[]
   color?: string
   height?: number
   className?: string
+  /** نسخهٔ ۷: خط خاکستری بدون سایه‌رنگ؛ فقط نقطهٔ پایانی رنگی */
+  muted?: boolean
 }) {
   const id = useId().replace(/:/g, "")
   if (values.length < 2 || values.every((v) => v === 0)) return null
@@ -420,11 +423,11 @@ export function Sparkline({
           <stop offset="1" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={`${line} L${W} ${H} L0 ${H} Z`} fill={`url(#${id})`} />
+      {!muted && <path d={`${line} L${W} ${H} L0 ${H} Z`} fill={`url(#${id})`} />}
       <path
         d={line}
         fill="none"
-        stroke={color}
+        stroke={muted ? "color-mix(in srgb, var(--muted-foreground) 45%, transparent)" : color}
         strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"

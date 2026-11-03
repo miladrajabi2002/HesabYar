@@ -2,31 +2,32 @@
 
 /**
  * لیست فاکتورها — فیلتر نوع/شخص، جستجوی سروری + صفحه‌بندی واقعی (IMP-01)
- * موبایل: کارت‌های عمودی • دسکتاپ: جدول پهن (UI-09)
+ * موبایل: گروه‌بندی روزانه با ردیف‌های خط‌دار • دسکتاپ: جدول پهن با ستون وضعیت (UI-09، نسخهٔ ۷)
+ * بنر نسیهٔ معوق → چیپ «نسیهٔ معوق N» در ردیف فیلترها
  */
 import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { AnimatePresence, motion } from "framer-motion"
+import { motion } from "framer-motion"
 import { toast } from "sonner"
 import {
   Plus,
   FileText,
-  ChevronLeft,
   Search,
   Download,
   ChevronDown,
   Loader2,
-  TrendingUp,
   UserRound,
   Pencil,
   Trash2,
+  AlertTriangle,
+  X,
 } from "lucide-react"
 import { apiDelete, apiGet } from "@/lib/api-client"
 import { invoiceProfit } from "@/lib/finance-math"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
-import { formatJalaliShort } from "@/lib/jalali"
+import { formatJalaliShort, formatJalaliWithWeekday, jalaliDayKey, nowTehran } from "@/lib/jalali"
 import { formatUnit } from "@/lib/units"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
@@ -34,7 +35,6 @@ import { ListSkeleton } from "@/components/ui/page-skeletons"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ErrorState } from "@/components/ui/error-state"
 import { useTelegram } from "@/hooks/use-telegram"
-import { useUIStore } from "@/lib/ui-store"
 import { useConfirm } from "@/components/ui/confirm"
 import { Segmented, FilterChip } from "@/components/ui/segmented"
 import { SwipeRow } from "@/components/ui/swipe-row"
@@ -76,7 +76,6 @@ function InvoicesPageInner() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { confirm } = useConfirm()
-  const openAddSheet = useUIStore((s) => s.openAddSheet)
   const [type, setType] = useState<"ALL" | "SALE" | "PURCHASE">("ALL")
   const [personId, setPersonId] = useState<string | null>(searchParams.get("person"))
   const [personName, setPersonName] = useState<string | null>(null)
@@ -159,9 +158,13 @@ function InvoicesPageInner() {
   const removeInvoice = async (inv: Invoice) => {
     haptic.warning()
     const okRemove = await confirm({
-      title: "حذف فاکتور",
-      description: `فاکتور ${toPersianDigits(inv.number)} «${inv.person.name}» با همهٔ اقلام، چک‌ها و تسویه‌هایش حذف شود؟`,
-      confirmText: "بله، حذف کن",
+      title: `فاکتور ${toPersianDigits(inv.number)} حذف شود؟`,
+      consequences: [
+        `فاکتور ${inv.type === "SALE" ? "فروش" : "خرید"} «${inv.person.name}» با همهٔ اقلام، چک‌ها و تسویه‌هایش حذف می‌شود`,
+        inv.type === "SALE" ? "کالاهای آن به انبار برمی‌گردد" : "کالاهای آن از موجودی انبار کم می‌شود",
+        "این کار قابل برگشت نیست",
+      ],
+      confirmText: "حذف فاکتور",
       tone: "danger",
     })
     if (!okRemove) return
@@ -175,30 +178,62 @@ function InvoicesPageInner() {
     }
   }
 
+  const hasFilters = !!(debouncedQ || personId || type !== "ALL" || overdueOnly)
+  const clearFilters = () => {
+    setQ("")
+    setType("ALL")
+    setPersonId(null)
+    setPersonName(null)
+    setOverdueOnly(false)
+    setPage(1)
+  }
+  const overdueCount =
+    (overdue ? (type !== "PURCHASE" ? overdue.sale.count : 0) + (type !== "SALE" ? overdue.purchase.count : 0) : 0)
+
+  // نسخهٔ ۷: گروه‌بندی بر اساس روز (موبایل) — «امروز · ۳ فاکتور · ۲۸٫۱ م»
+  const todayKey = jalaliDayKey(nowTehran())
+  const yesterdayKey = jalaliDayKey(new Date(nowTehran().getTime() - 86_400_000))
+  const groups: { key: string; label: string; items: Invoice[]; sum: number }[] = []
+  for (const inv of invoices) {
+    const d = new Date(inv.date)
+    const key = jalaliDayKey(d)
+    let g = groups.find((x) => x.key === key)
+    if (!g) {
+      const label =
+        key === todayKey
+          ? `امروز · ${formatJalaliShort(d)}`
+          : key === yesterdayKey
+            ? `دیروز · ${formatJalaliShort(d)}`
+            : formatJalaliWithWeekday(d)
+      g = { key, label, items: [], sum: 0 }
+      groups.push(g)
+    }
+    g.items.push(inv)
+    g.sum += inv.total
+  }
+
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">
-          فاکتورها
+      <div className="mb-4 hidden items-end justify-between gap-3 lg:flex">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">فاکتورها</h1>
           {total > 0 && (
-            <span className="nums ms-2 text-xs font-medium text-muted-foreground">
-              {toPersianDigits(total)} فاکتور
-            </span>
+            <p className="nums mt-0.5 text-label text-muted-foreground">{toPersianDigits(total)} فاکتور</p>
           )}
-        </h1>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             onClick={() => downloadCsv("invoices")}
             disabled={exporting}
             variant="outline"
-            className="hidden h-10 rounded-2xl px-4 text-xs font-bold hover:bg-accent sm:flex"
+            className="h-10 rounded-xl px-4 text-label font-bold hover:bg-accent"
             aria-label="خروجی اکسل"
           >
             {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            اکسل
+            خروجی اکسل
           </Button>
-          <Link href="/invoices/new?type=SALE">
-            <Button className="h-10 rounded-2xl px-4 text-xs font-bold shadow-fab">
+          <Link href="/invoices/new">
+            <Button className="h-10 rounded-xl px-4 text-label font-bold">
               <Plus className="size-4" />
               فاکتور جدید
             </Button>
@@ -206,34 +241,15 @@ function InvoicesPageInner() {
         </div>
       </div>
 
-      {/* فیلترها — قرص لغزان نوع + جستجو + چیپ شخص */}
-      <div className="mb-4 space-y-2.5">
-        <Segmented
-          value={type}
-          onChange={(k) => {
-            haptic.tap()
-            setType(k)
-            setPage(1)
-          }}
-          options={[
-            { key: "ALL", label: "همه" },
-            { key: "SALE", label: "فروش", tone: "var(--sale)", icon: <span className="size-1.5 rounded-full bg-[color:var(--sale)]" /> },
-            {
-              key: "PURCHASE",
-              label: "خرید",
-              tone: "var(--purchase)",
-              icon: <span className="size-1.5 rounded-full bg-[color:var(--purchase)]" />,
-            },
-          ]}
-          className="sm:max-w-sm"
-        />
-        <div className="flex gap-2">
+      {/* فیلترها — قرص لغزان نوع + جستجو + چیپ‌ها (معوق، شخص) */}
+      <div className="mb-3 space-y-2.5">
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute inset-y-0 start-3.5 my-auto size-4 text-muted-foreground" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="شخص، شماره فاکتور یا جنس…"
+              placeholder="جستجوی شخص، شماره فاکتور یا کالا"
               className="field ps-10"
               inputMode="search"
             />
@@ -241,9 +257,59 @@ function InvoicesPageInner() {
               <Loader2 className="absolute inset-y-0 end-3.5 my-auto size-4 animate-spin text-muted-foreground" />
             )}
           </div>
+          <Segmented
+            value={type}
+            onChange={(k) => {
+              haptic.tap()
+              setType(k)
+              setPage(1)
+            }}
+            options={[
+              { key: "ALL", label: "همه" },
+              { key: "SALE", label: "فروش", tone: "var(--sale)", icon: <span className="size-1.5 rounded-full bg-[color:var(--sale)]" /> },
+              {
+                key: "PURCHASE",
+                label: "خرید",
+                tone: "var(--purchase)",
+                icon: <span className="size-1.5 rounded-full bg-[color:var(--purchase)]" />,
+              },
+            ]}
+            className="lg:w-80"
+          />
+        </div>
+        <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          {(overdueCount > 0 || overdueOnly) && (
+            <button
+              type="button"
+              onClick={() => {
+                haptic.tap()
+                setOverdueOnly((v) => !v)
+                setPage(1)
+              }}
+              aria-pressed={overdueOnly}
+              className={cn(
+                "flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-label font-bold transition-colors",
+                overdueOnly ? "bg-warning-ink text-white" : "bg-warning/15 text-warning-ink hover:bg-warning/20"
+              )}
+            >
+              <AlertTriangle className="size-3.5" />
+              نسیهٔ معوق
+              {overdueCount > 0 && (
+                <span
+                  className={cn(
+                    "nums grid h-5 min-w-5 place-items-center rounded-full px-1 text-micro",
+                    overdueOnly ? "bg-white/25" : "bg-warning-ink text-white"
+                  )}
+                >
+                  {toPersianDigits(overdueCount)}
+                </span>
+              )}
+              {overdueOnly && <X className="size-3.5" />}
+            </button>
+          )}
           <FilterChip
             active={!!personId}
-            label={personId ? (personName ?? "شخص") : "شخص"}
+            label={personId ? (personName ?? "شخص") : "همهٔ اشخاص"}
             icon={<UserRound className="size-4" />}
             onClick={() => setPersonSheet(true)}
             onClear={() => {
@@ -256,58 +322,69 @@ function InvoicesPageInner() {
             type="button"
             onClick={() => downloadCsv("invoices")}
             disabled={exporting}
-            aria-label="خروجی اکسل"
-            className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-input bg-card text-muted-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50 sm:hidden"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-label font-semibold text-muted-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50 lg:hidden"
           >
             {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            اکسل
           </button>
         </div>
+        {overdueOnly && overdue && (
+          <p className="nums text-caption text-muted-foreground">
+            فاکتورهایی که بیش از {toPersianDigits(overdue.days)} روز نسیه مانده‌اند
+            {type !== "PURCHASE" && overdue.sale.count > 0 && ` · فروش ${formatTomanCompact(overdue.sale.total)}`}
+            {type !== "SALE" && overdue.purchase.count > 0 && ` · خرید ${formatTomanCompact(overdue.purchase.total)}`}
+          </p>
+        )}
       </div>
 
-      {/* هشدار نسیهٔ معوق (بیش از ۳۰ روز) — لمس = فقط همین‌ها */}
-      <OverdueBanner
-        summary={overdue}
-        type={type}
-        active={overdueOnly}
-        onToggle={() => {
-          haptic.tap()
-          setOverdueOnly((v) => !v)
-          setPage(1)
-        }}
-      />
-
-      {/* لیست — موبایل کارت / دسکتاپ جدول (UI-09) */}
+      {/* لیست — موبایل گروه‌بندی روزانه / دسکتاپ جدول (UI-09) */}
       {isLoading ? (
         <ListSkeleton rows={5} />
       ) : isError ? (
         <ErrorState message="لیست فاکتورها بارگذاری نشد" onRetry={() => refetch()} />
       ) : isEmpty ? (
         <EmptyState
-          icon={FileText}
-          title={debouncedQ || personId || type !== "ALL" || overdueOnly ? "فاکتوری با این فیلترها نیست" : "هنوز فاکتوری ثبت نشده"}
+          icon={hasFilters ? Search : FileText}
+          title={
+            debouncedQ
+              ? `فاکتوری با «${debouncedQ}» پیدا نشد`
+              : hasFilters
+                ? "فاکتوری با این فیلترها نیست"
+                : "هنوز فاکتوری ثبت نشده"
+          }
           description={
-            debouncedQ || personId || type !== "ALL"
-              ? "فیلترها را تغییر دهید یا عبارت دیگری جستجو کنید"
+            hasFilters
+              ? [
+                  debouncedQ && "املای نام یا شماره را بررسی کنید.",
+                  type !== "ALL" && `فیلتر «${type === "SALE" ? "فروش" : "خرید"}» فعال است.`,
+                  personId && "فیلتر شخص فعال است.",
+                  overdueOnly && "فقط نسیه‌های معوق نمایش داده می‌شوند.",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               : "اولین خرید یا فروش را ثبت کنید — ۳۰ ثانیه بیشتر طول نمی‌کشد"
           }
-          actionLabel={debouncedQ || personId || type !== "ALL" ? undefined : "ثبت اولین فاکتور"}
-          onAction={debouncedQ || personId || type !== "ALL" ? undefined : openAddSheet}
+          actionLabel={hasFilters ? undefined : "ثبت اولین فاکتور"}
+          onAction={hasFilters ? undefined : () => router.push("/invoices/new")}
+          secondaryLabel={hasFilters ? "پاک کردن فیلترها" : undefined}
+          onSecondary={hasFilters ? clearFilters : undefined}
         />
       ) : (
         <>
           {/* جدول دسکتاپ */}
-          <div className="hidden overflow-hidden rounded-3xl border border-border/70 bg-card shadow-card lg:block">
+          <div className="hidden overflow-hidden rounded-[1.25rem] border border-border/80 bg-card lg:block">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border/70 bg-muted/40 text-[0.7rem] text-muted-foreground">
-                  <th className="px-4 py-3 text-start font-medium">شخص</th>
-                  <th className="px-4 py-3 text-start font-medium">نوع</th>
-                  <th className="px-4 py-3 text-start font-medium">شماره</th>
-                  <th className="px-4 py-3 text-start font-medium">تاریخ</th>
-                  <th className="px-4 py-3 text-start font-medium">اجناس</th>
-                  <th className="px-4 py-3 text-end font-medium">مبلغ</th>
-                  <th className="px-4 py-3 text-end font-medium">سود</th>
-                  <th className="px-4 py-3 text-end font-medium">مانده</th>
+                <tr className="border-b border-border/80 bg-muted/40 text-caption text-muted-foreground">
+                  <th className="px-4 py-3 text-start font-semibold">طرف حساب</th>
+                  <th className="px-4 py-3 text-start font-semibold">نوع</th>
+                  <th className="px-4 py-3 text-start font-semibold">شماره</th>
+                  <th className="px-4 py-3 text-start font-semibold">تاریخ</th>
+                  <th className="px-4 py-3 text-start font-semibold">کالاها</th>
+                  <th className="px-4 py-3 text-end font-semibold">مبلغ</th>
+                  <th className="px-4 py-3 text-end font-semibold">سود</th>
+                  <th className="px-4 py-3 text-start font-semibold">وضعیت</th>
+                  <th className="w-12 px-2 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -315,23 +392,22 @@ function InvoicesPageInner() {
                   <tr
                     key={inv.id}
                     onClick={() => router.push(`/invoices/${inv.id}`)}
-                    style={{ ["--i" as string]: invoices.indexOf(inv) }}
-                    className="hy-rise group cursor-pointer border-b border-border/40 transition-colors last:border-0 hover:bg-accent/40"
+                    className="group cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-accent/40"
                   >
                     <td className="px-4 py-3">
                       <Link href={`/invoices/${inv.id}`} className="group flex items-center gap-2.5">
-                        <InvoiceTypeMark type={inv.type} size={38} />
+                        <InvoiceTypeMark type={inv.type} size={34} />
                         <span className="font-bold">{inv.person.name}</span>
                       </Link>
                     </td>
                     <td className="px-4 py-3">
                       <InvoiceTypePill type={inv.type} />
                     </td>
-                    <td className="nums px-4 py-3 text-xs text-muted-foreground">{toPersianDigits(inv.number)}</td>
-                    <td className="nums px-4 py-3 text-xs text-muted-foreground">
+                    <td className="nums px-4 py-3 text-label text-muted-foreground">#{toPersianDigits(inv.number)}</td>
+                    <td className="nums px-4 py-3 text-label text-muted-foreground">
                       {formatJalaliShort(new Date(inv.date))}
                     </td>
-                    <td className="max-w-64 truncate px-4 py-3 text-xs text-muted-foreground">
+                    <td className="max-w-64 truncate px-4 py-3 text-label text-muted-foreground">
                       {inv.items
                         .slice(0, 2)
                         .map((it) => `${toPersianDigits(it.quantity)} ${formatUnit(it.unit)} ${it.productName}`)
@@ -339,144 +415,115 @@ function InvoicesPageInner() {
                       {inv.items.length > 2 && ` +${toPersianDigits(inv.items.length - 2)}`}
                     </td>
                     <td className="nums px-4 py-3 text-end font-extrabold">{formatToman(inv.total, false)}</td>
-                    <td className="px-4 py-3 text-end">
+                    <td className="nums px-4 py-3 text-end text-label font-bold">
                       {inv.type === "SALE" ? (
-                        <span
-                          className={cn(
-                            "nums rounded-md px-1.5 py-px text-[0.65rem] font-bold",
-                            invoiceProfit(inv) >= 0
-                              ? "bg-income/10 text-income"
-                              : "bg-destructive/10 text-destructive"
-                          )}
-                        >
+                        <span className={invoiceProfit(inv) >= 0 ? "text-income" : "text-destructive"}>
                           {formatToman(invoiceProfit(inv), false)}
                         </span>
                       ) : (
-                        <span className="text-[0.65rem] text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-end">
-                      {inv.credit > 0 ? (
-                        <span className="rounded-md bg-warning/10 px-1.5 py-px text-[0.65rem] font-bold text-warning">
-                          {formatToman(inv.credit, false)}
-                        </span>
-                      ) : (
-                        <SettledPill />
-                      )}
+                    <td className="px-4 py-3">
+                      <StatusPill credit={inv.credit} />
+                    </td>
+                    <td className="px-2 py-3">
+                      <Link
+                        href={`/invoices/new?edit=${inv.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`ویرایش فاکتور ${toPersianDigits(inv.number)}`}
+                        className="grid size-8 place-items-center rounded-lg text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <Pencil className="size-4" />
+                      </Link>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <div className="nums flex items-center justify-between border-t border-border/60 px-4 py-2.5 text-caption text-muted-foreground">
+              <span>
+                {toPersianDigits(invoices.length)} از {toPersianDigits(total)} فاکتور
+              </span>
+            </div>
           </div>
 
-          {/* کارت‌های موبایل — کشیدن به چپ: ویرایش • کشیدن به راست: حذف */}
-          <div className="space-y-2.5 lg:hidden">
-            {invoices.map((inv, i) => {
-              const profit = invoiceProfit(inv)
-              return (
-                <motion.div
-                  key={inv.id}
-                  layout="position"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.035, 0.35), type: "spring", stiffness: 380, damping: 32 }}
-                >
-                  <SwipeRow
-                    hint={i === 0}
-                    trailing={[
-                      {
-                        key: "edit",
-                        label: "ویرایش",
-                        icon: <Pencil className="size-4" />,
-                        color: "var(--primary)",
-                        onAction: () => router.push(`/invoices/new?edit=${inv.id}`),
-                      },
-                    ]}
-                    leading={[
-                      {
-                        key: "delete",
-                        label: "حذف",
-                        icon: <Trash2 className="size-4" />,
-                        color: "var(--destructive)",
-                        onAction: () => removeInvoice(inv),
-                      },
-                    ]}
-                  >
-                    <Link
-                      href={`/invoices/${inv.id}`}
-                      className="group block rounded-3xl border border-border/70 bg-card p-3.5 shadow-card transition-shadow hover:shadow-card-hover active:bg-accent/30"
-                    >
-                      <div className="flex items-center gap-3">
-                        <InvoiceTypeMark type={inv.type} size={46} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate text-sm font-extrabold">{inv.person.name}</span>
-                            <InvoiceTypePill type={inv.type} />
-                          </div>
-                          <div className="nums mt-1 text-[0.66rem] text-muted-foreground">
-                            {formatJalaliShort(new Date(inv.date))}
-                            <span className="mx-1.5 opacity-40">|</span>
-                            ش {toPersianDigits(inv.number)}
-                            {inv.items.length > 0 && (
-                              <>
-                                <span className="mx-1.5 opacity-40">|</span>
-                                {toPersianDigits(inv.items.length)} قلم
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-end">
-                          <div className="nums text-[0.95rem] font-extrabold leading-tight">
-                            {formatToman(inv.total, false)}
-                          </div>
-                          <div className="mt-1 flex justify-end">
-                            {inv.credit > 0 ? (
-                              <span className="nums rounded-full bg-warning/12 px-2 py-0.5 text-[0.58rem] font-bold text-[color:color-mix(in_srgb,var(--warning)_75%,black)]">
-                                مانده {formatToman(inv.credit, false)}
-                              </span>
-                            ) : (
-                              <SettledPill />
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      {(inv.items.length > 0 || inv.type === "SALE") && (
-                        <div className="mt-2.5 flex items-center gap-2 border-t border-dashed border-border/80 pt-2.5">
-                          <div className="flex min-w-0 flex-1 gap-1 overflow-hidden">
-                            {inv.items.slice(0, 1).map((it) => (
-                              <span
-                                key={it.id}
-                                className="nums max-w-[80%] truncate rounded-lg bg-muted px-2 py-1 text-[0.6rem] text-muted-foreground"
-                              >
-                                {toPersianDigits(it.quantity)} {formatUnit(it.unit)} {it.productName}
-                              </span>
-                            ))}
-                            {inv.items.length > 1 && (
-                              <span className="nums shrink-0 rounded-lg bg-muted px-2 py-1 text-[0.6rem] text-muted-foreground">
-                                +{toPersianDigits(inv.items.length - 1)}
-                              </span>
-                            )}
-                          </div>
-                          {inv.type === "SALE" && (
-                            <span
-                              className={cn(
-                                "nums inline-flex shrink-0 items-center gap-0.5 text-[0.62rem] font-bold",
-                                profit >= 0 ? "text-income" : "text-destructive"
-                              )}
-                            >
-                              <TrendingUp className={cn("size-3", profit < 0 && "-scale-y-100")} />
-                              {formatToman(Math.abs(profit), false)}
-                            </span>
-                          )}
-                          <ChevronLeft className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:-translate-x-0.5" />
-                        </div>
-                      )}
-                    </Link>
-                  </SwipeRow>
-                </motion.div>
-              )
-            })}
+          {/* موبایل — گروه‌بندی روزانه؛ کشیدن به چپ: ویرایش • کشیدن به راست: حذف */}
+          <div className="space-y-4 lg:hidden">
+            {groups.map((g, gi) => (
+              <section key={g.key}>
+                <div className="mb-2 flex items-baseline justify-between px-1">
+                  <h3 className="nums text-label font-extrabold text-foreground/85">{g.label}</h3>
+                  <span className="nums text-caption font-semibold text-muted-foreground">
+                    {toPersianDigits(g.items.length)} فاکتور · {formatTomanCompact(g.sum)}
+                  </span>
+                </div>
+                <div className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+                  {g.items.map((inv, i) => {
+                    const profit = invoiceProfit(inv)
+                    return (
+                      <motion.div
+                        key={inv.id}
+                        layout="position"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: Math.min((gi * 3 + i) * 0.03, 0.3), type: "spring", stiffness: 380, damping: 32 }}
+                        className={cn(i > 0 && "border-t border-border/60")}
+                      >
+                        <SwipeRow
+                          hint={gi === 0 && i === 0}
+                          trailing={[
+                            {
+                              key: "edit",
+                              label: "ویرایش",
+                              icon: <Pencil className="size-4" />,
+                              color: "var(--primary)",
+                              onAction: () => router.push(`/invoices/new?edit=${inv.id}`),
+                            },
+                          ]}
+                          leading={[
+                            {
+                              key: "delete",
+                              label: "حذف",
+                              icon: <Trash2 className="size-4" />,
+                              color: "var(--destructive)",
+                              onAction: () => removeInvoice(inv),
+                            },
+                          ]}
+                        >
+                          <Link
+                            href={`/invoices/${inv.id}`}
+                            className="flex items-center gap-3 bg-card px-3.5 py-3 transition-colors active:bg-accent/40"
+                          >
+                            <InvoiceTypeMark type={inv.type} size={42} />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[0.95rem] font-bold">{inv.person.name}</div>
+                              <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
+                                {inv.type === "SALE" ? "فروش" : "خرید"} · #{toPersianDigits(inv.number)}
+                                {inv.items.length > 0 && ` · ${toPersianDigits(inv.items.length)} قلم`}
+                                {inv.type === "SALE" && (
+                                  <span className={cn("font-bold", profit >= 0 ? "text-income" : "text-destructive")}>
+                                    {" "}· سود {formatTomanCompact(profit)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-end">
+                              <div className="nums text-[0.95rem] font-extrabold leading-tight">
+                                {formatToman(inv.total, false)}
+                              </div>
+                              <div className="mt-1 flex justify-end">
+                                <StatusPill credit={inv.credit} />
+                              </div>
+                            </div>
+                          </Link>
+                        </SwipeRow>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
 
           {/* صفحه‌بندی — IMP-01 */}
@@ -486,7 +533,7 @@ function InvoicesPageInner() {
                 onClick={() => setPage((p) => p + 1)}
                 disabled={isFetching}
                 variant="outline"
-                className="h-12 rounded-2xl px-8 text-xs font-bold hover:bg-accent"
+                className="h-12 rounded-2xl px-8 text-label font-bold hover:bg-accent"
               >
                 {isFetching ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -542,92 +589,16 @@ interface OverdueSummary {
   purchase: { count: number; total: number }
 }
 
-/** بنر «N فاکتور بیش از ۳۰ روز نسیه مانده — جمع X» */
-function OverdueBanner({
-  summary,
-  type,
-  active,
-  onToggle,
-}: {
-  summary?: OverdueSummary
-  type: "ALL" | "SALE" | "PURCHASE"
-  active: boolean
-  onToggle: () => void
-}) {
-  if (!summary) return null
-  const lines: { key: string; text: string; total: number }[] = []
-  if (type !== "PURCHASE" && summary.sale.count > 0)
-    lines.push({
-      key: "s",
-      text: `${toPersianDigits(summary.sale.count)} فاکتور فروش بیش از ${toPersianDigits(summary.days)} روز نسیه مانده`,
-      total: summary.sale.total,
-    })
-  if (type !== "SALE" && summary.purchase.count > 0)
-    lines.push({
-      key: "p",
-      text: `${toPersianDigits(summary.purchase.count)} فاکتور خرید بیش از ${toPersianDigits(summary.days)} روز پرداخت نشده`,
-      total: summary.purchase.total,
-    })
+/** وضعیت پرداخت: «مانده X» (کهربایی) یا «تسویه» با تیک (سبز) */
+function StatusPill({ credit }: { credit: number }) {
+  if (credit > 0)
+    return (
+      <span className="nums inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-micro font-bold leading-4 text-warning-ink">
+        مانده {formatTomanCompact(credit)}
+      </span>
+    )
   return (
-    <AnimatePresence initial={false}>
-      {(lines.length > 0 || active) && (
-        <motion.button
-          type="button"
-          onClick={onToggle}
-          initial={{ opacity: 0, y: -8, height: 0 }}
-          animate={{ opacity: 1, y: 0, height: "auto" }}
-          exit={{ opacity: 0, y: -6, height: 0 }}
-          transition={{ type: "spring", stiffness: 380, damping: 34 }}
-          className="mb-3 block w-full overflow-hidden text-start"
-        >
-          <div
-            className={cn(
-              "flex items-center gap-3 rounded-2xl px-3.5 py-3 ring-1 transition-colors",
-              active ? "bg-warning text-white ring-warning" : "bg-warning/10 ring-warning/25 hover:bg-warning/15"
-            )}
-          >
-            <span
-              className={cn(
-                "relative grid size-9 shrink-0 place-items-center rounded-xl font-black",
-                active ? "bg-white/25 text-white" : "bg-warning text-white"
-              )}
-            >
-              {!active && <span className="hy-ping absolute -end-0.5 -top-0.5 size-2.5 rounded-full bg-destructive ring-2 ring-card" />}
-              !
-            </span>
-            <div className="min-w-0 flex-1 space-y-0.5">
-              {lines.length > 0 ? (
-                lines.map((l) => (
-                  <div key={l.key} className="text-[0.74rem] leading-5">
-                    <b>{l.text}</b>
-                    <span className={cn("nums", active ? "text-white/85" : "text-muted-foreground")}>
-                      {" "}— جمع {formatTomanCompact(l.total)}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="text-[0.74rem] font-bold">نسیهٔ معوقی نمانده</div>
-              )}
-            </div>
-            <span
-              className={cn(
-                "shrink-0 rounded-xl px-3 py-1.5 text-[0.7rem] font-extrabold",
-                active ? "bg-white text-[color:color-mix(in_srgb,var(--warning)_70%,black)]" : "bg-card text-[color:color-mix(in_srgb,var(--warning)_75%,black)] shadow-sm"
-              )}
-            >
-              {active ? "نمایش همه" : "ببین"}
-            </span>
-          </div>
-        </motion.button>
-      )}
-    </AnimatePresence>
-  )
-}
-
-/** برچسب «تسویه» با تیک */
-function SettledPill() {
-  return (
-    <span className="inline-flex items-center gap-0.5 rounded-full bg-income/10 px-2 py-0.5 text-[0.58rem] font-bold text-income">
+    <span className="inline-flex items-center gap-0.5 rounded-full bg-income/10 px-2 py-0.5 text-micro font-bold leading-4 text-income">
       <svg viewBox="0 0 24 24" className="size-2.5" fill="none" stroke="currentColor" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M5 12.5l4.5 4.5L19 7.5" />
       </svg>

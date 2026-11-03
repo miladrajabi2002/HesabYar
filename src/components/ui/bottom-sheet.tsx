@@ -198,10 +198,9 @@ export function BottomSheet({
             tabIndex={-1}
             aria-label="بستن"
             onClick={() => onCloseRef.current()}
-            className={cn(
-              "absolute inset-0 cursor-default backdrop-blur-[2px]",
-              asDrawer ? "bg-black/35 backdrop-blur-[3px]" : "bg-black/55"
-            )}
+            // بدون backdrop-filter: در وب‌اپ iOS بلور هنگام محو شدن با opacity والد هماهنگ نمی‌شد
+            // و تکه‌ای تار روی هدر می‌ماند — فقط تیرگی ساده
+            className={cn("absolute inset-0 cursor-default", asDrawer ? "bg-[rgb(15_26_23/0.34)]" : "bg-[rgb(15_26_23/0.45)]")}
           />
 
           {/* پنل — MO-04: در موبایل با کشیدن دستگیره به پایین بسته می‌شود */}
@@ -249,24 +248,27 @@ export function BottomSheet({
           >
             {/* دستگیره + هدر — دستگیره واقعاً قابل کشیدن است (MO-04) */}
             {!hideHeader && (
-              <div className={cn("relative shrink-0 border-b border-border/60 bg-card/95 px-4 pb-3 pt-2 backdrop-blur-xl", (asDialog || asDrawer) && "pt-4")}>
+              <div className={cn("relative shrink-0 bg-card px-5 pb-2 pt-1.5", (asDialog || asDrawer) && "pt-5")}>
+                {/* نسخهٔ ۷: دستگیرهٔ دیدنی، عنوان بزرگ‌تر، دکمهٔ بستن گرد و کم‌رنگ، بدون خط زیر سربرگ */}
                 <span
                   aria-hidden
                   onPointerDown={(e) => {
                     if (!asDialog && !asDrawer && !reduceMotion) dragControls.start(e)
                   }}
                   className={cn(
-                    "mx-auto mb-2 block h-[1.4rem] w-16 cursor-grab touch-none rounded-full transition-colors hover:bg-foreground/10 active:cursor-grabbing active:bg-foreground/15",
+                    "mx-auto mb-1.5 grid h-5 w-16 cursor-grab touch-none place-items-center active:cursor-grabbing",
                     (asDialog || asDrawer) && "hidden"
                   )}
-                />
-                <div className="flex min-h-9 items-center gap-3">
+                >
+                  <span className="block h-[5px] w-10 rounded-full bg-foreground/15" />
+                </span>
+                <div className="flex min-h-9 items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    <h2 id={titleId} className="truncate text-[0.95rem] font-bold leading-tight">
+                    <h2 id={titleId} className="truncate text-[1.15rem] font-extrabold leading-snug">
                       {title}
                     </h2>
                     {description && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{description}</p>
+                      <p className="mt-0.5 truncate text-label text-muted-foreground">{description}</p>
                     )}
                   </div>
                   <button
@@ -274,9 +276,9 @@ export function BottomSheet({
                     type="button"
                     onClick={() => onCloseRef.current()}
                     aria-label="بستن"
-                    className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
+                    className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
                   >
-                    <X className="size-4" />
+                    <X className="size-4" strokeWidth={2.4} />
                   </button>
                 </div>
               </div>
@@ -295,7 +297,8 @@ export function BottomSheet({
             <div
               style={{ WebkitOverflowScrolling: "touch" }}
               className={cn(
-                "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4",
+                "min-h-0 flex-1 overflow-y-auto overscroll-contain px-5",
+                hideHeader ? "pt-4" : "pt-2",
                 // نکته: py-4 استفاده نشده چون در کسکید CSS روی [padding-bottom:] غلبه می‌کند
                 // و فضای امن پایین (مینی‌اپ تلگرام) عملاً بی‌اثر می‌شد.
                 // نکته ۲: داخل کلاس arbitrary نباید فاصله باشد وگرنه به چند کلاس جدا تجزیه می‌شود.
@@ -310,7 +313,7 @@ export function BottomSheet({
 
             {/* فوتر */}
             {footer && (
-              <div className="shrink-0 border-t border-border/60 bg-card/95 px-4 pt-3 backdrop-blur-xl [padding-bottom:max(1.5rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+1rem))]">
+              <div className="shrink-0 border-t border-border/70 bg-card px-5 pt-3 [padding-bottom:max(1.5rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+1rem))]">
                 {footer}
               </div>
             )}
@@ -348,7 +351,7 @@ export function SheetOption({
         "flex w-full items-center gap-3 rounded-2xl border p-3 text-start transition-all duration-150 active:scale-[0.99]",
         selected
           ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-          : "border-border bg-card hover:bg-accent/60",
+          : "border-border/80 bg-card hover:bg-accent/50",
         tone === "danger" && !selected && "hover:bg-destructive/5",
         tone === "primary" && !selected && "border-primary/30 bg-primary/5"
       )}

@@ -100,7 +100,7 @@ export function weightedAverageCost(
   return Math.round(((initial.quantity || 0) * (initial.unitCost || 0) + purchasedCost) / totalQty)
 }
 
-/** موجودی جنس = اولیه + خریدها − فروش‌ها */
+/** موجودی کالا = اولیه + خریدها − فروش‌ها */
 export function stockLevel(initial: number, purchasedQty: number, soldQty: number): number {
   return (initial || 0) + purchasedQty - soldQty
 }

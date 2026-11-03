@@ -217,7 +217,7 @@ function ActionButton({
       <motion.span style={{ scale }} className="grid size-9 place-items-center rounded-full bg-white/20">
         {action.icon}
       </motion.span>
-      <span className="text-[0.62rem] font-bold">{action.label}</span>
+      <span className="text-caption font-bold">{action.label}</span>
     </button>
   )
 }

@@ -52,10 +52,10 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       : null
     if (data.accountId && !account) return fail("حساب بانکی پیدا نشد", 404)
 
-    // اعتبارسنجی اجناس
+    // اعتبارسنجی کالاها
     const productIds = [...new Set(data.items.map((i) => i.productId))]
     const products = await db.product.findMany({ where: { id: { in: productIds } } })
-    if (products.length !== productIds.length) return fail("یکی از اجناس پیدا نشد", 404)
+    if (products.length !== productIds.length) return fail("یکی از کالاها پیدا نشد", 404)
 
     // چک نقدشده/برگشتی قابل جابه‌جایی نیست (گردش بانکی‌اش ثبت شده)
     const oldChecks = await db.checkPaper.findMany({

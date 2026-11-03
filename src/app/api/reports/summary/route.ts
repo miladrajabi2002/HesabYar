@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       salesCollection(start, end),
     ])
 
-    // پرفروش‌ترین اجناس و بهترین مشتری‌ها
+    // پرفروش‌ترین کالاها و بهترین مشتری‌ها
     const items = await db.invoiceItem.findMany({
       where: { invoice: { date: { gte: start, lte: end } } },
       select: {

@@ -1,12 +1,12 @@
 "use client"
 
 /**
- * آواتار شخص (نسخهٔ ۵) — حرف اول نام روی کاشی رنگی نقش + نشان کوچک نقش در گوشه
+ * آواتار شخص — آیکون نقش (نسخهٔ ۸: بدون حرف اول نام)
  *  CUSTOMER (مشتری)  → آبی، نشان کیسهٔ خرید
  *  SUPPLIER (فروشنده) → بنفش، نشان کامیون
  *  BOTH (هر دو)       → کاشی دورنگ مورب (آبی/بنفش) + نشان فلش دوطرفه
- * بدون نام، به‌جای حرف، آیکون نقش وسط کاشی می‌نشیند.
  */
+import { toPersianDigits } from "@/lib/money"
 import { cn } from "@/lib/utils"
 
 const ROLE_TONE: Record<string, string> = {
@@ -55,16 +55,12 @@ function RoleGlyph({ role, size }: { role?: string | null; size: number }) {
   )
 }
 
-/** اولین حرف معنادار نام (بدون «آقای/خانم/شرکت») */
-function initialOf(name?: string | null): string {
-  if (!name) return ""
-  const cleaned = name.trim().replace(/^(آقای|آقا|خانم|شرکت|فروشگاه|جناب)\s+/, "")
-  return Array.from(cleaned)[0] ?? ""
-}
-
+/**
+ * آواتار نقش (نسخهٔ ۸) — بدون حرف اول نام: آیکون نقش روی کاشی رنگی همان نقش
+ * (کیسهٔ خرید = مشتری، کامیون = فروشنده، فلش دوطرفه = هر دو). «name» فقط برای سازگاری می‌ماند.
+ */
 export function RoleAvatar({
   role,
-  name,
   size = 40,
   className,
 }: {
@@ -75,47 +71,21 @@ export function RoleAvatar({
 }) {
   const both = role === "BOTH"
   const tone = ROLE_TONE[role ?? ""] ?? "var(--muted-foreground)"
-  const letter = initialOf(name)
-  const badge = Math.max(14, Math.round(size * 0.42))
-
-  const bg = both
-    ? "linear-gradient(135deg, color-mix(in srgb, var(--role-customer) 16%, white) 0 50%, color-mix(in srgb, var(--role-supplier) 18%, white) 50% 100%)"
-    : `linear-gradient(155deg, color-mix(in srgb, ${tone} 10%, white), color-mix(in srgb, ${tone} 22%, white))`
-
   return (
     <span
-      aria-hidden
-      className={cn("relative inline-grid shrink-0 select-none place-items-center rounded-[34%]", className)}
+      aria-label={ROLE_LABELS[role ?? ""] ?? "شخص"}
+      role="img"
+      className={cn("relative inline-grid shrink-0 select-none place-items-center rounded-[32%]", className)}
       style={{
         width: size,
         height: size,
-        background: bg,
+        background: both
+          ? "linear-gradient(135deg, color-mix(in srgb, var(--role-customer) 13%, white) 0 50%, color-mix(in srgb, var(--role-supplier) 14%, white) 50% 100%)"
+          : `color-mix(in srgb, ${tone} 12%, white)`,
         color: both ? "var(--foreground)" : tone,
-        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${both ? "var(--role-supplier)" : tone} 16%, transparent)`,
       }}
     >
-      {letter ? (
-        <span className="font-black leading-none" style={{ fontSize: Math.round(size * 0.42) }}>
-          {letter}
-        </span>
-      ) : (
-        <RoleGlyph role={role} size={Math.round(size * 0.48)} />
-      )}
-      {letter && role && (
-        <span
-          className="absolute -bottom-1 -left-1 grid place-items-center rounded-full text-white ring-2 ring-card"
-          style={{
-            width: badge,
-            height: badge,
-            background: both
-              ? "linear-gradient(135deg, var(--role-customer) 0 50%, var(--role-supplier) 50% 100%)"
-              : tone,
-          }}
-          title={ROLE_LABELS[role]}
-        >
-          <RoleGlyph role={role} size={Math.round(badge * 0.62)} />
-        </span>
-      )}
+      <RoleGlyph role={role} size={Math.round(size * 0.5)} />
     </span>
   )
 }
@@ -135,7 +105,7 @@ export function RoleBadge({ role, className }: { role?: string | null; className
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-bold",
+        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-micro font-bold",
         className
       )}
       style={{
@@ -157,72 +127,102 @@ export function RoleBadge({ role, className }: { role?: string | null; className
   )
 }
 
+/** نسیهٔ بازِ بیش از این تعداد روز معوق است — همان آستانهٔ بنر فاکتورها (lib/finance OVERDUE_DAYS) */
+const OVERDUE_DAYS = 30
+
+/** برچسب کوتاه قدمت مانده: «امروز» / «۱۲ روز» / «۲ ماه» */
+export function formatOpenDays(days: number): string {
+  if (days <= 0) return "امروز"
+  if (days < 60) return `${toPersianDigits(days)} روز`
+  return `${toPersianDigits(Math.floor(days / 30))} ماه`
+}
+
 /**
- * آواتار تراز (نسخهٔ ۶) — به‌جای حرف اول نام، وضعیت حساب را نشان می‌دهد:
- *  • حلقه: طول قوس = سهم این شخص از بزرگ‌ترین مانده؛ رنگ = طلب ما (کهربایی) / بدهی ما (بنفش) / تسویه (سبز)
- *  • وسط: آیکون نقش (مشتری/فروشنده/هر دو)
+ * آواتار تراز (نسخهٔ ۸) — بدون حلقه و بدون حرف: یک نگاه = «این کیست و حسابش چطور است»
+ *  • آیکون نقش (مشتری/فروشنده/هر دو) روی کاشی
+ *  • رنگ کاشی = وضعیت حساب: کهربایی «به ما بدهکار است»، نیلی «ما بدهکاریم»، خاکستری «تسویه»
+ *  • نشان گوشه: ساعت قرمز = بیش از ۳۰ روز بدون پرداخت (معوق)، تیک سبز = تسویه‌شده
+ *  متن «بدهکار/طلبکار» و قدمت همیشه کنار مبلغ نوشته می‌شود (BalanceTag) — رنگ تنها نیست.
  */
 export function BalanceAvatar({
   role,
   balance,
-  maxAbs,
+  openDays,
   size = 48,
   className,
 }: {
   role?: string | null
   balance: number
-  /** بزرگ‌ترین قدرمطلق مانده در فهرست — برای نسبت قوس */
-  maxAbs: number
+  /** روزهای باز ماندن مانده (null = نامعلوم) */
+  openDays?: number | null
   size?: number
   className?: string
 }) {
   const settled = balance === 0
-  const tone = settled ? "var(--income)" : balance > 0 ? "var(--warning)" : "var(--role-supplier)"
-  const stroke = Math.max(3, Math.round(size * 0.075))
-  const r = (size - stroke) / 2
-  const c = 2 * Math.PI * r
-  const frac = settled ? 1 : Math.min(1, Math.max(0.1, maxAbs > 0 ? Math.abs(balance) / maxAbs : 0.1))
-  const roleTone = ROLE_TONE[role ?? ""] ?? "var(--muted-foreground)"
-  const label = settled ? "تسویه‌شده" : balance > 0 ? "طلب ما" : "بدهی ما"
+  const overdue = !settled && openDays != null && openDays > OVERDUE_DAYS
+  const tone = settled ? "var(--muted-foreground)" : balance > 0 ? "var(--warning-ink)" : "var(--role-supplier)"
+  const badge = Math.max(16, Math.round(size * 0.4))
+  const label = settled
+    ? "تسویه‌شده"
+    : `${balance > 0 ? "به ما بدهکار است" : "ما بدهکاریم"}${openDays != null ? ` — ${formatOpenDays(openDays)}${overdue ? "، معوق" : ""}` : ""}`
   return (
     <span
       role="img"
       aria-label={`${ROLE_LABELS[role ?? ""] ?? "شخص"} — ${label}`}
-      className={cn("relative inline-grid shrink-0 select-none place-items-center", className)}
-      style={{ width: size, height: size }}
+      className={cn("relative inline-grid shrink-0 select-none place-items-center rounded-[32%]", className)}
+      style={{
+        width: size,
+        height: size,
+        background: `color-mix(in srgb, ${tone} ${settled ? 9 : 13}%, white)`,
+        color: tone,
+      }}
     >
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={`color-mix(in srgb, ${tone} 16%, transparent)`}
-          strokeWidth={stroke}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={tone}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={`${c * frac} ${c}`}
-          style={{ transition: "stroke-dasharray 0.6s var(--ease-out, ease-out)" }}
-        />
-      </svg>
-      <span
-        className="relative grid place-items-center rounded-full"
-        style={{
-          width: size - stroke * 2 - 6,
-          height: size - stroke * 2 - 6,
-          background: `color-mix(in srgb, ${role === "BOTH" ? "var(--role-customer)" : roleTone} 9%, var(--card))`,
-          color: role === "BOTH" ? "var(--foreground)" : roleTone,
-        }}
-      >
-        <RoleGlyph role={role} size={Math.round(size * 0.4)} />
-      </span>
+      <RoleGlyph role={role} size={Math.round(size * 0.48)} />
+      {(overdue || settled) && (
+        <span
+          aria-hidden
+          className="absolute -bottom-1 -left-1 grid place-items-center rounded-full text-white ring-2 ring-card"
+          style={{ width: badge, height: badge, background: overdue ? "var(--destructive)" : "var(--income)" }}
+        >
+          <svg
+            width={Math.round(badge * 0.62)}
+            height={Math.round(badge * 0.62)}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {overdue ? (
+              <>
+                <circle cx="12" cy="12" r="8" />
+                <path d="M12 8v4.5l3 1.5" />
+              </>
+            ) : (
+              <path d="m6 12.5 4 4 8-9" />
+            )}
+          </svg>
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** برچسب متنی وضعیت حساب کنار مبلغ: «بدهکار» / «طلبکار» / «تسویه» */
+export function BalanceTag({ balance, className }: { balance: number; className?: string }) {
+  const tone = balance > 0 ? "warning" : balance < 0 ? "purchase" : "neutral"
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+        tone === "warning" && "bg-warning/12 text-warning-ink",
+        tone === "purchase" && "bg-purchase/10 text-purchase",
+        tone === "neutral" && "bg-muted text-muted-foreground",
+        className
+      )}
+    >
+      {balance > 0 ? "بدهکار" : balance < 0 ? "طلبکار" : "تسویه"}
     </span>
   )
 }

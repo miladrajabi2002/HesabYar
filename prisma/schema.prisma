@@ -51,15 +51,15 @@ model Person {
   @@index([isArchived])
 }
 
-// ───────────────────────── اجناس ─────────────────────────
+// ───────────────────────── کالاها ─────────────────────────
 model Product {
   id           String        @id @default(cuid())
   name         String // «الکترود E6013 قطر ۳.۲»
   brand        String? // اختیاری: «اصفهان»
-  code         String? // اختیاری: کد جنس
+  code         String? // اختیاری: کد کالا
   unit         String        @default("عدد") // عدد | کیلوگرم | پاکت | کارتن
   minStock     Float         @default(0) // حد هشدار موجودی
-  initialStock Float         @default(0) // موجودی اولیه انبار هنگام ثبت جنس (قبل از هر فاکتور)
+  initialStock Float         @default(0) // موجودی اولیه انبار هنگام ثبت کالا (قبل از هر فاکتور)
   initialStockCostPrice Int   @default(0) // قیمت خرید هر واحد از موجودی اولیه (تومان) — برای محاسبه سود
   isArchived   Boolean       @default(false)
   createdAt    DateTime      @default(now())
@@ -103,7 +103,7 @@ model InvoiceItem {
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   productId   String
   product     Product @relation(fields: [productId], references: [id])
-  productName String // تصویر لحظه‌ای نام جنس
+  productName String // تصویر لحظه‌ای نام کالا
   brand       String?
   code        String?
   unit        String
@@ -238,7 +238,7 @@ model PushSubscription {
   createdAt DateTime @default(now())
 }
 
-// ───────────────────────── پیوست تصویر (چک / فاکتور / شخص / جنس) ─────────────────────────
+// ───────────────────────── پیوست تصویر (چک / فاکتور / شخص / کالا) ─────────────────────────
 model Attachment {
   id        String   @id @default(cuid())
   refType   String // CHECK | INVOICE | PERSON | PRODUCT

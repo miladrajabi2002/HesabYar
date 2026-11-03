@@ -99,7 +99,7 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">گزارش‌ها</h1>
+      <h1 className="hidden text-2xl font-extrabold tracking-tight lg:block">گزارش‌ها</h1>
 
       {/* انتخاب دوره */}
       <Segmented
@@ -164,7 +164,7 @@ export default function ReportsPage() {
               value={data.summary.profit}
               prev={data.prev.profit}
               prevLabel={prevLabel}
-              tone="var(--warning)"
+              tone="var(--primary)"
               icon={<BarChart3 className="size-3.5" />}
               foot={`حاشیه سود ${toPersianDigits(profitMargin)}٪`}
               spark={elapsedSeries.map((d) => d.profit)}
@@ -187,18 +187,18 @@ export default function ReportsPage() {
               transition={{ delay: 0.15 }}
               className="rounded-3xl border border-border/70 bg-card p-4 shadow-card"
             >
-              <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
                 <span className="grid size-6 place-items-center rounded-lg bg-[color:color-mix(in_srgb,var(--hue-checks)_13%,transparent)] text-[color:var(--hue-checks)]">
                   <CheckSquare2 className="size-3.5" />
                 </span>
                 چک‌های سررسید دوره
               </div>
               <div className="mt-2 space-y-1">
-                <div className="flex items-center justify-between text-[0.7rem]">
+                <div className="flex items-center justify-between text-caption">
                   <span className="text-muted-foreground">وصولی</span>
                   <span className="nums font-extrabold text-[color:var(--sale)]">{formatTomanCompact(data.summary.receivedChecks)}</span>
                 </div>
-                <div className="flex items-center justify-between text-[0.7rem]">
+                <div className="flex items-center justify-between text-caption">
                   <span className="text-muted-foreground">پرداختی</span>
                   <span className="nums font-extrabold text-[color:var(--purchase)]">{formatTomanCompact(data.summary.issuedChecks)}</span>
                 </div>
@@ -209,7 +209,7 @@ export default function ReportsPage() {
           <div className="grid items-start gap-4 lg:grid-cols-5">
             {/* نمودار روند */}
             <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 lg:col-span-3">
-              <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+              <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
                 <BarChart3 className="size-4 text-primary" />
                 روند روزانهٔ {label}
               </div>
@@ -224,11 +224,11 @@ export default function ReportsPage() {
 
             {/* وصول فروش */}
             <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 lg:col-span-2">
-              <div className="mb-1 flex items-center gap-2 text-sm font-bold">
+              <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
                 <HandCoins className="size-4 text-primary" />
                 وصول فروش {label}
               </div>
-              <p className="mb-3 text-[0.66rem] text-muted-foreground">
+              <p className="mb-3 text-caption text-muted-foreground">
                 از {formatTomanCompact(data.collection.total)} فروش، چقدر پولش دست ما رسیده
               </p>
               <CollectionDonut data={data.collection} />
@@ -238,34 +238,34 @@ export default function ReportsPage() {
           <div className="grid items-start gap-4 lg:grid-cols-2">
             {/* پرفروش‌ها */}
             <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-              <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+              <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
                 <Package className="size-4 text-primary" />
-                پرفروش‌ترین اجناس {label}
+                پرفروش‌ترین کالاها {label}
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {data.topSold.map((p, i) => (
                   <div
                     key={p.name}
-                    className="relative isolate flex items-center gap-2.5 overflow-hidden rounded-2xl border border-border/60 px-3 py-2.5"
+                    className="relative isolate flex items-center gap-2.5 overflow-hidden rounded-xl px-2 py-2.5"
                   >
                     <span
                       className={cn(
-                        "nums relative z-10 flex size-7 shrink-0 items-center justify-center rounded-lg text-[0.7rem] font-extrabold",
+                        "nums relative z-10 flex size-7 shrink-0 items-center justify-center rounded-lg text-caption font-extrabold",
                         i === 0 ? "bg-[#f5a524] text-white" : i === 1 ? "bg-[#a8b3bd] text-white" : i === 2 ? "bg-[#c98a55] text-white" : "bg-muted"
                       )}
                     >
                       {toPersianDigits(i + 1)}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-bold">
+                      <div className="truncate text-sm font-bold">
                         {p.name}
                         {p.brand ? <span className="font-medium text-muted-foreground"> — {p.brand}</span> : null}
                       </div>
-                      <div className="nums text-[0.62rem] text-muted-foreground">
+                      <div className="nums text-caption text-muted-foreground">
                         {toPersianDigits(p.qty)} {formatUnit(p.unit)} • سود {formatTomanCompact(p.profit)}
                       </div>
                     </div>
-                    <span className="nums shrink-0 text-xs font-extrabold text-[color:var(--sale)]">
+                    <span className="nums shrink-0 text-sm font-extrabold">
                       {formatTomanCompact(p.revenue)}
                     </span>
                     <RankBar value={p.revenue} max={data.topSold[0]?.revenue ?? 1} tone="var(--sale)" />
@@ -279,7 +279,7 @@ export default function ReportsPage() {
 
             {/* بهترین مشتری‌ها */}
             <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-              <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+              <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
                 <Users className="size-4 text-primary" />
                 بهترین مشتری‌ها {label}
               </div>
@@ -287,23 +287,23 @@ export default function ReportsPage() {
                 {data.topCustomers.map((c, i) => (
                   <div
                     key={c.name + i}
-                    className="relative isolate flex items-center gap-2.5 overflow-hidden rounded-2xl border border-border/60 px-3 py-2.5"
+                    className="relative isolate flex items-center gap-2.5 overflow-hidden rounded-xl px-2 py-2.5"
                   >
                     <span
                       className={cn(
-                        "nums relative z-10 flex size-7 shrink-0 items-center justify-center rounded-lg text-[0.7rem] font-extrabold",
+                        "nums relative z-10 flex size-7 shrink-0 items-center justify-center rounded-lg text-caption font-extrabold",
                         i === 0 ? "bg-[#f5a524] text-white" : i === 1 ? "bg-[#a8b3bd] text-white" : i === 2 ? "bg-[#c98a55] text-white" : "bg-muted"
                       )}
                     >
                       {toPersianDigits(i + 1)}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-bold">{c.name}</div>
-                      <div className="nums text-[0.62rem] text-muted-foreground">
+                      <div className="truncate text-sm font-bold">{c.name}</div>
+                      <div className="nums text-caption text-muted-foreground">
                         {toPersianDigits(c.count)} فاکتور
                       </div>
                     </div>
-                    <span className="nums shrink-0 text-xs font-extrabold text-[color:var(--role-customer)]">
+                    <span className="nums shrink-0 text-sm font-extrabold">
                       {formatTomanCompact(c.total)}
                     </span>
                     <RankBar value={c.total} max={data.topCustomers[0]?.total ?? 1} tone="var(--role-customer)" />
@@ -372,14 +372,14 @@ function ReportKpi({
       style={{ ["--tile" as string]: tone }}
       className="relative overflow-hidden rounded-3xl border border-border/70 bg-card p-4 shadow-card"
     >
-      <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
         <span className="icon-soft grid size-6 place-items-center rounded-lg">{icon}</span>
         {label}
       </div>
-      <p className="nums mt-2 text-lg font-extrabold sm:text-xl" style={{ color: "color-mix(in srgb, var(--tile) 85%, black)" }}>
+      <p className="nums mt-1.5 text-[1.3rem] font-extrabold tracking-tight">
         {formatTomanCompact(value)}
       </p>
-      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[0.6rem] text-muted-foreground">
+      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-caption text-muted-foreground">
         <span className="nums">{foot}</span>
         {pct !== null && pct !== 0 && (
           <span
@@ -393,7 +393,7 @@ function ReportKpi({
           </span>
         )}
       </div>
-      {spark && <Sparkline values={spark} color={tone} className="mt-2.5" />}
+      {spark && <Sparkline values={spark} color={tone} muted className="mt-2.5" />}
     </motion.div>
   )
 }

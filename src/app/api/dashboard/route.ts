@@ -4,6 +4,8 @@ import { ok, requireApiAuth, serverError } from "@/lib/api-helpers"
 import {
   getAccountBalances,
   getPersonBalances,
+  getPersonActivity,
+  openBalanceDays,
   periodSummary,
   dailySeries,
   salesCollection,
@@ -37,7 +39,7 @@ export async function GET(req: NextRequest) {
     const saturdayOffset = (gteDay + 1) % 7
     const weekStart = new Date(startOfJalaliDay(now).getTime() - saturdayOffset * 86_400_000)
 
-    const [today, week, month, prevMonth, accounts, personBalances, monthCollection] = await Promise.all([
+    const [today, week, month, prevMonth, accounts, personBalances, monthCollection, activity] = await Promise.all([
       periodSummary(dayStart, dayEnd),
       periodSummary(weekStart, dayEnd),
       periodSummary(monthStart, monthEnd),
@@ -45,6 +47,7 @@ export async function GET(req: NextRequest) {
       getAccountBalances(),
       getPersonBalances(),
       salesCollection(monthStart, monthEnd),
+      getPersonActivity(),
     ])
 
     // ST-01: درصد تغییر ماه جاری نسبت به ماه قبل (null = ماه قبل صفر بوده)
@@ -65,7 +68,10 @@ export async function GET(req: NextRequest) {
       select: { id: true, name: true, phone: true, company: true, role: true },
     })
     const withBalance = people
-      .map((p) => ({ ...p, balance: personBalances.get(p.id) ?? 0 }))
+      .map((p) => {
+        const balance = personBalances.get(p.id) ?? 0
+        return { ...p, balance, openDays: openBalanceDays(balance, activity.get(p.id), now) }
+      })
       .filter((p) => p.balance !== 0)
     const debtors = withBalance
       .filter((p) => p.balance > 0)

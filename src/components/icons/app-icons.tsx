@@ -224,6 +224,14 @@ export const IconApps = makeIcon("apps", "spin", () => (
   </>
 ))
 
+export const IconBell = makeIcon("bell", "swing", () => (
+  <>
+    <F d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z" />
+    <S d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z" />
+    <S d="M10 20.5h4" delay={0.15} />
+  </>
+))
+
 export const IconLogout = makeIcon("logout", "slide", () => (
   <>
     <S d="M14 4h3a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-3" />

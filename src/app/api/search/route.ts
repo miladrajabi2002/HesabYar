@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 
 /**
  * GET /api/search?q=… — جستجوی سراسری یکپارچه (ADV-01)
- * هم‌زمان بین فاکتور، شخص، جنس، چک و شماره‌ها.
+ * هم‌زمان بین فاکتور، شخص، کالا، چک و شماره‌ها.
  */
 export async function GET(req: NextRequest) {
   const auth = await requireApiAuth(req)

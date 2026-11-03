@@ -180,7 +180,7 @@ export function InstallButton({ className }: { className?: string }) {
       onClick={promptInstall}
       className={
         className ??
-        "flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-[0.7rem] font-bold text-primary transition-colors hover:bg-primary/10"
+        "flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-caption font-bold text-primary transition-colors hover:bg-primary/10"
       }
     >
       <Download className="size-4" />

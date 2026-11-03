@@ -4,7 +4,7 @@ import { Toaster as Sonner, toast, type ToasterProps } from "sonner"
 
 /**
  * اعلان حساب‌یار (نسخهٔ ۴) — «جزیرهٔ پویا»
- *  • یک قرص کوچک بالای صفحه، بدون دکمهٔ بستن؛ با کشیدن یا خودکار بسته می‌شود
+ *  • یک قرص کوچک پایین صفحه (بالای نوار منو)، بدون دکمهٔ بستن؛ با کشیدن یا خودکار بسته می‌شود
  *  • موفقیت کوتاه (۱٫۸ ثانیه)، خطا بلندتر (۴٫۵ ثانیه) — همیشه حداکثر ۲ اعلان روی هم
  *  • آیکون‌ها با CSS «کشیده» می‌شوند (globals.css → .hy-toast-icon)
  */
@@ -68,10 +68,10 @@ const Toaster = (props: ToasterProps) => {
       theme="light"
       className="toaster group font-sans"
       dir="rtl"
-      position="top-center"
-      // زیر جزیرهٔ دینامیک/ناچ آیفون (وب‌اپ نصب‌شده)؛ بدون جمع‌شدن با جابه‌جایی پیش‌فرض sonner
-      offset={{ top: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}
-      mobileOffset={{ top: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}
+      position="bottom-center"
+      // نسخهٔ ۷: پایین صفحه، نزدیک انگشت (دکمهٔ «بازگردانی» در دسترس) — درست بالای نوار پایین موبایل
+      offset={{ bottom: "1.5rem" }}
+      mobileOffset={{ bottom: "var(--hy-toast-bottom)" }}
       visibleToasts={2}
       gap={8}
       duration={2200}

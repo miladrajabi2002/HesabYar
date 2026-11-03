@@ -1,6 +1,6 @@
 /**
  * منطق مالی فروشگاه — lib/finance.ts
- * تراز حساب‌های بانکی، تراز اشخاص (طلب/بدهی)، موجودی جنس، سود و شماره فاکتور.
+ * تراز حساب‌های بانکی، تراز اشخاص (طلب/بدهی)، موجودی کالا، سود و شماره فاکتور.
  * تنها مرجع محاسبه مانده‌ها برای جلوگیری از ناسازگاری.
  */
 import { db } from "@/lib/db"
@@ -162,9 +162,61 @@ export async function getPersonBalances(): Promise<Map<string, number>> {
   return map
 }
 
-// ───────────────────────── موجودی جنس ─────────────────────────
+/** نسیهٔ قدیمی‌تر از این تعداد روز «معوق» است (بنر فاکتورها + حلقهٔ اشخاص) */
+export const OVERDUE_DAYS = 30
 
-/** موجودی یک جنس = موجودی اولیه + مجموع خریدها − مجموع فروش‌ها */
+export interface PersonActivity {
+  /** جمع فاکتورهای فروش به این شخص */
+  salesTotal: number
+  /** جمع فاکتورهای خرید از این شخص */
+  purchaseTotal: number
+  /** تاریخ قدیمی‌ترین فاکتور فروشِ هنوز مانده‌دار (طلب ما) */
+  saleOpenSince: Date | null
+  /** تاریخ قدیمی‌ترین فاکتور خریدِ هنوز مانده‌دار (بدهی ما) */
+  purchaseOpenSince: Date | null
+}
+
+/** حجم خرید/فروش و قدمت قدیمی‌ترین نسیهٔ باز هر شخص — با دو groupBy */
+export async function getPersonActivity(): Promise<Map<string, PersonActivity>> {
+  const [totals, open] = await Promise.all([
+    db.invoice.groupBy({ by: ["personId", "type"], _sum: { total: true } }),
+    db.invoice.groupBy({ by: ["personId", "type"], where: { credit: { gt: 0 } }, _min: { date: true } }),
+  ])
+  const map = new Map<string, PersonActivity>()
+  const get = (id: string) => {
+    let a = map.get(id)
+    if (!a) {
+      a = { salesTotal: 0, purchaseTotal: 0, saleOpenSince: null, purchaseOpenSince: null }
+      map.set(id, a)
+    }
+    return a
+  }
+  totals.forEach((g) => {
+    if (g.type === "SALE") get(g.personId).salesTotal = g._sum.total ?? 0
+    else get(g.personId).purchaseTotal = g._sum.total ?? 0
+  })
+  open.forEach((g) => {
+    if (g.type === "SALE") get(g.personId).saleOpenSince = g._min.date
+    else get(g.personId).purchaseOpenSince = g._min.date
+  })
+  return map
+}
+
+/**
+ * چند روز است مانده‌ی شخص باز مانده — بر اساس قدیمی‌ترین فاکتورِ مانده‌دار در جهت تراز
+ * (طلب ← فاکتور فروش، بدهی ← فاکتور خرید). مانده‌ای که فقط از «مانده اولیه» یا تسویهٔ آزاد
+ * آمده فاکتوری ندارد → null.
+ */
+export function openBalanceDays(balance: number, activity: PersonActivity | undefined, now = new Date()): number | null {
+  if (balance === 0 || !activity) return null
+  const since = balance > 0 ? activity.saleOpenSince : activity.purchaseOpenSince
+  if (!since) return null
+  return Math.max(0, Math.floor((now.getTime() - since.getTime()) / 86_400_000))
+}
+
+// ───────────────────────── موجودی کالا ─────────────────────────
+
+/** موجودی یک کالا = موجودی اولیه + مجموع خریدها − مجموع فروش‌ها */
 export async function getProductStock(productId: string): Promise<number> {
   const product = await db.product.findUnique({
     where: { id: productId },
@@ -181,10 +233,10 @@ export async function getProductStock(productId: string): Promise<number> {
   return stockLevel(product?.initialStock ?? 0, purchases._sum.quantity ?? 0, sales._sum.quantity ?? 0)
 }
 
-/** موجودی همه اجناس به صورت یکجا (شامل موجودی اولیه؛ کارآمدتر: یک کوئری روی اجناس و یک کوئری روی اقلام) */
+/** موجودی همه کالاها به صورت یکجا (شامل موجودی اولیه؛ کارآمدتر: یک کوئری روی کالاها و یک کوئری روی اقلام) */
 export async function getProductStocks(): Promise<Map<string, number>> {
   const map = new Map<string, number>()
-  // موجودی اولیه هر جنس (ثبت‌شده هنگام افزودن جنس)
+  // موجودی اولیه هر کالا (ثبت‌شده هنگام افزودن کالا)
   const products = await db.product.findMany({ select: { id: true, initialStock: true } })
   for (const p of products) {
     if (p.initialStock) map.set(p.id, p.initialStock)
@@ -208,8 +260,8 @@ export async function nextInvoiceNumber(): Promise<number> {
 }
 
 /**
- * میانگین موزون قیمت تمام‌شده یک جنس تا لحظه مشخص (برای قیمت تمام‌شده فروش).
- * موجودی اولیه ثبت‌شده هنگام افزودن جنس هم با قیمت خریدش در میانگین لحاظ می‌شود،
+ * میانگین موزون قیمت تمام‌شده یک کالا تا لحظه مشخص (برای قیمت تمام‌شده فروش).
+ * موجودی اولیه ثبت‌شده هنگام افزودن کالا هم با قیمت خریدش در میانگین لحاظ می‌شود،
  * بنابراین فروش از روی موجودی اولیه سود درست محاسبه می‌کند (نه سود ۱۰۰٪).
  * اگر نه موجودی اولیه‌ای باشد و نه سابقه خرید، صفر برمی‌گردد.
  */

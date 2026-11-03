@@ -2,7 +2,7 @@
 
 /**
  * پروفایل شخص — مشخصات، تراز، فاکتورها، چک‌ها، تسویه‌ها + ثبت تسویه
- * + اشتراک صورتحساب در واتس‌اپ/سیستمی/کپی (ADV-06) + گالری تصاویر شخص (ADV-04)
+ * + صورتحساب PDF + گالری تصاویر شخص (ADV-04)
  */
 import { use, useEffect, useRef, useState } from "react"
 import Link from "next/link"
@@ -23,12 +23,9 @@ import {
   MapPin,
   Loader2,
   CheckCheck,
-  Copy,
   ImagePlus,
   Images,
-  MessageCircle,
   FileDown,
-  Share2,
   X,
   BadgeCheck,
 } from "lucide-react"
@@ -37,7 +34,6 @@ import { formatToman, formatTomanCompact, toLatinDigits, toPersianDigits } from 
 import {
   addJalaliMonths,
   formatJalaliShort,
-  formatJalaliWithWeekday,
   jalaliDayKey,
   jalaliOf,
   nowTehran,
@@ -45,6 +41,7 @@ import {
 } from "@/lib/jalali"
 import { BANKS, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
+import { PersonFields } from "@/components/people/person-fields"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { AmountInput } from "@/components/ui/amount-input"
 import { JalaliDateField } from "@/components/ui/jalali-date-picker"
@@ -52,12 +49,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
-import { BalanceAvatar, RoleBadge } from "@/components/ui/role-avatar"
+import { BalanceAvatar, RoleBadge, formatOpenDays } from "@/components/ui/role-avatar"
 import { Sparkline } from "@/components/charts/finance-charts"
 import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useConfirm } from "@/components/ui/confirm"
 import { useTelegram } from "@/hooks/use-telegram"
+import { useConfirm } from "@/components/ui/confirm"
 
 interface PersonDetail {
   person: {
@@ -71,6 +68,8 @@ interface PersonDetail {
     openingBalance: number
   }
   balance: number
+  /** روزهای باز ماندن مانده (حلقهٔ آواتار) */
+  openDays: number | null
   invoices: {
     id: string
     number: number
@@ -118,9 +117,6 @@ interface Attachment {
 /** حد مجاز حجم پیوست — همان MAX_SIZE مسیر /api/attachments */
 const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024 // ۸ مگابایت
 
-/** جداکننده بخش‌های متن صورتحساب اشتراکی (ADV-06) */
-const SHARE_SEPARATOR = "——————————"
-
 /** initData مینی‌اپ تلگرام — همان منطق lib/api-client (در وب، کوکی نشست خودکار ارسال می‌شود) */
 function telegramInitData(): string | null {
   if (typeof window === "undefined") return null
@@ -164,20 +160,6 @@ async function fetchAttachmentObjectUrl(id: string): Promise<string> {
   const res = await fetch(`/api/attachments?id=${id}`, { headers })
   if (!res.ok) throw new Error("دریافت تصویر ناموفق بود")
   return URL.createObjectURL(await res.blob())
-}
-
-/**
- * نرمال‌سازی شماره موبایل برای wa.me — فرمت بین‌المللی بدون + (مثل 98912…):
- * ارقام فارسی/عربی → لاتین، حذف +/فاصله/خط تیره، سپس ۰۰۹۸/۰/۹۱۲… → 98…
- */
-function normalizeWaPhone(raw: string): string | null {
-  const digits = toLatinDigits(raw).replace(/\D/g, "")
-  if (!digits) return null
-  if (digits.startsWith("0098")) return `98${digits.slice(4)}`
-  if (digits.startsWith("98") && digits.length >= 12) return digits
-  if (digits.startsWith("0")) return `98${digits.slice(1)}`
-  if (digits.startsWith("9") && digits.length === 10) return `98${digits}`
-  return digits.length >= 8 ? digits : null
 }
 
 /** بازه‌های آمادهٔ صورتحساب — کلید روز شمسی «jy-jm-jd» */
@@ -252,12 +234,6 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     queryFn: () => apiGet<{ accounts: Account[] }>("/api/accounts"),
     enabled: settleSheet,
   })
-
-  /* ── اشتراک صورتحساب (ADV-06) ── */
-  const [shareSheet, setShareSheet] = useState(false)
-  // قابلیت اشتراک سیستمی — فقط سمت کلاینت معتبر است؛ شیت همیشه بسته رندر می‌شود
-  // (شیت اشتراک فقط با تعامل کاربر باز می‌شود) پس روی hydration اثری ندارد.
-  const canSystemShare = typeof navigator !== "undefined" && typeof navigator.share === "function"
 
   /* ── گالری تصاویر شخص (ADV-04) ── */
   const { data: attData, isLoading: attLoading } = useQuery({
@@ -461,6 +437,20 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     }
   }
 
+  /** بازکردن لینک خارجی — داخل مینی‌اپ تلگرام با openLink بومی، وگرنه window.open */
+  const openExternal = (url: string) => {
+    const tg = webApp as unknown as { openLink?: (url: string) => void } | null
+    if (typeof tg?.openLink === "function") {
+      try {
+        tg.openLink(url)
+        return
+      } catch {
+        /* افتادن به window.open */
+      }
+    }
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+
   /* ── صورتحساب PDF: صفحهٔ چاپ مستقل با لوگو (توکن کوتاه‌عمر؛ داخل تلگرام در مرورگر باز می‌شود) ── */
   const openStatement = async (preset: StatementPreset) => {
     setStatementBusy(preset.key)
@@ -479,100 +469,6 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     }
   }
 
-  /* ── ADV-06: متن صورتحساب فارسی برای اشتراک ── */
-  const buildShareText = () => {
-    const lines: string[] = []
-    lines.push(`🧾 صورتحساب «${p.name}»`)
-    lines.push(`تاریخ: ${formatJalaliWithWeekday(new Date())}`)
-    lines.push(SHARE_SEPARATOR)
-    // مانده اولیه (حساب قدیمی) — اگر ثبت شده باشد جداگانه ذکر می‌شود
-    if ((p.openingBalance ?? 0) !== 0) {
-      const ob = p.openingBalance
-      lines.push(
-        ob > 0
-          ? `مانده اولیه: ${formatToman(ob, false)} تومان (طلب اولیه)`
-          : `مانده اولیه: ${formatToman(Math.abs(ob), false)} تومان (بدهی اولیه)`
-      )
-    }
-    if (balance > 0) {
-      lines.push(`مانده حساب: ${formatToman(balance, false)} تومان (طلب کاربر)`)
-    } else if (balance < 0) {
-      lines.push(`مانده حساب: ${formatToman(Math.abs(balance), false)} تومان (بستانکار)`)
-    } else {
-      lines.push("مانده حساب: تسویه کامل ✓")
-    }
-    lines.push(SHARE_SEPARATOR)
-    lines.push("آخرین تراکنش‌ها:")
-    const txns = [
-      ...data.invoices.map((inv) => ({
-        at: new Date(inv.date).getTime(),
-        line: `• فاکتور ${toPersianDigits(inv.number)} — ${formatJalaliShort(new Date(inv.date))} — ${formatToman(inv.total, false)} تومان (${inv.type === "SALE" ? "فروش" : "خرید"})`,
-      })),
-      ...data.settlements.map((s) => ({
-        at: new Date(s.date).getTime(),
-        line: `• تسویه — ${formatJalaliShort(new Date(s.date))} — ${formatToman(s.amount, false)} تومان (${s.direction === "RECEIVE" ? "دریافت" : "پرداخت"}${s.method === "CASH" ? " نقدی" : " چکی"})`,
-      })),
-      ...data.checks.map((c) => ({
-        at: new Date(c.dueDate).getTime(),
-        line: `• چک${c.serial ? ` ${toPersianDigits(c.serial)}` : ""} — ${formatJalaliShort(new Date(c.dueDate))} — ${formatToman(c.amount, false)} تومان (${c.direction === "RECEIVE" ? "دریافت" : "پرداخت"})`,
-      })),
-    ].sort((a, b) => b.at - a.at)
-    if (txns.length === 0) {
-      lines.push("• تراکنشی ثبت نشده است")
-    } else {
-      lines.push(...txns.slice(0, 5).map((t) => t.line))
-    }
-    lines.push(SHARE_SEPARATOR)
-    lines.push("ارسال شده با حساب‌یار 🌿")
-    return lines.join("\n")
-  }
-
-  /** بازکردن لینک خارجی — داخل مینی‌اپ تلگرام با openLink بومی، وگرنه window.open */
-  const openExternal = (url: string) => {
-    const tg = webApp as unknown as { openLink?: (url: string) => void } | null
-    if (typeof tg?.openLink === "function") {
-      try {
-        tg.openLink(url)
-        return
-      } catch {
-        /* افتادن به window.open */
-      }
-    }
-    window.open(url, "_blank", "noopener,noreferrer")
-  }
-
-  const waPhone = p.phone ? normalizeWaPhone(p.phone) : null
-
-  const shareWhatsApp = () => {
-    const text = buildShareText()
-    const base = waPhone ? `https://wa.me/${waPhone}` : "https://wa.me/"
-    setShareSheet(false)
-    openExternal(`${base}?text=${encodeURIComponent(text)}`)
-  }
-
-  const shareSystem = async () => {
-    const text = buildShareText()
-    setShareSheet(false)
-    try {
-      await navigator.share({ text })
-    } catch (e) {
-      // لغو توسط کاربر (AbortError) بی‌صدا نادیده گرفته می‌شود
-      if ((e as DOMException)?.name !== "AbortError") {
-        toast.error("اشتراک‌گذاری سیستمی ناموفق بود")
-      }
-    }
-  }
-
-  const shareCopy = async () => {
-    const text = buildShareText()
-    setShareSheet(false)
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success("متن صورتحساب کپی شد")
-    } catch {
-      toast.error("کپی متن ناموفق بود")
-    }
-  }
 
   /* ── ADV-04: افزودن تصویر به گالری شخص ── */
   const onPickImages = async (files: FileList | null) => {
@@ -668,10 +564,10 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       {/* کارت شخص — در دسکتاپ ستون ثابت کنار فهرست‌ها */}
       <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-card lg:sticky lg:top-6">
         <div className="flex items-center gap-3.5">
-          <BalanceAvatar role={p.role} balance={balance} maxAbs={Math.max(Math.abs(balance), 1)} size={64} />
+          <BalanceAvatar role={p.role} balance={balance} openDays={data.openDays} size={64} />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-extrabold sm:text-lg">{p.name}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[0.65rem] text-muted-foreground">
+            <h1 className="truncate text-lg font-extrabold sm:text-xl">{p.name}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-caption text-muted-foreground">
               <RoleBadge role={p.role} />
               {p.company && <span className="truncate">{p.company}</span>}
             </div>
@@ -703,25 +599,37 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         <div
           className={cn(
             "mt-4 rounded-2xl px-4 py-3.5",
-            balance > 0 ? "bg-warning/10" : balance < 0 ? "bg-destructive/10" : "bg-income/10"
+            balance > 0 ? "bg-warning/10" : balance < 0 ? "bg-purchase/8" : "bg-income/10"
           )}
         >
-          <div
-            className={cn(
-              "text-[0.7rem] font-bold",
-              balance > 0 ? "text-warning" : balance < 0 ? "text-destructive" : "text-income"
+          <div className="flex items-center justify-between gap-2">
+            <div
+              className={cn(
+                "text-caption font-bold",
+                balance > 0 ? "text-warning-ink" : balance < 0 ? "text-purchase" : "text-income"
+              )}
+            >
+              {balance > 0 ? "به شما بدهکار است" : balance < 0 ? "شما به او بدهکارید" : "حساب تسویه است"}
+            </div>
+            {data.openDays != null && (
+              <span
+                className={cn(
+                  "nums rounded-full px-2 py-0.5 text-micro font-bold",
+                  data.openDays > 30 ? "bg-destructive text-white" : "bg-card/70 text-muted-foreground"
+                )}
+              >
+                {data.openDays > 30 ? `${formatOpenDays(data.openDays)} بدون تسویه` : `باز از ${formatOpenDays(data.openDays)} پیش`}
+              </span>
             )}
-          >
-            {balance > 0 ? "طلب ما از این شخص" : balance < 0 ? "بدهی ما به این شخص" : "تسویه کامل ✓"}
           </div>
           <div
             className={cn(
               "nums mt-0.5 text-2xl font-black leading-tight",
-              balance > 0 ? "text-warning" : balance < 0 ? "text-destructive" : "text-income"
+              balance > 0 ? "text-warning-ink" : balance < 0 ? "text-purchase" : "text-income"
             )}
           >
             {balance !== 0 ? formatToman(Math.abs(balance), false) : "—"}
-            {balance !== 0 && <span className="ms-1 text-xs font-semibold opacity-70">تومان</span>}
+            {balance !== 0 && <span className="ms-1 text-label font-semibold opacity-70">تومان</span>}
           </div>
           {monthlyVolume.some((v) => v > 0) && (
             <div className="mt-2">
@@ -730,7 +638,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                 color={balance > 0 ? "var(--warning)" : balance < 0 ? "var(--role-supplier)" : "var(--income)"}
                 height={30}
               />
-              <div className="mt-0.5 text-[0.58rem] text-muted-foreground">گردش مبادلات ۶ ماه اخیر</div>
+              <div className="mt-0.5 text-micro text-muted-foreground">گردش مبادلات ۶ ماه اخیر</div>
             </div>
           )}
         </div>
@@ -743,9 +651,9 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
             { label: "چک در جریان", value: `${toPersianDigits(pendingChecks.length)} فقره`, tone: "var(--hue-checks)" },
           ].map((st) => (
             <div key={st.label} className="rounded-xl bg-muted/50 px-1 py-2">
-              <div className="truncate text-[0.58rem] text-muted-foreground">{st.label}</div>
+              <div className="truncate text-micro text-muted-foreground">{st.label}</div>
               <div
-                className="nums mt-0.5 truncate text-[0.74rem] font-extrabold"
+                className="nums mt-0.5 truncate text-label font-extrabold"
                 style={{ color: `color-mix(in srgb, ${st.tone} 85%, black)` }}
               >
                 {st.value}
@@ -757,7 +665,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         {/* مانده اولیه (حساب قدیمی) — جزء تراز بالا لحاظ شده */}
         {(p.openingBalance ?? 0) !== 0 && (
           <div className="mt-2 flex items-center justify-between rounded-2xl bg-muted/60 px-4 py-2.5">
-            <span className="text-[0.7rem] text-muted-foreground">
+            <span className="text-caption text-muted-foreground">
               شامل مانده اولیه ({p.openingBalance > 0 ? "طلب اولیه" : "بدهی اولیه"})
             </span>
             <span className="nums text-xs font-bold text-muted-foreground">
@@ -768,40 +676,37 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         )}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
+          {/* اقدام اصلی بر اساس جهت حساب پررنگ است (نسخهٔ ۷) */}
           <Button
             onClick={() => openSettle("RECEIVE")}
-            variant="outline"
-            className="h-11 rounded-2xl border-warning/40 text-xs font-bold text-warning hover:bg-warning/10"
+            variant={balance >= 0 ? "default" : "outline"}
+            className={cn("h-12 rounded-2xl text-label font-bold", balance < 0 && "hover:bg-accent")}
           >
             <HandCoins className="size-4" />
-            دریافت از شخص
+            دریافت وجه
           </Button>
           <Button
             onClick={() => openSettle("PAY")}
-            variant="outline"
-            className="h-11 rounded-2xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10"
+            variant={balance < 0 ? "default" : "outline"}
+            className={cn(
+              "h-12 rounded-2xl text-label font-bold",
+              balance < 0 ? "bg-purchase hover:bg-purchase/90" : "text-purchase hover:bg-purchase/8 hover:text-purchase"
+            )}
           >
             <HandCoins className="size-4" />
-            پرداخت به شخص
+            پرداخت وجه
           </Button>
         </div>
 
-        {/* صورتحساب PDF با لوگو + اشتراک متنی (ADV-06) */}
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        {/* صورتحساب PDF با لوگو */}
+        <div className="mt-2">
           <Button
             onClick={() => setStatementSheet(true)}
-            className="h-11 rounded-2xl text-xs font-bold shadow-fab"
+            variant="ghost"
+            className="h-11 w-full rounded-2xl text-label font-bold text-primary hover:bg-primary/8 hover:text-primary"
           >
             <FileDown className="size-4" />
-            صورتحساب PDF
-          </Button>
-          <Button
-            onClick={() => setShareSheet(true)}
-            variant="outline"
-            className="h-11 rounded-2xl border-primary/30 text-xs font-bold text-primary hover:bg-primary/10"
-          >
-            <MessageCircle className="size-4" />
-            اشتراک متنی
+            صورتحساب PDF با بازهٔ تاریخ
           </Button>
         </div>
       </div>
@@ -810,30 +715,29 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       <div className="min-w-0 space-y-4">
       {/* فاکتورها */}
       <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-          <FileText className="size-4 text-primary" />
-          فاکتورها ({toPersianDigits(data.invoices.length)})
+        <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
+          فاکتورها <span className="nums text-caption font-semibold text-muted-foreground">{toPersianDigits(data.invoices.length)}</span>
         </div>
-        <div className="space-y-2">
+        <div className="divide-y divide-border/60">
           {data.invoices.map((inv) => (
             <Link
               key={inv.id}
               href={`/invoices/${inv.id}`}
-              className="flex items-center gap-3 rounded-2xl border border-border/60 px-3 py-2.5 transition-colors hover:bg-accent/50"
+              className="-mx-1 flex items-center gap-3 rounded-xl px-1 py-2.5 transition-colors hover:bg-accent/50"
             >
               <InvoiceTypeMark type={inv.type} size={38} />
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold">
-                  {inv.type === "SALE" ? "فروش" : "خرید"} شماره {toPersianDigits(inv.number)}
+                <div className="text-sm font-bold">
+                  {inv.type === "SALE" ? "فروش" : "خرید"} #{toPersianDigits(inv.number)}
                 </div>
-                <div className="nums text-[0.62rem] text-muted-foreground">
+                <div className="nums text-caption text-muted-foreground">
                   {formatJalaliShort(new Date(inv.date))}
                 </div>
               </div>
               <div className="shrink-0 text-end">
-                <div className="nums text-xs font-extrabold">{formatToman(inv.total, false)}</div>
+                <div className="nums text-sm font-extrabold">{formatToman(inv.total, false)}</div>
                 {inv.credit > 0 && (
-                  <div className="nums text-[0.6rem] font-bold text-warning">
+                  <div className="nums text-micro font-bold text-warning-ink">
                     مانده {formatTomanCompact(inv.credit)}
                   </div>
                 )}
@@ -850,32 +754,31 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       {data.checks.length > 0 && (
       <>
       <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-          <CheckSquare2 className="size-4 text-primary" />
-          چک‌ها ({toPersianDigits(data.checks.length)})
+        <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
+          چک‌ها <span className="nums text-caption font-semibold text-muted-foreground">{toPersianDigits(data.checks.length)}</span>
         </div>
-        <div className="space-y-2">
+        <div className="divide-y divide-border/60">
           {data.checks.map((c) => (
             <Link
               key={c.id}
               href="/checks"
-              className="flex items-center gap-2.5 rounded-2xl border border-border/60 px-3 py-2.5 transition-colors hover:bg-accent/50"
+              className="-mx-1 flex items-center gap-2.5 rounded-xl px-1 py-2.5 transition-colors hover:bg-accent/50"
             >
               <BankLogo bankKey={c.bankKey} size={34} />
               <div className="min-w-0 flex-1">
                 <div className="nums text-xs font-bold">{formatToman(c.amount, false)}</div>
-                <div className="nums text-[0.62rem] text-muted-foreground">
+                <div className="nums text-caption text-muted-foreground">
                   {getBank(c.bankKey).name} • سررسید {formatJalaliShort(new Date(c.dueDate))}
                 </div>
               </div>
               <CheckDirectionBadge direction={c.direction} size="sm" />
               <span
                 className={cn(
-                  "shrink-0 rounded-md px-1.5 py-px text-[0.6rem] font-bold",
+                  "shrink-0 rounded-md px-1.5 py-px text-micro font-bold",
                   c.status === "CASHED"
                     ? "bg-income/10 text-income"
                     : c.status === "PENDING"
-                      ? "bg-primary/10 text-primary"
+                      ? "bg-warning/15 text-warning-ink"
                       : "bg-destructive/10 text-destructive"
                 )}
               >
@@ -906,10 +809,10 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2 text-xs"
             >
               <div>
-                <span className={cn("font-bold", s.direction === "RECEIVE" ? "text-income" : "text-destructive")}>
+                <span className={cn("font-bold", s.direction === "RECEIVE" ? "text-income" : "text-purchase")}>
                   {s.direction === "RECEIVE" ? "دریافت" : "پرداخت"} {s.method === "CASH" ? "نقدی" : "چکی"}
                 </span>
-                <span className="nums ms-2 text-[0.62rem] text-muted-foreground">
+                <span className="nums ms-2 text-caption text-muted-foreground">
                   {formatJalaliShort(new Date(s.date))}
                 </span>
               </div>
@@ -930,7 +833,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           <div className="flex min-w-0 items-center gap-2 text-sm font-bold">
             <Images className="size-4 shrink-0 text-primary" />
             <span className="truncate">تصاویر</span>
-            <span className="nums shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-bold text-muted-foreground">
+            <span className="nums shrink-0 rounded-full bg-muted px-2 py-0.5 text-caption font-bold text-muted-foreground">
               {toPersianDigits(attachments.length)}
             </span>
             {attLoading && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
@@ -981,7 +884,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   ) : (
                     <div className="flex size-full flex-col items-center justify-center gap-1 p-2 text-center">
                       <FileText className="size-6 text-muted-foreground" />
-                      <span className="w-full truncate text-[0.6rem] text-muted-foreground">{att.filename}</span>
+                      <span className="w-full truncate text-micro text-muted-foreground">{att.filename}</span>
                     </div>
                   )}
                   <button
@@ -1027,99 +930,22 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           </Button>
         }
       >
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">نام *</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">موبایل</label>
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              inputMode="tel"
-              dir="ltr"
-              className="nums text-end"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">شرکت</label>
-            <Input value={company} onChange={(e) => setCompany(e.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">آدرس مغازه</label>
-            <Input value={shopAddress} onChange={(e) => setShopAddress(e.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">نقش</label>
-            <div className="flex gap-1.5">
-              {(
-                [
-                  { key: "CUSTOMER", label: "مشتری" },
-                  { key: "SUPPLIER", label: "فروشنده" },
-                  { key: "BOTH", label: "هردو" },
-                ] as const
-              ).map((r) => (
-                <button
-                  key={r.key}
-                  type="button"
-                  onClick={() => setRole(r.key)}
-                  className={cn(
-                    "flex-1 rounded-xl border py-2 text-xs font-bold transition-colors",
-                    role === r.key
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground"
-                  )}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* ── ویرایش مانده اولیه (حساب قدیمی) ── */}
-          <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-              مانده اولیه (حساب قبلی)
-            </label>
-            <div className="flex gap-1.5">
-              {(
-                [
-                  { key: "none", label: "بدون مانده" },
-                  { key: "receivable", label: "طلب اولیه" },
-                  { key: "payable", label: "بدهی اولیه" },
-                ] as const
-              ).map((k) => (
-                <button
-                  key={k.key}
-                  type="button"
-                  onClick={() => setOpeningKind(k.key)}
-                  className={cn(
-                    "flex-1 rounded-xl border py-2 text-[0.7rem] font-bold transition-colors",
-                    openingKind === k.key
-                      ? k.key === "receivable"
-                        ? "border-warning bg-warning/10 text-warning"
-                        : k.key === "payable"
-                          ? "border-destructive bg-destructive/10 text-destructive"
-                          : "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground"
-                  )}
-                >
-                  {k.label}
-                </button>
-              ))}
-            </div>
-            {openingKind !== "none" && (
-              <div className="mt-2">
-                <AmountInput value={openingAmount} onChange={setOpeningAmount} showWords={false} />
-                <p className="mt-1 text-[0.62rem] text-muted-foreground">
-                  {openingKind === "receivable"
-                    ? "این شخص از قبل به شما بدهکار است (طلب شما)"
-                    : "شما از قبل به این شخص بدهکار هستید"} — در تراز شخص لحاظ می‌شود
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+          <PersonFields
+          name={name}
+            setName={setName}
+            phone={phone}
+            setPhone={setPhone}
+            company={company}
+            setCompany={setCompany}
+            shopAddress={shopAddress}
+            setShopAddress={setShopAddress}
+            openingKind={openingKind}
+            setOpeningKind={setOpeningKind}
+            openingAmount={openingAmount}
+            setOpeningAmount={setOpeningAmount}
+            role={role}
+            setRole={setRole}
+          />
       </BottomSheet>
 
       {/* ───────── شیت تسویه ───────── */}
@@ -1159,7 +985,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
               مبلغ (تومان) *
             </label>
             <AmountInput
@@ -1171,7 +997,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               <button
                 type="button"
                 onClick={() => setAmount(Math.abs(balance))}
-                className="mt-1.5 text-[0.7rem] font-medium text-primary hover:underline"
+                className="mt-1.5 text-caption font-medium text-primary hover:underline"
               >
                 انتخاب کل تراز ({formatToman(Math.abs(balance), false)})
               </button>
@@ -1180,7 +1006,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
 
           {method === "CASH" ? (
             <div>
-              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              <label className="mb-1.5 block text-label font-bold text-foreground/80">
                 حساب بانکی
               </label>
               <button
@@ -1201,7 +1027,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           ) : (
             <>
               <div>
-                <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+                <label className="mb-1.5 block text-label font-bold text-foreground/80">
                   بانک چک *
                 </label>
                 <button
@@ -1211,12 +1037,12 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                 >
                   <BankLogo bankKey={checkBank} size={32} />
                   <span className="flex-1 text-start text-sm">{getBank(checkBank).name}</span>
-                  <span className="text-[0.65rem] text-muted-foreground">تغییر</span>
+                  <span className="text-caption text-muted-foreground">تغییر</span>
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">سریال</label>
+                  <label className="mb-1.5 block text-label font-bold text-foreground/80">سریال</label>
                   <input
                     value={checkSerial}
                     onChange={(e) => setCheckSerial(e.target.value)}
@@ -1225,7 +1051,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+                  <label className="mb-1.5 block text-label font-bold text-foreground/80">
                     سررسید *
                   </label>
                   <JalaliDateField value={checkDue} onChange={setCheckDue} />
@@ -1249,7 +1075,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   </span>
                   <span className="flex-1">
                     <span className="block text-xs font-bold">چک ثبت شده است</span>
-                    <span className="mt-0.5 block text-[0.62rem] leading-4 text-muted-foreground">
+                    <span className="mt-0.5 block text-caption leading-4 text-muted-foreground">
                       {direction === "RECEIVE" ? "به نام خودتان در بانک ثبت شده" : "به نام این شخص ثبت شده"}
                     </span>
                   </span>
@@ -1257,7 +1083,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                 {checkRegistered && (
                   <div className="mt-3 grid grid-cols-2 gap-2.5 border-t border-dashed pt-3">
                     <div>
-                      <label className="mb-1.5 block text-[0.68rem] font-medium text-muted-foreground">
+                      <label className="mb-1.5 block text-label font-bold text-foreground/80">
                         نام صاحب حساب *
                       </label>
                       <input
@@ -1268,7 +1094,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                       />
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-[0.68rem] font-medium text-muted-foreground">
+                      <label className="mb-1.5 block text-label font-bold text-foreground/80">
                         کد ملی (اختیاری)
                       </label>
                       <input
@@ -1284,7 +1110,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                 )}
               </div>
 
-              <p className="rounded-xl bg-primary/5 px-3 py-2 text-[0.65rem] text-muted-foreground">
+              <p className="rounded-xl bg-primary/5 px-3 py-2 text-caption text-muted-foreground">
                 چک دریافت‌شده از مشتری یا داده‌شده به فروشنده؛ ربات تلگرام قبل از سررسید خبر می‌دهد.
                 چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود.
               </p>
@@ -1337,7 +1163,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         </div>
       </BottomSheet>
 
-      {/* ───────── شیت اشتراک صورتحساب (ADV-06) ───────── */}
+      {/* ───────── شیت صورتحساب PDF ───────── */}
       <BottomSheet
         open={statementSheet}
         onClose={() => setStatementSheet(false)}
@@ -1368,57 +1194,11 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   <FileDown className="size-4 text-primary" />
                 )}
               </span>
-              <span className="text-[0.68rem] text-muted-foreground">{pr.sub}</span>
+              <span className="text-caption text-muted-foreground">{pr.sub}</span>
             </motion.button>
           ))}
         </div>
       </BottomSheet>
-      <BottomSheet
-        open={shareSheet}
-        onClose={() => setShareSheet(false)}
-        title="اشتراک گذاری صورتحساب"
-        description={p.name}
-      >
-        <div className="space-y-3">
-          {/* پیش‌نمایش متن */}
-          <pre
-            dir="rtl"
-            className="max-h-48 overflow-y-auto rounded-2xl bg-muted/50 px-3 py-3 text-[0.7rem] leading-relaxed text-muted-foreground whitespace-pre-wrap"
-          >
-            {buildShareText()}
-          </pre>
-          <div className="space-y-2">
-            <SheetOption
-              icon={<MessageCircle className="size-5" />}
-              title="ارسال با WhatsApp"
-              subtitle={
-                !p.phone
-                  ? "شماره ثبت نشده — مخاطب را در واتس‌اپ انتخاب کنید"
-                  : waPhone
-                    ? `به شماره ${toPersianDigits(toLatinDigits(p.phone))}`
-                    : "شماره نامعتبر — مخاطب را در واتس‌اپ انتخاب کنید"
-              }
-              tone="primary"
-              onClick={shareWhatsApp}
-            />
-            {canSystemShare && (
-              <SheetOption
-                icon={<Share2 className="size-5" />}
-                title="اشتراک‌گذاری سیستمی"
-                subtitle="اشتراک بومی گوشی (تلگرام، پیامک و…)"
-                onClick={() => shareSystem()}
-              />
-            )}
-            <SheetOption
-              icon={<Copy className="size-5" />}
-              title="کپی متن"
-              subtitle="متن صورتحساب در کلیپ‌بورد کپی می‌شود"
-              onClick={() => shareCopy()}
-            />
-          </div>
-        </div>
-      </BottomSheet>
-
       {/* پیش‌نمایش تمام‌صفحه تصویر (ADV-04) */}
       <Dialog
         open={!!preview}

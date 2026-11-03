@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       return fail("برای تأیید، مقدار confirm=WIPE را ارسال کنید", 400)
     }
     await db.$transaction([
-      // پیوست‌های تصویری اول پاک شوند — چک/فاکتور/شخص/جنس همه می‌روند و پیوست یتیم نمی‌ماند
+      // پیوست‌های تصویری اول پاک شوند — چک/فاکتور/شخص/کالا همه می‌روند و پیوست یتیم نمی‌ماند
       db.attachment.deleteMany(),
       db.notificationLog.deleteMany(),
       db.transaction.deleteMany(),

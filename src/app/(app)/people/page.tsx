@@ -2,6 +2,8 @@
 
 /**
  * لیست اشخاص — مشتری/تأمین‌کننده با تراز طلب/بدهی + افزودن سریع
+ * مرتب‌سازی: بیشترین مانده / بیشترین فروش / بیشترین خرید / قدیمی‌ترین مانده
+ * حلقهٔ آواتار = چند روز است حساب باز مانده (بیش از ۳۰ روز قرمز)
  */
 import { Suspense, useState } from "react"
 import Link from "next/link"
@@ -22,12 +24,14 @@ import {
   Phone,
 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
-import { formatTomanCompact, toLatinDigits } from "@/lib/money"
+import { formatTomanCompact, toLatinDigits, toPersianDigits } from "@/lib/money"
+import { PersonFields } from "@/components/people/person-fields"
+import { EmptyState } from "@/components/ui/empty-state"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AmountInput } from "@/components/ui/amount-input"
-import { BalanceAvatar, RoleBadge } from "@/components/ui/role-avatar"
+import { BalanceAvatar, BalanceTag, ROLE_LABELS, formatOpenDays } from "@/components/ui/role-avatar"
 import { Segmented } from "@/components/ui/segmented"
 import { SwipeRow } from "@/components/ui/swipe-row"
 import { cn } from "@/lib/utils"
@@ -40,6 +44,19 @@ interface Person {
   shopAddress: string | null
   role: string
   balance: number
+  salesTotal: number
+  purchaseTotal: number
+  /** روزهای باز ماندن مانده (null = تسویه یا بدون فاکتور مانده‌دار) */
+  openDays: number | null
+}
+
+type SortKey = "balance" | "sales" | "purchases" | "age"
+
+const SORTS: Record<SortKey, { label: string; compare: (a: Person, b: Person) => number }> = {
+  balance: { label: "بیشترین مانده", compare: (a, b) => Math.abs(b.balance) - Math.abs(a.balance) },
+  sales: { label: "بیشترین فروش", compare: (a, b) => b.salesTotal - a.salesTotal },
+  purchases: { label: "بیشترین خرید", compare: (a, b) => b.purchaseTotal - a.purchaseTotal },
+  age: { label: "قدیمی‌ترین", compare: (a, b) => (b.openDays ?? -1) - (a.openDays ?? -1) },
 }
 
 function PeoplePageInner() {
@@ -52,6 +69,7 @@ function PeoplePageInner() {
     const f = searchParams.get("filter")
     return f === "debtors" || f === "creditors" ? f : "all"
   })
+  const [sort, setSort] = useState<SortKey>("balance")
   const [addSheet, setAddSheet] = useState(false)
   const [exporting, setExporting] = useState(false)
 
@@ -96,69 +114,63 @@ function PeoplePageInner() {
   let people = data?.people ?? []
   if (balanceFilter === "debtors") people = people.filter((p) => p.balance > 0)
   if (balanceFilter === "creditors") people = people.filter((p) => p.balance < 0)
-  const maxAbsBalance = Math.max(0, ...(data?.people ?? []).map((p) => Math.abs(p.balance)))
+  // رتبه‌بندی خرید/فروش فقط کسانی که واقعاً معامله داشته‌اند؛ «قدیمی‌ترین» فقط مانده‌دارها
+  if (sort === "sales") people = people.filter((p) => p.salesTotal > 0)
+  if (sort === "purchases") people = people.filter((p) => p.purchaseTotal > 0)
+  if (sort === "age") people = people.filter((p) => p.openDays != null)
+  people = [...people].sort(SORTS[sort].compare)
 
   const totalReceivable = people.reduce((s, p) => s + Math.max(0, p.balance), 0)
   const totalPayable = -people.reduce((s, p) => s + Math.min(0, p.balance), 0)
+  const debtorCount = people.filter((p) => p.balance > 0).length
+  const creditorCount = people.filter((p) => p.balance < 0).length
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">اشخاص</h1>
+        <h1 className="hidden text-2xl font-extrabold tracking-tight lg:block">اشخاص</h1>
         <div className="flex items-center gap-2">
           <Button
             onClick={() => downloadCsv("people")}
             variant="outline"
             disabled={exporting}
-            className="h-10 rounded-2xl px-4 text-xs font-bold hover:bg-accent"
+            className="h-10 rounded-xl px-4 text-label font-bold hover:bg-accent"
             aria-label="خروجی اکسل اشخاص"
           >
             {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
             <span className="hidden sm:inline">اکسل</span>
           </Button>
-          <Button onClick={() => setAddSheet(true)} className="h-10 rounded-2xl px-4 text-xs font-bold shadow-fab">
+          <Button onClick={() => setAddSheet(true)} className="h-10 rounded-xl px-4 text-label font-bold">
             <Plus className="size-4" />
             شخص جدید
           </Button>
         </div>
       </div>
 
-      {/* خلاصه طلب/بدهی — لمس = فیلتر */}
-      <div className="mb-4 grid grid-cols-2 gap-3">
+      {/* خلاصه طلب/بدهی — یک کارت دوتکه؛ لمس = فیلتر (نسخهٔ ۷) */}
+      <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
         {(
           [
-            { key: "debtors", label: "طلب ما از اشخاص", value: totalReceivable, tone: "var(--warning)", icon: HandCoins },
-            { key: "creditors", label: "بدهی ما به اشخاص", value: totalPayable, tone: "var(--role-supplier)", icon: Building2 },
+            { key: "debtors", label: `طلب شما از ${toPersianDigits(debtorCount)} نفر`, value: totalReceivable, cls: "text-warning-ink" },
+            { key: "creditors", label: `بدهی شما به ${toPersianDigits(creditorCount)} نفر`, value: totalPayable, cls: "text-purchase" },
           ] as const
         ).map((c, i) => (
-          <motion.button
+          <button
             key={c.key}
             type="button"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.06, type: "spring", stiffness: 380, damping: 30 }}
             onClick={() => setBalanceFilter(balanceFilter === c.key ? "all" : c.key)}
-            style={{ ["--tile" as string]: c.tone }}
+            aria-pressed={balanceFilter === c.key}
             className={cn(
-              "relative overflow-hidden rounded-3xl border bg-card p-3.5 text-start shadow-card transition-all active:scale-[0.98]",
-              balanceFilter === c.key
-                ? "border-[color:var(--tile)] ring-2 ring-[color:color-mix(in_srgb,var(--tile)_18%,transparent)]"
-                : "border-border/70"
+              "px-4 py-3 text-start transition-colors hover:bg-accent/40",
+              i > 0 && "border-s border-border/80",
+              balanceFilter === c.key && "bg-accent/60"
             )}
           >
-            <div className="flex items-center gap-2 text-[0.68rem] font-bold text-muted-foreground">
-              <span className="icon-soft grid size-6 place-items-center rounded-lg">
-                <c.icon className="size-3.5" />
-              </span>
-              {c.label}
-            </div>
-            <p className="nums mt-2 text-base font-extrabold sm:text-lg" style={{ color: "color-mix(in srgb, var(--tile) 82%, black)" }}>
+            <div className="text-label font-semibold text-muted-foreground">{c.label}</div>
+            <p className={cn("nums mt-0.5 text-[1.2rem] font-extrabold tracking-tight", c.cls)}>
               {formatTomanCompact(c.value)}
             </p>
-            <div className="mt-0.5 text-[0.6rem] text-muted-foreground">
-              {balanceFilter === c.key ? "فیلتر فعال — لمس برای حذف" : "لمس برای دیدن فهرست"}
-            </div>
-          </motion.button>
+          </button>
         ))}
       </div>
 
@@ -169,7 +181,7 @@ function PeoplePageInner() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="نام، موبایل، شرکت یا آدرس…"
+            placeholder="جستجوی نام، موبایل، شرکت یا آدرس"
             className="field ps-10"
           />
         </div>
@@ -180,6 +192,18 @@ function PeoplePageInner() {
             { key: "ALL", label: "همه" },
             { key: "CUSTOMER", label: "مشتری‌ها", tone: "var(--role-customer)" },
             { key: "SUPPLIER", label: "فروشنده‌ها", tone: "var(--role-supplier)" },
+          ]}
+          className="sm:max-w-md"
+        />
+        <Segmented
+          value={sort}
+          onChange={setSort}
+          size="sm"
+          options={[
+            { key: "balance", label: "بیشترین مانده" },
+            { key: "sales", label: "بیشترین فروش", tone: "var(--sale)" },
+            { key: "purchases", label: "بیشترین خرید", tone: "var(--purchase)" },
+            { key: "age", label: "قدیمی‌ترین", tone: "var(--destructive)" },
           ]}
           className="sm:max-w-md"
         />
@@ -194,7 +218,7 @@ function PeoplePageInner() {
               <button
                 type="button"
                 onClick={() => setBalanceFilter("all")}
-                className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-[0.68rem] font-bold text-background"
+                className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-caption font-bold text-background"
               >
                 {balanceFilter === "debtors" ? "فقط بدهکاران به ما" : "فقط طلبکاران از ما"}
                 <span className="opacity-60">✕</span>
@@ -210,22 +234,33 @@ function PeoplePageInner() {
           <Loader2 className="size-8 animate-spin text-primary" />
         </div>
       ) : people.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-border bg-card p-10 text-center">
-          <Users className="mx-auto size-10 text-muted-foreground/40" />
-          <p className="mt-3 text-sm font-bold">{q || role !== "ALL" || balanceFilter !== "all" ? "کسی با این فیلتر نیست" : "شخصی ثبت نشده"}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            هنگام ثبت فاکتور هم می‌توانید سریع شخص اضافه کنید
-          </p>
-        </div>
+        <EmptyState
+          icon={q ? Search : Users}
+          title={q ? `کسی با «${q}» پیدا نشد` : role !== "ALL" || balanceFilter !== "all" ? "کسی با این فیلتر نیست" : "شخصی ثبت نشده"}
+          description="هنگام ثبت فاکتور هم می‌توانید سریع شخص اضافه کنید."
+          actionLabel={q || role !== "ALL" || balanceFilter !== "all" ? undefined : "افزودن شخص"}
+          onAction={q || role !== "ALL" || balanceFilter !== "all" ? undefined : () => setAddSheet(true)}
+          secondaryLabel={q || role !== "ALL" || balanceFilter !== "all" ? "پاک کردن فیلترها" : undefined}
+          onSecondary={
+            q || role !== "ALL" || balanceFilter !== "all"
+              ? () => {
+                  setQ("")
+                  setRole("ALL")
+                  setBalanceFilter("all")
+                }
+              : undefined
+          }
+        />
       ) : (
-        <div className="space-y-2.5">
+        <div className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
           {people.map((p, i) => (
             <motion.div
               key={p.id}
               layout="position"
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i * 0.03, 0.3), type: "spring", stiffness: 380, damping: 32 }}
+              transition={{ delay: Math.min(i * 0.025, 0.25), type: "spring", stiffness: 380, damping: 32 }}
+              className={cn(i > 0 && "border-t border-border/60")}
             >
               <SwipeRow
                 hint={i === 0}
@@ -256,36 +291,48 @@ function PeoplePageInner() {
               >
                 <Link
                   href={`/people/${p.id}`}
-                  className="group block rounded-3xl border border-border/70 bg-card p-3.5 shadow-card transition-shadow hover:shadow-card-hover active:bg-accent/30"
+                  className="group block bg-card px-3.5 py-3 transition-colors hover:bg-accent/40 active:bg-accent/60"
                 >
                   <div className="flex items-center gap-3">
-                    <BalanceAvatar role={p.role} balance={p.balance} maxAbs={maxAbsBalance} size={48} />
+                    <BalanceAvatar role={p.role} balance={p.balance} openDays={p.openDays} size={44} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-extrabold">{p.name}</div>
-                      <div className="mt-1 flex items-center gap-1.5 text-[0.65rem] text-muted-foreground">
-                        <RoleBadge role={p.role} />
-                        {p.company && <span className="truncate">{p.company}</span>}
+                      <div className="truncate text-[0.95rem] font-bold">{p.name}</div>
+                      <div className="mt-0.5 truncate text-caption text-muted-foreground">
+                        {[ROLE_LABELS[p.role], p.company].filter(Boolean).join(" · ")}
                       </div>
                     </div>
                     <div className="shrink-0 text-end">
-                      {p.balance !== 0 ? (
+                      {sort === "sales" || sort === "purchases" ? (
                         <>
                           <div
                             className="nums text-sm font-extrabold"
-                            style={{
-                              color: `color-mix(in srgb, ${p.balance > 0 ? "var(--warning)" : "var(--role-supplier)"} 85%, black)`,
-                            }}
+                            style={{ color: sort === "sales" ? "var(--sale)" : "var(--purchase)" }}
                           >
-                            {formatTomanCompact(Math.abs(p.balance))}
+                            {formatTomanCompact(sort === "sales" ? p.salesTotal : p.purchaseTotal)}
                           </div>
-                          <div className="mt-0.5 text-[0.6rem] font-bold text-muted-foreground">
-                            {p.balance > 0 ? "طلب ما" : "بدهی ما"}
+                          <div className="mt-0.5 text-micro font-bold text-muted-foreground">
+                            <span className="nums">#{toPersianDigits(i + 1)}</span> {sort === "sales" ? "جمع فروش" : "جمع خرید"}
+                          </div>
+                        </>
+                      ) : p.balance !== 0 ? (
+                        <>
+                          <div className="nums text-[0.95rem] font-extrabold">{formatTomanCompact(Math.abs(p.balance))}</div>
+                          <div className="mt-1 flex items-center justify-end gap-1">
+                            {p.openDays != null && (
+                              <span
+                                className={cn(
+                                  "nums text-micro font-bold",
+                                  p.openDays > 30 ? "text-destructive" : "text-muted-foreground"
+                                )}
+                              >
+                                {formatOpenDays(p.openDays)}
+                              </span>
+                            )}
+                            <BalanceTag balance={p.balance} />
                           </div>
                         </>
                       ) : (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-income/10 px-2 py-0.5 text-[0.6rem] font-bold text-income">
-                          تسویه ✓
-                        </span>
+                        <BalanceTag balance={0} />
                       )}
                     </div>
                     <ChevronLeft className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:-translate-x-0.5" />
@@ -372,121 +419,27 @@ export function AddPersonSheet({
       footer={
         <Button onClick={submit} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-          ذخیره
+          ذخیرهٔ شخص
         </Button>
       }
     >
-      <div className="space-y-3">
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">نام *</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً آهنگری رحیمی" />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-            شماره موبایل (اختیاری)
-          </label>
-          <Input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            inputMode="tel"
-            dir="ltr"
-            placeholder="09…"
-            className="nums text-end"
-          />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-            اسم شرکت (اختیاری)
-          </label>
-          <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="مثلاً فنی قلندری" />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-            آدرس مغازه (اختیاری)
-          </label>
-          <Input
-            value={shopAddress}
-            onChange={(e) => setShopAddress(e.target.value)}
-            placeholder="مثلاً بازار آهن، پلاک ۴۵"
-          />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">نقش</label>
-          <div className="flex gap-1.5">
-            {(
-              [
-                { key: "CUSTOMER", label: "مشتری" },
-                { key: "SUPPLIER", label: "فروشنده" },
-                { key: "BOTH", label: "هردو" },
-              ] as const
-            ).map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                onClick={() => setRole(r.key)}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1 rounded-xl border py-2 text-xs font-bold transition-colors",
-                  role === r.key
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground"
-                )}
-              >
-                {r.key === "CUSTOMER" ? (
-                  <UserRound className="size-3.5" />
-                ) : r.key === "SUPPLIER" ? (
-                  <Building2 className="size-3.5" />
-                ) : (
-                  <UserRound className="size-3.5" />
-                )}
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* ── مانده اولیه (حساب قدیمی) ── */}
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-            مانده اولیه (حساب قبلی)
-          </label>
-          <div className="flex gap-1.5">
-            {(
-              [
-                { key: "none", label: "بدون مانده" },
-                { key: "receivable", label: "طلب اولیه" },
-                { key: "payable", label: "بدهی اولیه" },
-              ] as const
-            ).map((k) => (
-              <button
-                key={k.key}
-                type="button"
-                onClick={() => setOpeningKind(k.key)}
-                className={cn(
-                  "flex-1 rounded-xl border py-2 text-[0.7rem] font-bold transition-colors",
-                  openingKind === k.key
-                    ? k.key === "receivable"
-                      ? "border-warning bg-warning/10 text-warning"
-                      : k.key === "payable"
-                        ? "border-destructive bg-destructive/10 text-destructive"
-                        : "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground"
-                )}
-              >
-                {k.label}
-              </button>
-            ))}
-          </div>
-          {openingKind !== "none" && (
-            <div className="mt-2">
-              <AmountInput value={openingAmount} onChange={setOpeningAmount} showWords={false} />
-              <p className="mt-1 text-[0.62rem] text-muted-foreground">
-                {openingKind === "receivable"
-                  ? "این شخص از قبل به شما بدهکار است (طلب شما)"
-                  : "شما از قبل به این شخص بدهکار هستید"} — در تراز شخص لحاظ می‌شود
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      <PersonFields
+          name={name}
+          setName={setName}
+          phone={phone}
+          setPhone={setPhone}
+          company={company}
+          setCompany={setCompany}
+          shopAddress={shopAddress}
+          setShopAddress={setShopAddress}
+          openingKind={openingKind}
+          setOpeningKind={setOpeningKind}
+          openingAmount={openingAmount}
+          setOpeningAmount={setOpeningAmount}
+          role={role}
+          setRole={setRole}
+          autoFocusName
+        />
     </BottomSheet>
   )
 }

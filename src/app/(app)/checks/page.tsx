@@ -34,6 +34,7 @@ import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliWithWeekday, nowTehran, diffJalaliDays, startOfJalaliDay } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
+import { EmptyState } from "@/components/ui/empty-state"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -402,7 +403,7 @@ export default function ChecksPage() {
 
   return (
     <div>
-      <h1 className="mb-4 hidden text-lg font-extrabold lg:block lg:text-xl">چک‌ها</h1>
+      <h1 className="mb-4 hidden text-2xl font-extrabold tracking-tight lg:block">چک‌ها</h1>
 
       {/* خلاصه — دو کارت در جریان با نوار نسبت */}
       {summary && (
@@ -424,17 +425,17 @@ export default function ChecksPage() {
                 onClick={() => setDirection(direction === c.key ? "ALL" : c.key)}
                 style={{ ["--tile" as string]: c.tone }}
                 className={cn(
-                  "rounded-3xl border bg-card p-3.5 text-start shadow-card transition-all active:scale-[0.98]",
+                  "rounded-[1.15rem] border bg-card p-3.5 text-start transition-all active:scale-[0.98]",
                   direction === c.key
                     ? "border-[color:var(--tile)] ring-2 ring-[color:color-mix(in_srgb,var(--tile)_18%,transparent)]"
                     : "border-border/70"
                 )}
               >
-                <div className="flex items-center gap-2 text-[0.72rem] font-bold text-muted-foreground">
+                <div className="flex items-center gap-2 text-caption font-bold text-muted-foreground">
                   <CheckDirectionBadge direction={c.key} iconOnly />
                   {c.label}
                 </div>
-                <p className="nums mt-2 text-base font-extrabold text-[color:var(--tile)] sm:text-lg">
+                <p className="nums mt-2 text-lg font-extrabold">
                   {formatTomanCompact(c.value)}
                 </p>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -482,184 +483,189 @@ export default function ChecksPage() {
           <Loader2 className="size-8 animate-spin text-primary" />
         </div>
       ) : checks.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-border bg-card p-10 text-center">
-          <CheckSquare2 className="mx-auto size-10 text-muted-foreground/40" />
-          <p className="mt-3 text-sm font-bold">چکی در این دسته نیست</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            چک‌ها هنگام ثبت فاکتور یا تسویه چکی ساخته می‌شوند
-          </p>
-        </div>
+        <EmptyState
+          icon={CheckSquare2}
+          title="چکی در این دسته نیست"
+          description="چک‌ها هنگام ثبت فاکتور یا تسویهٔ چکی ساخته می‌شوند."
+        />
       ) : (
-        <div className="space-y-2.5">
-          {checks.map((c, i) => {
-            const daysLeft = diffJalaliDays(today, new Date(c.dueDate))
-            const overdue = c.status === "PENDING" && daysLeft < 0
-            const soon = c.status === "PENDING" && daysLeft >= 0 && daysLeft <= 3
-            const swipeable = c.status === "PENDING"
-            return (
-              <motion.div
-                key={c.id}
-                layout="position"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.035, 0.35), type: "spring", stiffness: 380, damping: 32 }}
-              >
-              <SwipeRow
-                hint={i === 0 && swipeable}
-                disabled={!swipeable}
-                trailing={[
-                  {
-                    key: "cash",
-                    label: c.direction === "RECEIVED" ? "پاس شد" : "پرداخت شد",
-                    icon: <CheckCircle2 className="size-4" />,
-                    color: "var(--income)",
-                    onAction: () => {
-                      if (!c.isRegistered) {
-                        toast.error("چک ثبت‌نشده قابل پاس شدن نیست — اول ثبتش کنید")
-                        setActionSheet(c)
-                        return
-                      }
-                      setActionSheet(c)
-                      setAccountSheet(true)
-                    },
-                  },
-                ]}
-                leading={[
-                  {
-                    key: "bounce",
-                    label: "برگشت",
-                    icon: <Ban className="size-4" />,
-                    color: "var(--destructive)",
-                    onAction: async () => {
-                      if (!c.isRegistered) {
-                        toast.error("چک ثبت‌نشده قابل برگشت نیست — اول ثبتش کنید")
-                        setActionSheet(c)
-                        return
-                      }
-                      const okBounce = await confirm({
-                        title: "برگشت چک",
-                        description: `چک ${formatToman(c.amount)} «${c.person.name}» برگشت خورده؟ مبلغ به حساب شخص برمی‌گردد.`,
-                        confirmText: "بله، برگشت خورد",
-                        tone: "danger",
-                      })
-                      if (okBounce) bounceCheck(c)
-                    },
-                  },
-                ]}
-              >
-              <button
-                type="button"
-                onClick={() => c.status === "PENDING" && setActionSheet(c)}
-                className={cn(
-                  "block w-full rounded-3xl border bg-card p-4 text-start shadow-card transition-all",
-                  c.status === "PENDING" && "hover:shadow-card-hover active:scale-[0.995]",
-                  c.status !== "PENDING" && "shadow-none",
-                  overdue
-                    ? "border-destructive/40"
-                    : soon
-                      ? "border-warning/40"
-                      : c.status === "CASHED"
-                        ? "border-income/25"
-                        : c.status === "BOUNCED"
-                          ? "border-destructive/25"
-                          : "border-border/70"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <BankLogo bankKey={c.bankKey} size={42} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-extrabold">{c.person.name}</span>
-                      <CheckDirectionBadge direction={c.direction} size="sm" />
-                    </div>
-                    <div className="nums mt-0.5 text-[0.65rem] text-muted-foreground">
-                      {getBank(c.bankKey).name} • سررسید {formatJalaliWithWeekday(new Date(c.dueDate))}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-end">
-                    <div
-                      className={cn(
-                        "nums text-sm font-extrabold",
-                        c.status !== "PENDING" && "text-muted-foreground"
-                      )}
-                    >
-                      {formatToman(c.amount, false)}
-                    </div>
-                    <div
-                      className={cn(
-                        "mt-0.5 inline-flex items-center gap-1 rounded-lg px-1.5 py-px text-[0.6rem] font-bold",
-                        c.status === "CASHED"
-                          ? "bg-income/10 text-income"
-                          : c.status === "BOUNCED"
-                            ? "bg-destructive/10 text-destructive"
-                            : c.status === "PENDING"
-                              ? overdue
-                                ? "bg-destructive/10 text-destructive"
-                                : soon
-                                  ? "bg-warning/10 text-warning"
-                                  : "bg-primary/10 text-primary"
-                              : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {c.status === "CASHED" ? (
-                        <>
-                          <CheckCircle2 className="size-3" />
-                          پاس شده
-                        </>
-                      ) : c.status === "BOUNCED" ? (
-                        <>
-                          <Ban className="size-3" />
-                          برگشت خورده
-                        </>
-                      ) : c.status === "PENDING" ? (
-                        <>
-                          <Clock3 className="size-3" />
-                          {overdue
-                            ? `${toPersianDigits(Math.abs(daysLeft))} روز گذشته`
-                            : daysLeft === 0
-                              ? "امروز سررسید"
-                              : `${toPersianDigits(daysLeft)} روز مانده`}
-                        </>
-                      ) : (
-                        STATUS_LABEL[c.status]
-                      )}
-                    </div>
-                  </div>
+        <div className="space-y-4">
+          {groupChecks(checks, today, status === "PENDING").map((g) => (
+            <section key={g.key}>
+              {g.label && (
+                <div className="mb-2 flex items-baseline justify-between px-1">
+                  <h3 className={cn("text-label font-extrabold", g.key === "overdue" ? "text-destructive" : "text-foreground/85")}>
+                    {g.label}
+                  </h3>
+                  <span className="nums text-caption font-semibold text-muted-foreground">
+                    {toPersianDigits(g.items.length)} چک · {formatTomanCompact(g.sum)}
+                  </span>
                 </div>
-                {(c.serial || c.invoice || c.status === "PENDING") && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-dashed pt-2 text-[0.6rem] text-muted-foreground">
-                    {c.serial && (
-                      <span className="nums rounded-lg bg-muted px-2 py-0.5">سریال {c.serial}</span>
-                    )}
-                    {c.invoice && (
-                      <Link
-                        href={`/invoices/${c.invoice.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="rounded-lg bg-muted px-2 py-0.5 font-medium text-primary hover:underline"
-                      >
-                        فاکتور {toPersianDigits(c.invoice.number)}
-                      </Link>
-                    )}
-                    {/* نشان وضعیت ثبت */}
-                    {c.status === "PENDING" &&
-                      (c.isRegistered ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-income/10 px-2 py-0.5 font-bold text-income">
-                          <BadgeCheck className="size-3" />
-                          ثبت‌شده{c.registeredName ? ` به نام ${c.registeredName}` : ""}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-warning/10 px-2 py-0.5 font-bold text-warning">
-                          <BadgeMinus className="size-3" />
-                          ثبت‌نشده
-                        </span>
-                      ))}
-                  </div>
-                )}
-              </button>
-              </SwipeRow>
-              </motion.div>
-            )
-          })}
+              )}
+              <div className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+                {g.items.map((c, i) => {
+            const daysLeft = diffJalaliDays(today, new Date(c.dueDate))
+                  const overdue = c.status === "PENDING" && daysLeft < 0
+                  const soon = c.status === "PENDING" && daysLeft >= 0 && daysLeft <= 3
+                  const swipeable = c.status === "PENDING"
+                  return (
+                    <motion.div
+                      key={c.id}
+                      layout="position"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), type: "spring", stiffness: 380, damping: 32 }}
+                      className={cn(i > 0 && "border-t border-border/60")}
+                    >
+                    <SwipeRow
+                      hint={i === 0 && swipeable}
+                      disabled={!swipeable}
+                      trailing={[
+                        {
+                          key: "cash",
+                          label: c.direction === "RECEIVED" ? "پاس شد" : "پرداخت شد",
+                          icon: <CheckCircle2 className="size-4" />,
+                          color: "var(--income)",
+                          onAction: () => {
+                            if (!c.isRegistered) {
+                              toast.error("چک ثبت‌نشده قابل پاس شدن نیست — اول ثبتش کنید")
+                              setActionSheet(c)
+                              return
+                            }
+                            setActionSheet(c)
+                            setAccountSheet(true)
+                          },
+                        },
+                      ]}
+                      leading={[
+                        {
+                          key: "bounce",
+                          label: "برگشت",
+                          icon: <Ban className="size-4" />,
+                          color: "var(--destructive)",
+                          onAction: async () => {
+                            if (!c.isRegistered) {
+                              toast.error("چک ثبت‌نشده قابل برگشت نیست — اول ثبتش کنید")
+                              setActionSheet(c)
+                              return
+                            }
+                            const okBounce = await confirm({
+                              title: "برگشت چک",
+                              description: `چک ${formatToman(c.amount)} «${c.person.name}» برگشت خورده؟ مبلغ به حساب شخص برمی‌گردد.`,
+                              confirmText: "بله، برگشت خورد",
+                              tone: "danger",
+                            })
+                            if (okBounce) bounceCheck(c)
+                          },
+                        },
+                      ]}
+                    >
+                    <button
+                      type="button"
+                      onClick={() => c.status === "PENDING" && setActionSheet(c)}
+                      className={cn(
+                        "block w-full bg-card px-4 py-3.5 text-start transition-colors",
+                        c.status === "PENDING" && "hover:bg-accent/40 active:bg-accent/60"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <BankLogo bankKey={c.bankKey} size={42} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-extrabold">{c.person.name}</span>
+                            <CheckDirectionBadge direction={c.direction} size="sm" />
+                          </div>
+                          <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
+                            {getBank(c.bankKey).name} · {formatJalaliWithWeekday(new Date(c.dueDate))}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-end">
+                          <div
+                            className={cn(
+                              "nums text-sm font-extrabold",
+                              c.status !== "PENDING" && "text-muted-foreground"
+                            )}
+                          >
+                            {formatToman(c.amount, false)}
+                          </div>
+                          <div
+                            className={cn(
+                              "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                              c.status === "CASHED"
+                                ? "bg-income/10 text-income"
+                                : c.status === "BOUNCED"
+                                  ? "bg-destructive/10 text-destructive"
+                                  : c.status === "PENDING"
+                                    ? overdue
+                                      ? "bg-destructive/10 text-destructive"
+                                      : soon
+                                        ? "bg-warning/10 text-warning-ink"
+                                        : "bg-muted text-muted-foreground"
+                                    : "bg-muted text-muted-foreground"
+                            )}
+                          >
+                            {c.status === "CASHED" ? (
+                              <>
+                                <CheckCircle2 className="size-3" />
+                                پاس شده
+                              </>
+                            ) : c.status === "BOUNCED" ? (
+                              <>
+                                <Ban className="size-3" />
+                                برگشت خورده
+                              </>
+                            ) : c.status === "PENDING" ? (
+                              <>
+                                <Clock3 className="size-3" />
+                                {overdue
+                                  ? `${toPersianDigits(Math.abs(daysLeft))} روز گذشته`
+                                  : daysLeft === 0
+                                    ? "امروز"
+                                    : `${toPersianDigits(daysLeft)} روز دیگر`}
+                              </>
+                            ) : (
+                              STATUS_LABEL[c.status]
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {(c.serial || c.invoice || c.status === "PENDING") && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 ps-[3.375rem] text-micro text-muted-foreground">
+                          {c.serial && (
+                            <span className="nums rounded-lg bg-muted px-2 py-0.5">سریال {c.serial}</span>
+                          )}
+                          {c.invoice && (
+                            <Link
+                              href={`/invoices/${c.invoice.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="rounded-lg bg-muted px-2 py-0.5 font-medium text-primary hover:underline"
+                            >
+                              فاکتور {toPersianDigits(c.invoice.number)}
+                            </Link>
+                          )}
+                          {/* نشان وضعیت ثبت */}
+                          {c.status === "PENDING" &&
+                            (c.isRegistered ? (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-income/10 px-2 py-0.5 font-bold text-income">
+                                <BadgeCheck className="size-3" />
+                                ثبت‌شده{c.registeredName ? ` به نام ${c.registeredName}` : ""}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-warning/10 px-2 py-0.5 font-bold text-warning-ink">
+                                <BadgeMinus className="size-3" />
+                                ثبت‌نشده
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                    </button>
+                    </SwipeRow>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
@@ -667,19 +673,71 @@ export default function ChecksPage() {
       <BottomSheet
         open={!!actionSheet}
         onClose={() => setActionSheet(null)}
-        title="اقدام روی چک"
-        description={actionSheet ? `${actionSheet.person.name} • ${formatToman(actionSheet.amount)}` : ""}
+        title={actionSheet ? `چک ${actionSheet.person.name}` : "اقدام روی چک"}
+        description={
+          actionSheet
+            ? `${actionSheet.direction === "RECEIVED" ? "دریافتی" : "صادره"} · سررسید ${formatJalaliWithWeekday(new Date(actionSheet.dueDate))}`
+            : ""
+        }
       >
         {actionSheet && (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
+            {/* خلاصهٔ چک — نسخهٔ ۷ */}
+            <div className="flex items-center gap-3 rounded-2xl border border-border/80 px-3.5 py-3">
+              <BankLogo bankKey={actionSheet.bankKey} size={44} />
+              <div className="min-w-0 flex-1">
+                <p className="nums text-xl font-black tracking-tight">
+                  {formatToman(actionSheet.amount, false)}
+                  <span className="ms-1 text-caption font-semibold text-muted-foreground">تومان</span>
+                </p>
+                <p className="nums truncate text-caption text-muted-foreground">
+                  {getBank(actionSheet.bankKey).name}
+                  {actionSheet.serial ? ` · سریال ${actionSheet.serial}` : ""}
+                </p>
+              </div>
+              {(() => {
+                const d = diffJalaliDays(today, new Date(actionSheet.dueDate))
+                return (
+                  <span
+                    className={cn(
+                      "nums shrink-0 rounded-full px-2.5 py-1 text-caption font-bold",
+                      d < 0 ? "bg-destructive/10 text-destructive" : d === 0 ? "bg-warning/15 text-warning-ink" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {d < 0 ? `${toPersianDigits(-d)} روز گذشته` : d === 0 ? "امروز" : `${toPersianDigits(d)} روز دیگر`}
+                  </span>
+                )
+              })()}
+            </div>
+            {/* دو اقدام اصلی کنار هم */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                onClick={() => (actionSheet.isRegistered ? setAccountSheet(true) : toast.error("چک ثبت‌نشده قابل پاس شدن نیست"))}
+                disabled={!actionSheet.isRegistered}
+                className="h-[3.25rem] rounded-2xl bg-income text-[0.95rem] font-bold hover:bg-income/90"
+              >
+                <CheckCircle2 className="size-5" />
+                {actionSheet.direction === "RECEIVED" ? "پاس شد" : "پرداخت شد"}
+              </Button>
+              <Button
+                onClick={() => (actionSheet.isRegistered ? bounceCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل برگشت نیست"))}
+                disabled={!actionSheet.isRegistered}
+                variant="ghost"
+                className="h-[3.25rem] rounded-2xl bg-destructive/10 text-[0.95rem] font-bold text-destructive hover:bg-destructive/15 hover:text-destructive"
+              >
+                <Undo2 className="size-5" />
+                برگشت خورد
+              </Button>
+            </div>
+
             {/* هشدار چک ثبت‌نشده — پاس/برگشت/لغو قفل است تا ثبت شود */}
             {!actionSheet.isRegistered && (
               <div className="rounded-2xl border border-warning/40 bg-warning/10 p-3.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-warning">
+                <div className="flex items-center gap-2 text-xs font-bold text-warning-ink">
                   <BadgeMinus className="size-4 shrink-0" />
                   این چک هنوز ثبت نشده است
                 </div>
-                <p className="mt-1.5 text-[0.68rem] leading-relaxed text-muted-foreground">
+                <p className="mt-1.5 text-caption leading-relaxed text-muted-foreground">
                   {actionSheet.direction === "RECEIVED"
                     ? "چک دریافتی را اول «به نام خودتان» ثبت کنید."
                     : "چک صادره را اول «به نام مشتری» ثبت کنید."}{" "}
@@ -703,7 +761,7 @@ export default function ChecksPage() {
                     ثبت‌شده
                     {actionSheet.direction === "RECEIVED" ? " به نام ما" : " به نام مشتری"}
                   </p>
-                  <p className="nums mt-0.5 truncate text-[0.65rem] text-muted-foreground">
+                  <p className="nums mt-0.5 truncate text-caption text-muted-foreground">
                     {actionSheet.registeredName ?? "—"}
                     {actionSheet.registeredNationalId
                       ? ` • کد ملی ${toPersianDigits(actionSheet.registeredNationalId)}`
@@ -714,7 +772,7 @@ export default function ChecksPage() {
                   variant="outline"
                   size="sm"
                   onClick={openRegisterSheet}
-                  className="h-8 shrink-0 rounded-xl px-2.5 text-[0.68rem] font-bold"
+                  className="h-8 shrink-0 rounded-xl px-2.5 text-caption font-bold"
                 >
                   ویرایش
                 </Button>
@@ -727,7 +785,7 @@ export default function ChecksPage() {
                 <div className="flex min-w-0 items-center gap-1.5 text-xs font-bold">
                   <Paperclip className="size-3.5 shrink-0 text-primary" />
                   <span className="truncate">پیوست‌های چک</span>
-                  <span className="nums shrink-0 rounded-full bg-muted px-1.5 py-px text-[0.6rem] font-bold text-muted-foreground">
+                  <span className="nums shrink-0 rounded-full bg-muted px-1.5 py-px text-micro font-bold text-muted-foreground">
                     {toPersianDigits(checkAttachments.length)}
                   </span>
                   {attLoading && <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />}
@@ -738,7 +796,7 @@ export default function ChecksPage() {
                   size="sm"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="h-8 shrink-0 rounded-xl px-2.5 text-[0.7rem] font-bold"
+                  className="h-8 shrink-0 rounded-xl px-2.5 text-caption font-bold"
                 >
                   {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
                   {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
@@ -746,13 +804,13 @@ export default function ChecksPage() {
               </div>
 
               {!actionSheet.isRegistered && (
-                <p className="mb-2 rounded-xl bg-warning/10 px-2.5 py-2 text-[0.68rem] font-medium leading-relaxed text-warning">
+                <p className="mb-2 rounded-xl bg-warning/10 px-2.5 py-2 text-caption font-medium leading-relaxed text-warning-ink">
                   عکس چک مستقل از «ثبت» است — حتی اگر چک هنوز ثبت نشده هم می‌توانید همین‌جا عکسش را بگیرید.
                 </p>
               )}
 
               {checkAttachments.length === 0 && !attLoading ? (
-                <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-[0.68rem] leading-relaxed text-muted-foreground">
+                <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-caption leading-relaxed text-muted-foreground">
                   تصویری پیوست نشده — عکس چک را اضافه کنید تا همین‌جا آرشیو شود.
                 </p>
               ) : (
@@ -786,7 +844,7 @@ export default function ChecksPage() {
                         ) : (
                           <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
                             <FileText className="size-5 text-muted-foreground" />
-                            <span className="w-full truncate text-[0.55rem] text-muted-foreground">
+                            <span className="w-full truncate text-micro text-muted-foreground">
                               {att.filename}
                             </span>
                           </div>
@@ -818,35 +876,15 @@ export default function ChecksPage() {
               />
             </div>
 
-            <SheetOption
-              icon={<CheckCircle2 className="size-5" />}
-              title="پاس شد"
-              subtitle={
-                actionSheet.isRegistered
-                  ? "مبلغ به حساب بانکی واریز/برداشت شد"
-                  : "اول باید چک ثبت شود"
-              }
-              tone="primary"
-              onClick={() => (actionSheet.isRegistered ? setAccountSheet(true) : toast.error("چک ثبت‌نشده قابل پاس شدن نیست"))}
-            />
-            <SheetOption
-              icon={<Undo2 className="size-5" />}
-              title="برگشت خورد"
-              subtitle={
-                actionSheet.isRegistered
-                  ? "چک پاس نشد؛ مانده به حساب شخص برمی‌گردد"
-                  : "اول باید چک ثبت شود"
-              }
-              tone="danger"
-              onClick={() => (actionSheet.isRegistered ? bounceCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل برگشت نیست"))}
-            />
-            <SheetOption
-              icon={<XCircle className="size-5" />}
-              title="لغو"
-              subtitle={actionSheet.isRegistered ? "چک باطل شد" : "اول باید چک ثبت شود"}
-              tone="danger"
+            {/* لغو — جدا و پایین، دور از دو اقدام اصلی */}
+            <button
+              type="button"
               onClick={() => (actionSheet.isRegistered ? cancelCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل لغو نیست"))}
-            />
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-label font-bold text-destructive transition-colors hover:bg-destructive/8"
+            >
+              <XCircle className="size-4" />
+              لغو و باطل کردن چک
+            </button>
           </div>
         )}
       </BottomSheet>
@@ -872,7 +910,7 @@ export default function ChecksPage() {
         }
       >
         <div className="space-y-3">
-          <p className="rounded-xl bg-primary/5 px-3 py-2.5 text-[0.68rem] leading-relaxed text-muted-foreground">
+          <p className="rounded-xl bg-primary/5 px-3 py-2.5 text-caption leading-relaxed text-muted-foreground">
             {actionSheet?.direction === "RECEIVED" ? (
               <>
                 این چک را <b className="text-primary">به نام خودتان</b> ثبت کنید — یعنی چک در بانک به
@@ -887,7 +925,7 @@ export default function ChecksPage() {
           </p>
 
           <div>
-            <label className="mb-1.5 flex items-center gap-1 text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 flex items-center gap-1 text-label font-bold text-foreground/80">
               <UserRound className="size-3.5" />
               نام صاحب حساب *
             </label>
@@ -899,7 +937,7 @@ export default function ChecksPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 flex items-center gap-1 text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 flex items-center gap-1 text-label font-bold text-foreground/80">
               <IdCard className="size-3.5" />
               کد ملی صاحب حساب (اختیاری)
             </label>
@@ -915,7 +953,7 @@ export default function ChecksPage() {
 
           {/* پیوست تصویر موقع ثبت */}
           <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5 text-center">
-            <p className="mb-2 flex items-center justify-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+            <p className="mb-2 flex items-center justify-center gap-1.5 text-caption font-medium text-muted-foreground">
               <ImagePlus className="size-3.5" />
               تصویر چک (اختیاری)
             </p>
@@ -996,4 +1034,21 @@ export default function ChecksPage() {
       </BottomSheet>
     </div>
   )
+}
+
+/** گروه‌بندی چک‌های در جریان بر اساس سررسید (نسخهٔ ۷) — کار امروز اول دیده شود */
+function groupChecks<T extends { dueDate: string; amount: number }>(list: T[], today: Date, byDue: boolean) {
+  if (!byDue) return [{ key: "all", label: "", items: list, sum: list.reduce((s, c) => s + c.amount, 0) }]
+  const buckets = [
+    { key: "overdue", label: "سررسید گذشته", test: (d: number) => d < 0 },
+    { key: "today", label: "امروز", test: (d: number) => d === 0 },
+    { key: "week", label: "۷ روز آینده", test: (d: number) => d > 0 && d <= 7 },
+    { key: "later", label: "بعدتر", test: (d: number) => d > 7 },
+  ]
+  return buckets
+    .map((b) => {
+      const items = list.filter((c) => b.test(diffJalaliDays(today, new Date(c.dueDate))))
+      return { key: b.key, label: b.label, items, sum: items.reduce((s, c) => s + c.amount, 0) }
+    })
+    .filter((g) => g.items.length > 0)
 }

@@ -19,6 +19,9 @@ import {
   Check,
   Fingerprint,
   Bell,
+  Clock,
+  CalendarClock,
+  TriangleAlert,
 } from "lucide-react"
 import {
   startRegistration,
@@ -82,6 +85,16 @@ function awaitServiceWorkerReady(ms = 6000): Promise<ServiceWorkerRegistration |
     new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
   ])
 }
+
+const SETTINGS_SECTIONS = [
+  { id: "telegram", label: "ربات تلگرام", icon: Send },
+  { id: "automation", label: "یادآوری و بکاپ خودکار", icon: Clock },
+  { id: "passkey", label: "ورود با اثر انگشت", icon: Fingerprint },
+  { id: "push", label: "اعلان روی گوشی", icon: Bell },
+  { id: "check-alerts", label: "هشدار سررسید چک", icon: CalendarClock },
+  { id: "backup", label: "پشتیبان‌گیری", icon: DatabaseBackup },
+  { id: "danger", label: "ناحیهٔ خطر", icon: TriangleAlert },
+] as const
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
@@ -428,22 +441,39 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">تنظیمات</h1>
+    <div className="lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+      {/* فهرست بخش‌ها — دسکتاپ: ستون ثابت کنار؛ موبایل: ردیف چیپ لغزان (نسخهٔ ۷) */}
+      <nav aria-label="بخش‌های تنظیمات" className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4 lg:sticky lg:top-20 lg:mx-0 lg:mb-0 lg:flex-col lg:gap-0.5 lg:px-0">
+        <h1 className="mb-3 hidden px-3 text-2xl font-extrabold tracking-tight lg:block">تنظیمات</h1>
+        {SETTINGS_SECTIONS.map((sec) => (
+          <a
+            key={sec.id}
+            href={`#${sec.id}`}
+            className={cn(
+              "flex h-9 shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3 text-label font-semibold transition-colors hover:bg-accent lg:h-10 lg:border-0 lg:bg-transparent lg:text-sm",
+              sec.id === "danger" ? "text-destructive" : "text-foreground/80"
+            )}
+          >
+            <sec.icon className="size-4 shrink-0 opacity-70" />
+            {sec.label}
+          </a>
+        ))}
+      </nav>
+    <div className="min-w-0 space-y-4">
 
       {/* ربات تلگرام */}
-      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+      <section id="telegram" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
+        <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
           <Send className="size-4 -scale-x-100 text-primary" />
           ربات تلگرام
         </div>
 
         <div className="space-y-3">
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
               توکن ربات
               {data.hasBotToken && (
-                <span className={cn("ms-2 rounded-md px-1.5 py-px text-[0.6rem]", "bg-primary/10 text-primary")}>
+                <span className={cn("ms-2 rounded-md px-1.5 py-px text-micro", "bg-primary/10 text-primary")}>
                   فعال ({data.botTokenMasked}) — از {data.botTokenSource === "db" ? "دیتابیس" : "env"}
                 </span>
               )}
@@ -458,7 +488,7 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
               شناسه چت ادمین (Chat ID)
             </label>
             <Input
@@ -471,7 +501,7 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
               آدرس مینی‌اپ (دکمه «باز کردن حساب‌یار» داخل ربات)
             </label>
             <Input
@@ -487,7 +517,7 @@ export default function SettingsPage() {
             onClick={testTelegram}
             disabled={testing || !data.hasBotToken || !data.hasAdminChatId}
             variant="outline"
-            className="h-11 w-full rounded-2xl border-primary/40 text-xs font-bold text-primary hover:bg-primary/10"
+            className="h-11 w-full rounded-2xl text-label font-bold hover:bg-accent"
           >
             {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
             ارسال پیام آزمایشی
@@ -496,22 +526,24 @@ export default function SettingsPage() {
       </section>
 
       {/* یادآوری صبحگاهی + بکاپ رمزدار تلگرام */}
-      <TelegramAutomation settings={data} onSaved={() => refetch()} />
+      <div id="automation" className="scroll-mt-24">
+        <TelegramAutomation settings={data} onSaved={() => refetch()} />
+      </div>
 
       {/* ورود بیومتریک — Passkey (SEC-01) */}
-      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-1 flex items-center gap-2 text-sm font-bold">
+      <section id="passkey" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
+        <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
           <Fingerprint className="size-4 text-primary" />
           ورود بیومتریک (Passkey)
         </div>
-        <p className="mb-3 text-[0.68rem] leading-5 text-muted-foreground">
+        <p className="mb-3 text-caption leading-5 text-muted-foreground">
           با اثر انگشت یا Face ID بدون رمز وارد شوید.
         </p>
 
         {passkeySupported !== false ? (
           <div className="space-y-3">
             <div>
-              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              <label className="mb-1.5 block text-label font-bold text-foreground/80">
                 نام این دستگاه (اختیاری)
               </label>
               <Input
@@ -525,14 +557,14 @@ export default function SettingsPage() {
               onClick={registerPasskey}
               disabled={passkeyBusy}
               variant="outline"
-              className="h-11 w-full rounded-2xl border-primary/40 text-xs font-bold text-primary hover:bg-primary/10"
+              className="h-11 w-full rounded-2xl text-label font-bold hover:bg-accent"
             >
               {passkeyBusy ? <Loader2 className="size-4 animate-spin" /> : <Fingerprint className="size-4" />}
               افزودن Passkey این دستگاه
             </Button>
           </div>
         ) : (
-          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-[0.65rem] leading-5 text-muted-foreground">
+          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-caption leading-5 text-muted-foreground">
             مرورگر این دستگاه از ورود بیومتریک (WebAuthn) پشتیبانی نمی‌کند — با کروم، سافاری یا اپ نصب‌شده امتحان کنید.
           </p>
         )}
@@ -560,7 +592,7 @@ export default function SettingsPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold">{k.deviceName}</p>
-                  <p className="nums mt-0.5 text-[0.62rem] text-muted-foreground">
+                  <p className="nums mt-0.5 text-caption text-muted-foreground">
                     {k.lastUsedAt
                       ? `آخرین استفاده: ${formatJalali(new Date(k.lastUsedAt))}`
                       : `ثبت‌شده: ${formatJalali(new Date(k.createdAt))}`}
@@ -584,28 +616,28 @@ export default function SettingsPage() {
           )}
         </div>
         {passkeys && passkeys.length > 0 && (
-          <p className="nums mt-2 text-[0.62rem] text-muted-foreground">
+          <p className="nums mt-2 text-caption text-muted-foreground">
             {toPersianDigits(passkeys.length)} کلید ثبت شده — با هر کدام می‌توان بدون نام کاربری و رمز وارد شد.
           </p>
         )}
       </section>
 
       {/* اعلان‌های Push (SEC-03) */}
-      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-1 flex items-center gap-2 text-sm font-bold">
+      <section id="push" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
+        <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
           <Bell className="size-4 text-primary" />
           اعلان‌های Push
         </div>
-        <p className="mb-3 text-[0.68rem] leading-5 text-muted-foreground">
+        <p className="mb-3 text-caption leading-5 text-muted-foreground">
           هشدار سررسید چک و رویدادهای مالی روی همین دستگاه.
         </p>
 
         {isTelegram ? (
-          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-[0.65rem] leading-5 text-muted-foreground">
+          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-caption leading-5 text-muted-foreground">
             داخل مینی‌اپ تلگرام، اعلان‌ها از خود ربات تلگرام ارسال می‌شود و نیازی به این تنظیم نیست.
           </p>
         ) : pushCapable === false ? (
-          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-[0.65rem] leading-5 text-muted-foreground">
+          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-caption leading-5 text-muted-foreground">
             مرورگر این دستگاه از اعلان‌های Push پشتیبانی نمی‌کند.
           </p>
         ) : pushCapable === null ? (
@@ -615,7 +647,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-muted/30 p-3.5">
               <div className="min-w-0">
                 <p className="text-xs font-bold">فعال‌سازی اعلان‌ها</p>
-                <p className="mt-0.5 text-[0.62rem] text-muted-foreground">
+                <p className="mt-0.5 text-caption text-muted-foreground">
                   {pushOn ? "فعال — اعلان‌ها به همین دستگاه می‌رسد" : "خاموش"}
                 </p>
               </div>
@@ -630,12 +662,12 @@ export default function SettingsPage() {
               onClick={testPush}
               disabled={!pushOn || testingPush}
               variant="outline"
-              className="h-11 w-full rounded-2xl border-primary/40 text-xs font-bold text-primary hover:bg-primary/10"
+              className="h-11 w-full rounded-2xl text-label font-bold hover:bg-accent"
             >
               {testingPush ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />}
               ارسال اعلان آزمایشی
             </Button>
-            <p className="text-[0.62rem] leading-5 text-muted-foreground">
+            <p className="text-caption leading-5 text-muted-foreground">
               در iOS ابتدا اپ را به صفحه اصلی اضافه کنید (Share → Add to Home Screen) تا اعلان‌ها فعال شوند.
             </p>
           </div>
@@ -643,12 +675,12 @@ export default function SettingsPage() {
       </section>
 
       {/* هشدار سررسید چک */}
-      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+      <section id="check-alerts" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
+        <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
           <BellRing className="size-4 text-primary" />
           هشدار سررسید چک
         </div>
-        <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+        <label className="mb-1.5 block text-label font-bold text-foreground/80">
           چند روز قبل از سررسید، ربات خبر بدهد؟
         </label>
         <div className="flex flex-wrap gap-1.5">
@@ -668,20 +700,20 @@ export default function SettingsPage() {
             </button>
           ))}
         </div>
-        <p className="mt-2 text-[0.62rem] text-muted-foreground">
+        <p className="mt-2 text-caption text-muted-foreground">
           چک سررسید‌شده هم (پاس‌نشده) هر ساعت یک‌بار پیگیری و خبر داده می‌شود.
         </p>
       </section>
 
       {/* بکاپ */}
-      <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
+      <section id="backup" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
+        <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
           <DatabaseBackup className="size-4 text-primary" />
           بکاپ و بازیابی
         </div>
 
         <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+          <label className="mb-1.5 block text-label font-bold text-foreground/80">
             رمز فایل بکاپ (اختیاری)
           </label>
           <Input
@@ -693,7 +725,7 @@ export default function SettingsPage() {
             className="text-xs"
             autoComplete="new-password"
           />
-          <p className="mt-2 text-[0.62rem] leading-5 text-muted-foreground">
+          <p className="mt-2 text-caption leading-5 text-muted-foreground">
             با رمز، فایل با AES-256 رمزگذاری می‌شود و بدون آن قابل بازگشایی نیست؛ هنگام بازیابی فایل رمزدار، همین رمز را وارد کنید.
           </p>
         </div>
@@ -727,20 +759,20 @@ export default function SettingsPage() {
             if (f) restoreBackup(f)
           }}
         />
-        <p className="mt-2 text-[0.62rem] text-muted-foreground">
+        <p className="mt-2 text-caption text-muted-foreground">
           بکاپ خودکار روزانه هم انجام می‌شود (۷ نسخه نگهداری می‌شود).
         </p>
       </section>
 
       {/* ناحیه خطر */}
-      <section className="rounded-3xl border border-destructive/25 bg-destructive/5 p-4 sm:p-5">
+      <section id="danger" className="scroll-mt-24 rounded-3xl border border-destructive/25 bg-destructive/5 p-4 sm:p-5">
         <div className="mb-2 flex items-center gap-2 text-sm font-bold text-destructive">
           <ShieldAlert className="size-4" />
           ناحیه خطر
         </div>
-        <p className="mb-3 text-[0.68rem] text-muted-foreground">
+        <p className="mb-3 text-caption text-muted-foreground">
           پاک‌سازی کامل داده‌ها برای وقتی است که داده نمونه می‌خواهید دور بریزید و از صفر شروع کنید.
-          همه اشخاص، اجناس، فاکتورها، چک‌ها و حساب‌ها حذف می‌شوند (تنظیمات و توکن ربات می‌ماند).
+          همه اشخاص، کالاها، فاکتورها، چک‌ها و حساب‌ها حذف می‌شوند (تنظیمات و توکن ربات می‌ماند).
         </p>
         <Button
           onClick={() => setWipeSheet(true)}
@@ -761,6 +793,8 @@ export default function SettingsPage() {
         ذخیره تنظیمات
       </Button>
 
+    </div>
+
       {/* شیت تأیید پاک‌سازی */}
       <BottomSheet
         open={wipeSheet}
@@ -770,7 +804,7 @@ export default function SettingsPage() {
       >
         <div className="space-y-3">
           <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-xs leading-6 text-destructive">
-            همه داده‌ها (اشخاص، اجناس، فاکتورها، چک‌ها، تسویه‌ها و حساب‌ها) برای همیشه حذف می‌شوند.
+            همه داده‌ها (اشخاص، کالاها، فاکتورها، چک‌ها، تسویه‌ها و حساب‌ها) برای همیشه حذف می‌شوند.
           </p>
           <Button
             onClick={wipe}
@@ -837,7 +871,7 @@ function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved
         <Send className="size-4 -scale-x-100 text-primary" />
         خودکارهای تلگرام
       </div>
-      <p className="mb-4 text-[0.7rem] leading-5 text-muted-foreground">
+      <p className="mb-4 text-caption leading-5 text-muted-foreground">
         {ready ? "این‌ها از طریق ربات برای خودتان ارسال می‌شوند." : "اول توکن ربات و شناسهٔ چت را بالا ذخیره کنید."}
       </p>
 
@@ -846,8 +880,8 @@ function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved
         <div className="flex items-start gap-3">
           <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-warning/12 text-lg">☀️</span>
           <div className="min-w-0 flex-1">
-            <div className="text-[0.8rem] font-bold">یادآوری صبحگاهی چک‌های امروز</div>
-            <div className="mt-0.5 text-[0.66rem] leading-5 text-muted-foreground">
+            <div className="text-label font-bold">یادآوری صبحگاهی چک‌های امروز</div>
+            <div className="mt-0.5 text-caption leading-5 text-muted-foreground">
               هر صبح فهرست چک‌های امروز و سررسیدگذشته، هر کدام با دکمهٔ «پاس شد» و «برگشت خورد» — بدون باز کردن اپ.
             </div>
           </div>
@@ -859,7 +893,7 @@ function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved
         </div>
         {settings.morningReminder && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-dashed pt-3">
-            <span className="me-1 text-[0.66rem] font-medium text-muted-foreground">ساعت:</span>
+            <span className="me-1 text-caption font-medium text-muted-foreground">ساعت:</span>
             {MORNING_HOURS.map((h) => (
               <button
                 key={h}
@@ -878,7 +912,7 @@ function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved
               onClick={() => run("morning")}
               disabled={!ready || busy !== null}
               variant="ghost"
-              className="ms-auto h-8 rounded-xl px-3 text-[0.68rem] font-bold text-primary hover:bg-primary/10"
+              className="ms-auto h-8 rounded-xl px-3 text-caption font-bold text-primary hover:bg-primary/10"
             >
               {busy === "morning" ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5 -scale-x-100" />}
               همین حالا بفرست
@@ -892,8 +926,8 @@ function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved
         <div className="flex items-start gap-3">
           <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg">🔐</span>
           <div className="min-w-0 flex-1">
-            <div className="text-[0.8rem] font-bold">بکاپ خودکار رمزدار به تلگرام</div>
-            <div className="mt-0.5 text-[0.66rem] leading-5 text-muted-foreground">
+            <div className="text-label font-bold">بکاپ خودکار رمزدار به تلگرام</div>
+            <div className="mt-0.5 text-caption leading-5 text-muted-foreground">
               هر شب ساعت ۳:۳۰ یک نسخهٔ رمزگذاری‌شده (AES-256) از کل داده‌ها برایتان فرستاده می‌شود. بدون رمز قابل باز شدن نیست.
             </div>
           </div>
@@ -909,7 +943,7 @@ function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved
           />
         </div>
         <div className="mt-3 space-y-2 border-t border-dashed pt-3">
-          <label className="block text-[0.66rem] font-medium text-muted-foreground">
+          <label className="block text-label font-bold text-foreground/80">
             رمز بکاپ {settings.hasBackupPassword ? "(تنظیم شده — برای تغییر رمز جدید بزنید)" : "(حداقل ۶ کاراکتر)"}
           </label>
           <div className="flex gap-2">
@@ -933,12 +967,12 @@ function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved
             )}
           </div>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[0.62rem] leading-4 text-warning">رمز را جایی امن نگه دارید؛ بدون آن بکاپ قابل بازیابی نیست.</p>
+            <p className="text-caption leading-4 text-warning-ink">رمز را جایی امن نگه دارید؛ بدون آن بکاپ قابل بازیابی نیست.</p>
             <Button
               onClick={() => run("backup")}
               disabled={!ready || !settings.hasBackupPassword || busy !== null}
               variant="ghost"
-              className="h-8 shrink-0 rounded-xl px-3 text-[0.68rem] font-bold text-primary hover:bg-primary/10"
+              className="h-8 shrink-0 rounded-xl px-3 text-caption font-bold text-primary hover:bg-primary/10"
             >
               {busy === "backup" ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5 -scale-x-100" />}
               ارسال الان

@@ -3,14 +3,11 @@ import { db } from "@/lib/db"
 import { ok, fail, parseBody, parseQuery, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { invoiceCreateSchema, invoiceFilterSchema } from "@/lib/validation"
 import { dayKeyToDate } from "@/lib/jalali"
-import { getAveragePurchasePrice, nextInvoiceNumber } from "@/lib/finance"
+import { getAveragePurchasePrice, nextInvoiceNumber, OVERDUE_DAYS } from "@/lib/finance"
 import { invoiceTotal, itemsSubtotal, paymentSplit } from "@/lib/finance-math"
 import { invoiceInclude } from "@/lib/includes"
 
 export const dynamic = "force-dynamic"
-
-/** چند روز نسیه «معوق» حساب می‌شود */
-const OVERDUE_DAYS = 30
 
 /**
  * GET /api/invoices — لیست فاکتورها با فیلتر نوع/شخص/ماه/جستجو + صفحه‌بندی
@@ -22,7 +19,7 @@ export async function GET(req: NextRequest) {
     const { data: f, error } = parseQuery(req, invoiceFilterSchema)
     if (error) return error
 
-    // IMP-01: جستجوی سروری — روی شماره فاکتور، نام شخص و نام جنس اقلام
+    // IMP-01: جستجوی سروری — روی شماره فاکتور، نام شخص و نام کالا اقلام
     const numberQuery = Number((f.q || "").replace(/[^\d]/g, ""))
     // نسیهٔ معوق: مانده‌دار و قدیمی‌تر از ۳۰ روز
     const overdueBefore = new Date(Date.now() - OVERDUE_DAYS * 86_400_000)
@@ -106,10 +103,10 @@ export async function POST(req: NextRequest) {
       : null
     if (data.accountId && !account) return fail("حساب بانکی پیدا نشد", 404)
 
-    // اعتبارسنجی اجناس
+    // اعتبارسنجی کالاها
     const productIds = [...new Set(data.items.map((i) => i.productId))]
     const products = await db.product.findMany({ where: { id: { in: productIds } } })
-    if (products.length !== productIds.length) return fail("یکی از اجناس پیدا نشد", 404)
+    if (products.length !== productIds.length) return fail("یکی از کالاها پیدا نشد", 404)
 
     const checkTotal = data.checks.reduce((s, c) => s + c.amount, 0)
     const subtotal = itemsSubtotal(data.items)

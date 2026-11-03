@@ -17,6 +17,8 @@ interface ConfirmOptions {
   cancelText?: string
   tone?: "danger" | "primary"
   icon?: React.ReactNode
+  /** نسخهٔ ۷: پیامدهای دقیق کار («۹ قلم به انبار برمی‌گردد») — به‌جای «مطمئنید؟» کلی */
+  consequences?: React.ReactNode[]
 }
 
 interface ConfirmContextValue {
@@ -65,19 +67,25 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         description={state?.options.description}
         desktopMode="dialog"
       >
-        <div className="space-y-3">
-          <div className="flex items-center justify-center gap-3 rounded-2xl bg-muted/60 px-4 py-5">
-            <span
-              className={
-                isDanger
-                  ? "flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"
-                  : "flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary"
-              }
-            >
-              {state?.options.icon ??
-                (isDanger ? <Trash2 className="size-6" /> : <AlertTriangle className="size-6" />)}
-            </span>
-          </div>
+        <div className="space-y-2.5">
+          {state?.options.consequences?.length ? (
+            <div className="rounded-2xl border border-border/80 px-4 py-3">
+              <p className="mb-1.5 flex items-center gap-1.5 text-label font-bold text-foreground/80">
+                {state.options.icon ??
+                  (isDanger ? (
+                    <Trash2 className="size-4 text-destructive" />
+                  ) : (
+                    <AlertTriangle className="size-4 text-primary" />
+                  ))}
+                با این کار:
+              </p>
+              <ul className="list-disc space-y-1 ps-5 text-sm leading-6 marker:text-muted-foreground">
+                {state.options.consequences.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <Button
             onClick={() => {
               setBusy(true)
@@ -86,8 +94,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             disabled={busy}
             className={
               isDanger
-                ? "h-12 w-full rounded-2xl bg-destructive font-bold hover:bg-destructive/90"
-                : "h-12 w-full rounded-2xl font-bold"
+                ? "h-[3.25rem] w-full rounded-2xl bg-destructive text-[0.95rem] font-bold hover:bg-destructive/90"
+                : "h-[3.25rem] w-full rounded-2xl text-[0.95rem] font-bold"
             }
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -96,8 +104,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
           <Button
             onClick={() => finish(false)}
             disabled={busy}
-            variant="outline"
-            className="h-12 w-full rounded-2xl font-bold"
+            variant="ghost"
+            className="h-11 w-full rounded-2xl font-bold text-muted-foreground"
           >
             {state?.options.cancelText ?? "انصراف"}
           </Button>

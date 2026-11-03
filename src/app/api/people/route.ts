@@ -2,11 +2,11 @@ import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, parseQuery, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { personCreateSchema, personFilterSchema } from "@/lib/validation"
-import { getPersonBalance } from "@/lib/finance"
+import { getPersonActivity, getPersonBalances, openBalanceDays } from "@/lib/finance"
 
 export const dynamic = "force-dynamic"
 
-/** GET /api/people — لیست اشخاص با تراز + فیلتر نقش/جستجو */
+/** GET /api/people — لیست اشخاص با تراز، حجم خرید/فروش و قدمت مانده + فیلتر نقش/جستجو */
 export async function GET(req: NextRequest) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
@@ -32,9 +32,19 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" },
     })
 
-    const withBalance = await Promise.all(
-      people.map(async (p) => ({ ...p, balance: await getPersonBalance(p.id) }))
-    )
+    const [balances, activity] = await Promise.all([getPersonBalances(), getPersonActivity()])
+    const now = new Date()
+    const withBalance = people.map((p) => {
+      const balance = balances.get(p.id) ?? 0
+      const a = activity.get(p.id)
+      return {
+        ...p,
+        balance,
+        salesTotal: a?.salesTotal ?? 0,
+        purchaseTotal: a?.purchaseTotal ?? 0,
+        openDays: openBalanceDays(balance, a, now),
+      }
+    })
     const filtered = f.onlyWithBalance ? withBalance.filter((p) => p.balance !== 0) : withBalance
     filtered.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance))
     return ok({ people: filtered })

@@ -11,7 +11,7 @@ const listQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
 })
 
-/** GET /api/products — لیست اجناس + موجودی زنده + آخرین قیمت خرید/فروش */
+/** GET /api/products — لیست کالاها + موجودی زنده + آخرین قیمت خرید/فروش */
 export async function GET(req: NextRequest) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     const stocks = await getProductStocks()
 
-    // آخرین قیمت خرید و فروش هر جنس
+    // آخرین قیمت خرید و فروش هر کالا
     const lastPrices = new Map<string, { purchase: number; sale: number }>()
     const items = await db.invoiceItem.findMany({
       orderBy: { invoice: { date: "desc" } },
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
       lastPrices.set(it.productId, cur)
     }
 
-    // میانگین قیمت تمام‌شده هر جنس = (موجودی اولیه × قیمت خریدش + جمع خریدها) ÷ (اولیه + تعداد خرید)
+    // میانگین قیمت تمام‌شده هر کالا = (موجودی اولیه × قیمت خریدش + جمع خریدها) ÷ (اولیه + تعداد خرید)
     const purAgg = await db.invoiceItem.groupBy({
       by: ["productId"],
       where: { invoice: { type: "PURCHASE" } },
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       purAgg.map((r) => [r.productId, { qty: r._sum.quantity ?? 0, total: r._sum.total ?? 0 }])
     )
 
-    // عکس جنس (ADV-05): اولین تصویر پیوست‌شدهٔ هر جنس — اختیاری، برای بندانگشتی لیست
+    // عکس کالا (ADV-05): اولین تصویر پیوست‌شدهٔ هر کالا — اختیاری، برای بندانگشتی لیست
     const productIds = products.map((p) => p.id)
     const photoAtts = productIds.length
       ? await db.attachment.findMany({
@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** POST /api/products — افزودن جنس */
+/** POST /api/products — افزودن کالا */
 export async function POST(req: NextRequest) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     const dup = await db.product.findFirst({
       where: { name: data.name, brand: data.brand ?? undefined, code: data.code ?? undefined },
     })
-    if (dup) return fail("جنس مشابهی با همین نام/برند/کد وجود دارد", 400)
+    if (dup) return fail("کالا مشابهی با همین نام/برند/کد وجود دارد", 400)
     const product = await db.product.create({ data })
     return ok({ product })
   } catch (e) {

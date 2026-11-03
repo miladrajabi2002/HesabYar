@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     if (!(file instanceof File) || typeof refType !== "string" || typeof refId !== "string") {
       return fail("فایل و مشخصات رکورد الزامی است", 400)
     }
-    // PRODUCT: عکس جنس — اختیاری و مستقل از هر وضعیتی (ADV-05)
+    // PRODUCT: عکس کالا — اختیاری و مستقل از هر وضعیتی (ADV-05)
     if (!["CHECK", "INVOICE", "PERSON", "PRODUCT"].includes(refType)) {
       return fail("نوع پیوست نامعتبر است", 400)
     }

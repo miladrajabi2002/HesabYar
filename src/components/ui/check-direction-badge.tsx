@@ -38,7 +38,7 @@ export function CheckDirectionBadge({
     )
   }
   const iconSize = size === "sm" ? "size-3" : "size-3.5"
-  const textSize = size === "sm" ? "text-[0.52rem]" : "text-[0.58rem]"
+  const textSize = size === "sm" ? "text-micro" : "text-micro"
   return (
     <span
       className={cn(

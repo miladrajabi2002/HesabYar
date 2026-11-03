@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * حالت خالی یکدست (UI-06 + MO-05) — آیکون متحرک + دکمه اقدام مستقیم
+ * حالت خالی یکدست (UI-06 + MO-05، نسخهٔ ۷) — آیکون، توضیح علت و دکمهٔ اقدام مستقیم
  * به‌جای متن ساده «چیزی نیست».
  */
 import { motion } from "framer-motion"
@@ -14,6 +14,8 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  secondaryLabel,
+  onSecondary,
   tone = "muted",
 }: {
   icon: LucideIcon
@@ -21,6 +23,9 @@ export function EmptyState({
   description?: string
   actionLabel?: string
   onAction?: () => void
+  /** نسخهٔ ۷: اقدام دوم (مثلاً «پاک کردن فیلترها») */
+  secondaryLabel?: string
+  onSecondary?: () => void
   tone?: "muted" | "primary" | "success"
 }) {
   const iconClass =
@@ -29,39 +34,35 @@ export function EmptyState({
       : tone === "success"
         ? "bg-income/10 text-income"
         : "bg-muted text-muted-foreground"
+  // نسخهٔ ۷: بدون قاب خط‌چین و سایه، بدون حرکت دائمی — فقط ورود نرم؛ متن بگوید چرا خالی است و راه حل بدهد
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="rounded-3xl border border-dashed border-border bg-card p-8 text-center shadow-card"
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      className="px-6 py-10 text-center"
     >
-      {/* آیکون با انیمیشن ظریف شناور + پالس حلقه */}
-      <div className="relative mx-auto w-fit">
-        <motion.span
-          aria-hidden
-          className="absolute inset-0 rounded-3xl"
-          style={{ boxShadow: "0 0 0 0 rgba(14,124,102,0.18)" }}
-          animate={{ boxShadow: ["0 0 0 0 rgba(14,124,102,0.16)", "0 0 0 14px rgba(14,124,102,0)"] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
-        />
-        <motion.div
-          animate={{ y: [0, -6, 0] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-          className={`flex size-16 items-center justify-center rounded-3xl ${iconClass}`}
-        >
-          <Icon className="size-8" strokeWidth={1.8} />
-        </motion.div>
-      </div>
-      <p className="mt-4 text-sm font-bold">{title}</p>
+      <span className={`mx-auto flex size-14 items-center justify-center rounded-full ${iconClass}`}>
+        <Icon className="size-6" strokeWidth={1.9} />
+      </span>
+      <p className="mt-4 text-base font-extrabold">{title}</p>
       {description && (
-        <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">{description}</p>
+        <p className="mx-auto mt-1 max-w-[32ch] text-label leading-6 text-muted-foreground">{description}</p>
       )}
-      {actionLabel && onAction && (
-        <Button onClick={onAction} className="mt-5 h-11 rounded-2xl px-6 text-xs font-bold shadow-fab">
-          {actionLabel}
-        </Button>
-      )}
+      {(actionLabel && onAction) || (secondaryLabel && onSecondary) ? (
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+          {actionLabel && onAction && (
+            <Button onClick={onAction} className="h-11 rounded-2xl px-5 text-label font-bold">
+              {actionLabel}
+            </Button>
+          )}
+          {secondaryLabel && onSecondary && (
+            <Button onClick={onSecondary} variant="ghost" className="h-11 rounded-2xl px-4 text-label font-bold text-muted-foreground">
+              {secondaryLabel}
+            </Button>
+          )}
+        </div>
+      ) : null}
     </motion.div>
   )
 }

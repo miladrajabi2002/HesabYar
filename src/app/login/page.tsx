@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Eye, EyeOff, Loader2, LockKeyhole, UserRound } from "lucide-react"
+import { Eye, EyeOff, Fingerprint, Loader2, LockKeyhole, UserRound } from "lucide-react"
 import { startAuthentication } from "@simplewebauthn/browser"
 import { BrandLogo } from "@/components/ui/brand-logo"
 import { Button } from "@/components/ui/button"
@@ -163,19 +163,29 @@ export default function LoginPage() {
                           : "ورود با اثر انگشت / چهره")}
                   </motion.p>
                 </AnimatePresence>
-                {scan === "idle" && !scanMsg && (
-                  <p className="mt-0.5 text-[0.7rem] text-muted-foreground">برای ورود، دایره را لمس کنید</p>
-                )}
               </div>
 
+              {/* نسخهٔ ۷: اقدام اصلی با برچسب صریح؛ ورود با رمز به‌عنوان راه دوم دیده می‌شود */}
+              <Button
+                type="button"
+                size="lg"
+                onClick={loginWithPasskey}
+                disabled={scan === "scanning"}
+                className="mt-3 h-14 w-full rounded-2xl text-[0.95rem] font-bold shadow-fab"
+              >
+                {scan === "scanning" ? <Loader2 className="size-5 animate-spin" /> : <Fingerprint className="size-5" />}
+                ورود با اثر انگشت یا چهره
+              </Button>
               {!showForm && (
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="lg"
                   onClick={() => setShowForm(true)}
-                  className="mt-5 rounded-full px-4 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="mt-2 h-12 w-full rounded-2xl text-label font-bold hover:bg-accent"
                 >
                   ورود با نام کاربری و رمز
-                </button>
+                </Button>
               )}
             </motion.div>
           )}
@@ -193,7 +203,7 @@ export default function LoginPage() {
               transition={{ type: "spring", stiffness: 320, damping: 32 }}
               className={cn("overflow-hidden", passkeyAvailable && "mt-6")}
             >
-              <div className="space-y-4 rounded-[1.75rem] border border-border bg-card/90 p-5 shadow-card backdrop-blur">
+              <div className="space-y-4 rounded-[1.4rem] border border-border bg-card/95 p-5 backdrop-blur">
                 <div className="space-y-1.5">
                   <Label htmlFor="username">نام کاربری</Label>
                   <div className="relative">
@@ -259,7 +269,7 @@ export default function LoginPage() {
                 </Button>
 
                 {passkeyAvailable === false && (
-                  <p className="text-center text-[0.7rem] leading-6 text-muted-foreground">
+                  <p className="text-center text-caption leading-6 text-muted-foreground">
                     بعد از ورود، از «تنظیمات ← امنیت» اثر انگشت یا چهره را فعال کنید تا دفعهٔ بعد بدون رمز وارد شوید.
                   </p>
                 )}
@@ -301,7 +311,7 @@ function FingerprintButton({ state, onPress }: { state: ScanState; onPress: () =
       animate={state === "error" && !reduce ? { x: [0, -8, 8, -5, 5, 0] } : { x: 0 }}
       transition={{ duration: 0.45 }}
       style={{ ["--fp" as string]: color }}
-      className="relative grid size-40 place-items-center rounded-full outline-none focus-visible:ring-4 focus-visible:ring-ring/30"
+      className="relative grid size-32 place-items-center rounded-full outline-none focus-visible:ring-4 focus-visible:ring-ring/30"
     >
       {/* هاله‌های تپنده */}
       {!reduce &&
@@ -332,7 +342,7 @@ function FingerprintButton({ state, onPress }: { state: ScanState; onPress: () =
       {/* اثر انگشت */}
       <svg
         viewBox="0 0 24 24"
-        className="relative size-20 overflow-visible"
+        className="relative size-16 overflow-visible"
         fill="none"
         stroke="var(--fp)"
         strokeWidth={1.6}

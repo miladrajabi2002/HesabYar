@@ -97,7 +97,7 @@ async function main() {
     data: { name: "جوشکاری نعمتی", phone: "09126667788", role: "CUSTOMER" },
   })
 
-  // ───────── اجناس ─────────
+  // ───────── کالاها ─────────
   const mkProduct = (name: string, brand: string, code: string, unit: string, minStock: number) =>
     db.product.create({ data: { name, brand, code, unit, minStock } })
   const e6013_25 = await mkProduct("الکترود E6013 قطر ۲.۵", "اصفهان", "E60-25", "بسته", 30)

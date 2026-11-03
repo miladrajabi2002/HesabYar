@@ -304,10 +304,25 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const remove = async () => {
+    const qty = inv.items.reduce((sum, it) => sum + it.quantity, 0)
+    const consequences: string[] = [
+      isSale
+        ? `${toPersianDigits(qty)} واحد کالا به انبار برمی‌گردد`
+        : `${toPersianDigits(qty)} واحد کالا از موجودی انبار کم می‌شود`,
+    ]
+    if (inv.credit > 0)
+      consequences.push(
+        isSale
+          ? `طلب شما از ${inv.person.name} ${formatToman(inv.credit)} کم می‌شود`
+          : `بدهی شما به ${inv.person.name} ${formatToman(inv.credit)} کم می‌شود`
+      )
+    if (inv.paidCash > 0) consequences.push(`پرداخت نقدی ${formatToman(inv.paidCash)} از گردش حساب حذف می‌شود`)
+    if (inv.checks.length > 0) consequences.push(`${toPersianDigits(inv.checks.length)} چک این فاکتور هم حذف می‌شود`)
+    consequences.push("این کار قابل برگشت نیست")
     const okRemove = await confirm({
-      title: "حذف فاکتور",
-      description: `فاکتور ${toPersianDigits(inv.number)} و همه اقلام، چک‌ها و تسویه‌هایش حذف شود؟ این کار برگشت‌پذیر نیست.`,
-      confirmText: "بله، حذف کن",
+      title: `فاکتور ${toPersianDigits(inv.number)} حذف شود؟`,
+      consequences,
+      confirmText: "حذف فاکتور",
       tone: "danger",
     })
     if (!okRemove) return
@@ -474,7 +489,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <h1 className="truncate text-lg font-extrabold leading-tight sm:text-xl">
               فاکتور {isSale ? "فروش" : "خرید"} <span className="nums">{toPersianDigits(inv.number)}</span>
             </h1>
-            <p className="nums text-[0.68rem] text-muted-foreground">{formatJalaliWithWeekday(new Date(inv.date))}</p>
+            <p className="nums text-caption text-muted-foreground">{formatJalaliWithWeekday(new Date(inv.date))}</p>
           </div>
           <div className="flex gap-1.5">
             <Link
@@ -496,7 +511,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </button>
             <button
               onClick={remove}
-              className="grid size-11 place-items-center rounded-2xl border border-destructive/25 bg-card text-destructive/80 shadow-card transition-colors hover:bg-destructive/10"
+              className="hidden size-11 place-items-center rounded-2xl border border-destructive/25 bg-card text-destructive/80 transition-colors hover:bg-destructive/10 sm:grid"
               aria-label="حذف فاکتور"
             >
               <Trash2 className="size-4" />
@@ -510,10 +525,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 340, damping: 30 }}
           className={cn(
-            "relative overflow-hidden rounded-[1.75rem] p-5 text-white sm:p-6",
+            "relative overflow-hidden rounded-[1.4rem] p-5 text-white sm:p-6",
+            // نسخهٔ ۷: رنگ یکدست با یک نور ملایم — بدون گرادیان سه‌رنگ و سایهٔ رنگی
             isSale
-              ? "bg-[linear-gradient(125deg,#14b886,#0b7a62_55%,#064e3f)] shadow-[0_20px_40px_-18px_rgba(7,74,61,0.6)]"
-              : "bg-[linear-gradient(125deg,#7480ee,#4f5bd5_55%,#343c9c)] shadow-[0_20px_40px_-18px_rgba(52,60,156,0.6)]"
+              ? "bg-[radial-gradient(120%_80%_at_100%_0%,rgb(255_255_255/0.13),transparent_60%),#0a6a55]"
+              : "bg-[radial-gradient(120%_80%_at_100%_0%,rgb(255_255_255/0.13),transparent_60%),#3d48b8]"
           )}
         >
           <div className="relative flex items-start gap-3.5">
@@ -521,7 +537,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <InvoiceTypeMark type={inv.type} size={34} className="!bg-white !shadow-none" />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[0.7rem] opacity-80">{isSale ? "فروخته شد به" : "خریداری شد از"}</div>
+              <div className="text-caption opacity-80">{isSale ? "فروخته شد به" : "خریداری شد از"}</div>
               <Link
                 href={`/people/${inv.person.id}`}
                 className="block truncate text-lg font-black underline-offset-4 hover:underline sm:text-xl"
@@ -529,14 +545,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 {inv.person.name}
               </Link>
               {(inv.person.company || inv.person.phone) && (
-                <div className="nums truncate text-[0.7rem] opacity-80">
+                <div className="nums truncate text-caption opacity-80">
                   {[inv.person.company, inv.person.phone && toPersianDigits(inv.person.phone)].filter(Boolean).join(" • ")}
                 </div>
               )}
             </div>
             <span
               className={cn(
-                "shrink-0 rounded-full px-2.5 py-1 text-[0.66rem] font-extrabold",
+                "shrink-0 rounded-full px-2.5 py-1 text-caption font-extrabold",
                 inv.credit > 0 ? "bg-[#ffd86b] text-[#5c3a00]" : "bg-white text-[color:var(--sale)]"
               )}
             >
@@ -546,7 +562,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
           <div className="relative mt-5 flex items-end justify-between gap-3">
             <div>
-              <div className="text-[0.68rem] opacity-80">مبلغ نهایی</div>
+              <div className="text-caption opacity-80">مبلغ نهایی</div>
               <div className="nums text-[1.9rem] font-black leading-none tracking-tight sm:text-[2.3rem]">
                 <AnimatedAmount value={inv.total} />
                 <span className="ms-1.5 text-xs font-semibold opacity-70">تومان</span>
@@ -554,7 +570,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </div>
             {inv.credit > 0 && (
               <div className="text-end">
-                <div className="text-[0.68rem] opacity-80">مانده</div>
+                <div className="text-caption opacity-80">مانده</div>
                 <div className="nums text-base font-extrabold text-[#ffd86b]">{formatToman(inv.credit, false)}</div>
               </div>
             )}
@@ -567,7 +583,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <motion.span className="h-full bg-[#ffc14d]" initial={{ width: 0 }} animate={{ width: `${checkPct}%` }} transition={{ delay: 0.3, type: "spring", stiffness: 120, damping: 20 }} />
               <motion.span className="h-full bg-[#9cc8ff]" initial={{ width: 0 }} animate={{ width: `${laterPct}%` }} transition={{ delay: 0.4, type: "spring", stiffness: 120, damping: 20 }} />
             </div>
-            <div className="nums mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.64rem] opacity-90">
+            <div className="nums mt-2 flex flex-wrap gap-x-3 gap-y-1 text-caption opacity-90">
               <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-white" />نقد {formatToman(inv.paidCash, false)}</span>
               <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-[#ffc14d]" />چک {formatToman(inv.paidChecks, false)}</span>
               {settledLater > 0 && (
@@ -586,7 +602,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <Button
               onClick={openSettle}
               style={{ ["--tile" as string]: tone }}
-              className="h-14 w-full rounded-2xl bg-[color:var(--tile)] text-sm font-extrabold shadow-fab hover:bg-[color:var(--tile)]/90"
+              className="h-14 w-full rounded-2xl bg-[color:var(--tile)] text-sm font-extrabold hover:bg-[color:var(--tile)]/90"
             >
               <HandCoins className="size-5" />
               {isSale ? "دریافت مانده از" : "پرداخت مانده به"} {inv.person.name}
@@ -603,7 +619,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 <FileText className="size-4" />
               </span>
               اقلام
-              <span className="nums rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-bold text-muted-foreground">
+              <span className="nums rounded-full bg-muted px-2 py-0.5 text-caption font-bold text-muted-foreground">
                 {toPersianDigits(inv.items.length)}
               </span>
             </div>
@@ -611,9 +627,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             {/* دسکتاپ: جدول */}
             <table className="hidden w-full text-xs sm:table">
               <thead>
-                <tr className="text-[0.66rem] text-muted-foreground">
+                <tr className="text-caption text-muted-foreground">
                   <th className="w-8 pb-2 text-start font-medium">#</th>
-                  <th className="pb-2 text-start font-medium">جنس</th>
+                  <th className="pb-2 text-start font-medium">کالا</th>
                   <th className="pb-2 text-start font-medium">تعداد</th>
                   <th className="pb-2 text-end font-medium">فی</th>
                   <th className="pb-2 text-end font-medium">مبلغ</th>
@@ -625,7 +641,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <td className="nums py-3 text-muted-foreground">{toPersianDigits(i + 1)}</td>
                     <td className="py-3">
                       <div className="font-bold">{it.productName}</div>
-                      <div className="text-[0.62rem] text-muted-foreground">
+                      <div className="text-caption text-muted-foreground">
                         {[it.brand, it.code && `کد ${it.code}`].filter(Boolean).join(" • ")}
                         {isSale && (it.costPrice || 0) > 0 && (
                           <span className="nums ms-1 font-bold text-income">
@@ -643,31 +659,31 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </table>
 
             {/* موبایل: ردیف‌ها */}
-            <div className="space-y-2 sm:hidden">
+            <div className="-mx-4 divide-y divide-border/60 border-y border-border/60 sm:hidden">
               {inv.items.map((it, i) => (
-                <div key={it.id} style={{ ["--i" as string]: i }} className="hy-rise flex items-center gap-3 rounded-2xl bg-muted/45 px-3 py-2.5">
-                  <span className="nums grid size-7 shrink-0 place-items-center rounded-lg bg-card text-[0.66rem] font-extrabold text-muted-foreground">
+                <div key={it.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className="nums grid size-7 shrink-0 place-items-center rounded-lg bg-card text-caption font-extrabold text-muted-foreground">
                     {toPersianDigits(i + 1)}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-bold">
+                    <div className="truncate text-sm font-bold">
                       {it.productName}
                       {it.brand ? <span className="font-medium text-muted-foreground"> — {it.brand}</span> : null}
                     </div>
-                    <div className="nums mt-0.5 text-[0.64rem] text-muted-foreground">
+                    <div className="nums mt-0.5 text-caption text-muted-foreground">
                       {toPersianDigits(it.quantity)} {formatUnit(it.unit)} × {formatToman(it.unitPrice, false)}
                       {isSale && (it.costPrice || 0) > 0 && (
                         <span className="font-bold text-income"> • سود {formatToman(Math.round((it.unitPrice - it.costPrice) * it.quantity), false)}</span>
                       )}
                     </div>
                   </div>
-                  <div className="nums shrink-0 text-xs font-extrabold">{formatToman(it.total, false)}</div>
+                  <div className="nums shrink-0 text-sm font-extrabold">{formatToman(it.total, false)}</div>
                 </div>
               ))}
             </div>
 
             {/* جمع‌ها */}
-            <div className="mt-3 space-y-1.5 rounded-2xl bg-muted/45 p-3 text-xs">
+            <div className="mt-3 space-y-1.5 border-t border-dashed border-border pt-3 text-label">
               <div className="flex justify-between text-muted-foreground">
                 <span>جمع اقلام</span>
                 <span className="nums">{formatToman(inv.subtotal, false)}</span>
@@ -680,12 +696,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               )}
               <div className="flex justify-between border-t border-dashed border-border pt-1.5 text-sm font-extrabold">
                 <span>مبلغ نهایی</span>
-                <span className="nums">{formatToman(inv.total, false)} <span className="text-[0.62rem] font-medium text-muted-foreground">تومان</span></span>
+                <span className="nums">{formatToman(inv.total, false)} <span className="text-caption font-medium text-muted-foreground">تومان</span></span>
               </div>
             </div>
 
             {inv.note && (
-              <p className="mt-3 rounded-2xl border border-dashed border-border px-3 py-2.5 text-[0.72rem] leading-6 text-muted-foreground">
+              <p className="mt-3 rounded-2xl border border-dashed border-border px-3 py-2.5 text-caption leading-6 text-muted-foreground">
                 <span className="font-bold text-foreground">یادداشت: </span>
                 {inv.note}
               </p>
@@ -702,7 +718,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 {isSale ? "دریافت‌ها" : "پرداخت‌ها"}
               </div>
               {timeline.length === 0 ? (
-                <p className="rounded-2xl bg-muted/45 px-3 py-4 text-center text-[0.72rem] text-muted-foreground">
+                <p className="rounded-2xl bg-muted/45 px-3 py-4 text-center text-caption text-muted-foreground">
                   هنوز {isSale ? "پولی دریافت نشده" : "پولی پرداخت نشده"} — کل مبلغ نسیه است
                 </p>
               ) : (
@@ -725,12 +741,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                         <div className="flex items-center gap-1.5 text-xs font-bold">
                           <span className="truncate">{t.title}</span>
                           {t.badge && (
-                            <span className={cn("shrink-0 rounded-md px-1.5 py-px text-[0.56rem] font-bold", t.badge.cls)}>
+                            <span className={cn("shrink-0 rounded-md px-1.5 py-px text-micro font-bold", t.badge.cls)}>
                               {t.badge.text}
                             </span>
                           )}
                         </div>
-                        <div className="nums truncate text-[0.62rem] text-muted-foreground">{t.sub}</div>
+                        <div className="nums truncate text-caption text-muted-foreground">{t.sub}</div>
                       </div>
                       <span className={cn("nums shrink-0 text-xs font-extrabold", t.muted && "line-through")}>
                         {formatToman(t.amount, false)}
@@ -767,7 +783,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     </span>
                     سود این فاکتور
                   </div>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[0.58rem] font-bold text-muted-foreground">فقط برای شما — چاپ نمی‌شود</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-micro font-bold text-muted-foreground">فقط برای شما — چاپ نمی‌شود</span>
                 </div>
                 <div className="mt-3 flex items-center gap-4">
                   <MarginRing pct={marginPct} />
@@ -804,14 +820,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <Link
                       key={it.id}
                       href="/products"
-                      className="nums rounded-xl bg-card px-2.5 py-1.5 text-[0.66rem] font-bold ring-1 ring-border transition-colors hover:ring-[color:var(--purchase)]"
+                      className="nums rounded-xl bg-card px-2.5 py-1.5 text-caption font-bold ring-1 ring-border transition-colors hover:ring-[color:var(--purchase)]"
                     >
                       <span className="text-[color:var(--purchase)]">+{toPersianDigits(it.quantity)} {formatUnit(it.unit)}</span>{" "}
                       {it.productName}
                     </Link>
                   ))}
                 </div>
-                <p className="nums mt-2.5 text-[0.62rem] text-muted-foreground">
+                <p className="nums mt-2.5 text-caption text-muted-foreground">
                   میانگین قیمت هر واحد: {formatToman(Math.round(inv.subtotal / Math.max(1, inv.items.reduce((s, it) => s + it.quantity, 0))), false)} تومان
                 </p>
               </section>
@@ -825,7 +841,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <div className="flex min-w-0 items-center gap-2 text-sm font-bold">
               <Paperclip className="size-4 shrink-0 text-primary" />
               <span className="truncate">پیوست‌ها (تصاویر)</span>
-              <span className="nums shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-bold text-muted-foreground">
+              <span className="nums shrink-0 rounded-full bg-muted px-2 py-0.5 text-caption font-bold text-muted-foreground">
                 {toPersianDigits(attachments.length)}
               </span>
               {attLoading && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
@@ -876,7 +892,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     ) : (
                       <div className="flex size-full flex-col items-center justify-center gap-1 p-2 text-center">
                         <FileText className="size-6 text-muted-foreground" />
-                        <span className="w-full truncate text-[0.6rem] text-muted-foreground">{att.filename}</span>
+                        <span className="w-full truncate text-micro text-muted-foreground">{att.filename}</span>
                       </div>
                     )}
                     <button
@@ -905,6 +921,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             tabIndex={-1}
           />
         </section>
+
+        {/* حذف — موبایل: دور از سربرگ و جدا در انتهای صفحه (نسخهٔ ۷) */}
+        <button
+          type="button"
+          onClick={remove}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-label font-bold text-destructive transition-colors hover:bg-destructive/8 sm:hidden"
+        >
+          <Trash2 className="size-4" />
+          حذف این فاکتور
+        </button>
 
         {/* ───────── شیت تسویه مانده ───────── */}
         <BottomSheet
@@ -946,7 +972,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             {settleMethod === "CASH" ? (
               <>
                 <div>
-                  <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+                  <label className="mb-1.5 block text-label font-bold text-foreground/80">
                     مبلغ (تومان)
                   </label>
                   <AmountInput value={settleAmount} onChange={setSettleAmount} showWords={false} />
@@ -954,14 +980,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <button
                       type="button"
                       onClick={() => setSettleAmount(inv.credit)}
-                      className="mt-1.5 text-[0.7rem] font-medium text-primary hover:underline"
+                      className="mt-1.5 text-caption font-medium text-primary hover:underline"
                     >
                       انتخاب کل مانده ({formatToman(inv.credit, false)})
                     </button>
                   )}
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+                  <label className="mb-1.5 block text-label font-bold text-foreground/80">
                     واریز/برداشت به حساب
                   </label>
                   <button
@@ -983,14 +1009,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             ) : (
               <>
                 <div>
-                  <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+                  <label className="mb-1.5 block text-label font-bold text-foreground/80">
                     مبلغ چک (تومان)
                   </label>
                   <AmountInput value={checkAmount} onChange={setCheckAmount} showWords={false} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+                    <label className="mb-1.5 block text-label font-bold text-foreground/80">
                       سریال
                     </label>
                     <Input
@@ -1002,13 +1028,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+                    <label className="mb-1.5 block text-label font-bold text-foreground/80">
                       سررسید *
                     </label>
                     <JalaliDateField value={checkDue} onChange={setCheckDue} />
                   </div>
                 </div>
-                <p className="rounded-xl bg-primary/5 px-3 py-2 text-[0.65rem] text-muted-foreground">
+                <p className="rounded-xl bg-primary/5 px-3 py-2 text-caption text-muted-foreground">
                   چک تا سررسید «در جریان» می‌ماند و ربات تلگرام قبل از سررسید یادآوری می‌کند. با پاس
                   شدن، گردش بانکی ثبت می‌شود.
                 </p>
@@ -1099,7 +1125,7 @@ function MarginRing({ pct }: { pct: number }) {
       </svg>
       <div className="text-center leading-none">
         <div className="nums text-sm font-black text-income">{toPersianDigits(Math.round(pct))}٪</div>
-        <div className="mt-0.5 text-[0.5rem] text-muted-foreground">حاشیه</div>
+        <div className="mt-0.5 text-micro text-muted-foreground">حاشیه</div>
       </div>
     </div>
   )

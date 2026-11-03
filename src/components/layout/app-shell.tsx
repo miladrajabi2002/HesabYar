@@ -1,26 +1,31 @@
 "use client"
 
 /**
- * پوستهٔ اصلی حساب‌یار (نسخهٔ ۴)
- *  • دسکتاپ: سایدبار تخت (بدون گروه و بدون اسکرول) با نشانگر فعال لغزان + آیکون‌های رنگی متحرک
- *  • موبایل: هدر شیشه‌ای با عنوان صفحه + نوار پایین شناور که با اسکرول به پایین
- *    کنار می‌رود و با اسکرول به بالا برمی‌گردد؛ در صفحات فرم (فاکتور جدید) پنهان است
- *  • شیت «بیشتر» با کاشی‌های رنگی + شیت «فاکتور جدید»
+ * پوستهٔ اصلی حساب‌یار (نسخهٔ ۷)
+ *  • دسکتاپ: سایدبار تخت با آیکون‌های خطی تک‌رنگ (فقط آیتم فعال رنگی) + نوار بالا با جستجوی سراسری (Ctrl/⌘ K) و زنگ
+ *  • موبایل: هدر جمع‌وجور (عنوان بزرگ + جستجو + زنگ «کار امروز») — بدون لوگو تا محتوا جا داشته باشد
+ *  • نوار پایین شناور با دکمهٔ + برجسته؛ نشانگر فعال (قرص پشت آیکون + خط درخشان بالا) با فنر بین آیتم‌ها لیز می‌خورد
+ *    با اسکرول به پایین کنار می‌رود و در صفحات فرم (فاکتور جدید) پنهان است
+ *  • زنگ: چک‌های در جریانِ سررسید امروز/گذشته (همان معیار یادآوری صبحگاهی تلگرام) — /api/alerts
  */
 import { useEffect, ReactNode, useState, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { apiGet } from "@/lib/api-client"
 import { useTelegram } from "@/hooks/use-telegram"
 import { useUIStore } from "@/lib/ui-store"
-import { formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
+import { formatJalaliShort, formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
+import { formatToman, toPersianDigits } from "@/lib/money"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
+import { BankLogo } from "@/components/ui/bank-logo"
 import { GlobalSearch } from "@/components/search/global-search"
 import { BrandLogo } from "@/components/ui/brand-logo"
-import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import {
   IconApps,
+  IconBell,
   IconLogout,
   IconPlus,
   IconSearch,
@@ -36,7 +41,7 @@ const NAV_LIST: NavItem[] = [
   { href: "/calendar", label: "تقویم مالی", short: "تقویم" },
   { href: "/checks", label: "چک‌ها" },
   { href: "/people", label: "اشخاص" },
-  { href: "/products", label: "اجناس و انبار", short: "اجناس" },
+  { href: "/products", label: "کالاها و انبار", short: "کالاها" },
   { href: "/accounts", label: "حساب‌های بانکی", short: "حساب‌ها" },
   { href: "/reports", label: "گزارش‌ها" },
   { href: "/settings", label: "تنظیمات" },
@@ -55,6 +60,19 @@ function titleFor(pathname: string): string {
   if (pathname.startsWith("/invoices/new")) return "فاکتور"
   const hit = NAV_ITEMS.filter((i) => i.href !== "/").find((i) => pathname.startsWith(i.href))
   return hit?.label ?? "حساب‌یار"
+}
+
+type AlertsData = {
+  dueCount: number
+  dueChecks: {
+    id: string
+    amount: number
+    dueDate: string
+    direction: string
+    bankKey: string
+    personName: string
+    daysLeft: number
+  }[]
 }
 
 /** نوار پایین با اسکرول به پایین پنهان و با اسکرول به بالا ظاهر می‌شود */
@@ -81,18 +99,39 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const { isTelegram, haptic } = useTelegram()
-  const { moreSheetOpen, setMoreSheetOpen, addSheetOpen, openAddSheet, closeAddSheet } =
-    useUIStore()
-  const [searchOpen, setSearchOpen] = useState(false) // جستجو فقط در موبایل
+  const { moreSheetOpen, setMoreSheetOpen } = useUIStore()
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [alertsOpen, setAlertsOpen] = useState(false)
   const scrolledAway = useHideOnScroll()
   const reduceMotion = useReducedMotion()
-
   const showSidebar = !isTelegram
-  const today = formatJalaliWithWeekday(nowTehran())
+  const now = nowTehran()
+  const today = formatJalaliWithWeekday(now)
+
+  const { data: alerts } = useQuery({
+    queryKey: ["alerts"],
+    queryFn: () => apiGet<AlertsData>("/api/alerts"),
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  })
+  const dueCount = alerts?.dueCount ?? 0
+
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href))
   const isFormRoute = FORM_ROUTES.some((r) => pathname.startsWith(r))
-  const navHidden = isFormRoute || (scrolledAway && !moreSheetOpen && !addSheetOpen)
+  const navHidden = isFormRoute || (scrolledAway && !moreSheetOpen)
   const moreActive = MORE_ITEMS.some((m) => isActive(m.href)) || moreSheetOpen
+
+  // جستجوی سراسری با Ctrl/⌘ + K (دسکتاپ)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => null)
@@ -108,85 +147,106 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background">
       {/* ───────── سایدبار دسکتاپ ───────── */}
       {showSidebar ? (
-        <aside className="fixed inset-y-0 start-0 z-40 hidden w-[17rem] flex-col border-e border-sidebar-border bg-sidebar lg:flex">
-          <div className="flex items-center gap-3 px-5 pb-4 pt-6">
-            <BrandLogo size={42} />
-            <div className="min-w-0">
-              <div className="text-[1.05rem] font-black tracking-tight">حساب‌یار</div>
-              <div className="text-[0.7rem] text-muted-foreground">حسابداری فروشگاهی</div>
-            </div>
+        <aside className="fixed inset-y-0 start-0 z-40 hidden w-[16rem] flex-col border-e border-sidebar-border bg-sidebar lg:flex">
+          <div className="flex items-center gap-2.5 px-5 pb-1 pt-5">
+            <BrandLogo size={34} />
+            <div className="text-base font-black tracking-tight">حساب‌یار</div>
           </div>
 
-          <div className="px-3 pb-3">
-            <button
-              type="button"
-              onClick={openAddSheet}
-              className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-fab transition-transform hover:brightness-110 active:scale-[0.98]"
+          {/* فاکتور جدید: فروش (اصلی) + خرید */}
+          <div className="flex gap-1.5 px-3 pb-3 pt-4">
+            <Link
+              href="/invoices/new"
+              className="group flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-fab transition-[filter,transform] hover:brightness-110 active:scale-[0.98]"
             >
-              <IconPlus active={addSheetOpen} className="size-[1.1rem]" strokeWidth={2.4} />
-              فاکتور جدید
-            </button>
+              <IconPlus active={isFormRoute} className="size-[1.05rem]" strokeWidth={2.4} />
+              فاکتور فروش
+            </Link>
+            <Link
+              href="/invoices/new?type=PURCHASE"
+              title="فاکتور خرید جدید"
+              className="flex h-10 items-center justify-center rounded-xl bg-purchase/10 px-3 text-label font-bold text-purchase transition-colors hover:bg-purchase/15"
+            >
+              خرید
+            </Link>
           </div>
 
           <nav className="flex flex-1 flex-col justify-start gap-0.5 px-3 pb-4 pt-1">
             {NAV_LIST.map((item) => (
-              <SidebarItem key={item.href} item={item} active={isActive(item.href)} />
+              <SidebarItem
+                key={item.href}
+                item={item}
+                active={isActive(item.href)}
+                count={item.href === "/checks" ? dueCount : 0}
+              />
             ))}
           </nav>
 
-          <div className="space-y-2 border-t border-sidebar-border p-3">
-            <div className="flex items-center gap-2">
-              <div className="nums flex-1 truncate rounded-xl px-2 text-[0.7rem] text-muted-foreground">{today}</div>
-              <button
-                onClick={logout}
-                className="group flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              >
-                <IconLogout className="size-4" />
-                خروج
-              </button>
-            </div>
+          <div className="flex items-center gap-2 border-t border-sidebar-border px-4 py-3">
+            <div className="nums min-w-0 flex-1 truncate text-caption text-muted-foreground">{today}</div>
+            <button
+              onClick={logout}
+              className="group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-caption font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <IconLogout className="size-4" />
+              خروج
+            </button>
           </div>
         </aside>
       ) : null}
 
       {/* ───────── محتوا ───────── */}
-      <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-[17rem]")}>
-        {/* هدر موبایل — شیشه‌ای */}
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-background px-4 pb-2.5 pt-[max(0.7rem,env(safe-area-inset-top))] lg:hidden">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <BrandLogo size={34} />
-            <div className="min-w-0">
+      <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-[16rem]")}>
+        {/* هدر موبایل — جمع‌وجور: عنوان بزرگ + جستجو + زنگ */}
+        <header className="hy-mobile-header sticky top-0 z-30 border-b border-transparent bg-background/88 px-4 pb-2.5 pt-[calc(env(safe-area-inset-top,0px)+0.6rem)] backdrop-blur-xl lg:hidden">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
               <AnimatePresence mode="popLayout" initial={false}>
-                <motion.div
+                <motion.h1
                   key={titleFor(pathname)}
                   initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.2 }}
-                  className="truncate text-[0.95rem] font-extrabold leading-tight"
+                  className="truncate text-[1.4rem] font-extrabold leading-tight tracking-tight"
                 >
                   {titleFor(pathname)}
-                </motion.div>
+                </motion.h1>
               </AnimatePresence>
-              <div className="nums truncate text-[0.66rem] leading-tight text-muted-foreground">{today}</div>
+              <div className="nums truncate text-caption font-medium text-muted-foreground">{today}</div>
             </div>
-          </div>
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={() => setSearchOpen(true)}
-              aria-label="جستجوی سراسری"
-              className="group grid size-10 place-items-center rounded-2xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-95"
-            >
+            <HeaderButton label="جستجوی سراسری" onClick={() => setSearchOpen(true)}>
               <IconSearch className="size-[1.2rem]" />
-            </button>
+            </HeaderButton>
+            <HeaderButton label="کار امروز" onClick={() => setAlertsOpen(true)} count={dueCount}>
+              <IconBell className="size-[1.2rem]" active={dueCount > 0} />
+            </HeaderButton>
           </div>
         </header>
 
+        {/* نوار بالای دسکتاپ — جستجوی سراسری و زنگ */}
+        <div className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b border-border/70 bg-background/85 px-8 backdrop-blur-xl lg:flex">
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="group flex h-9 w-full max-w-md items-center gap-2 rounded-xl border border-border bg-card px-3 text-label text-muted-foreground transition-colors hover:border-primary/40"
+          >
+            <IconSearch className="size-4" />
+            جستجوی فاکتور، شخص، کالا یا چک…
+            <kbd className="ms-auto rounded-md border border-border bg-muted/60 px-1.5 font-sans text-micro font-bold" dir="ltr">
+              Ctrl K
+            </kbd>
+          </button>
+          <span className="flex-1" />
+          <HeaderButton label="کار امروز" onClick={() => setAlertsOpen(true)} count={dueCount}>
+            <IconBell className="size-[1.15rem]" active={dueCount > 0} />
+          </HeaderButton>
+        </div>
+
         <main
           className={cn(
-            "mx-auto w-full max-w-6xl flex-1 px-4 pt-4 sm:px-6 lg:px-8 lg:pb-12 lg:pt-8",
-            isFormRoute ? "pb-32" : "pb-36"
+            "mx-auto w-full max-w-6xl flex-1 px-4 pt-3 sm:px-6 lg:px-8 lg:pb-12 lg:pt-7",
+            isFormRoute ? "pb-32" : "pb-40"
           )}
         >
           {children}
@@ -197,123 +257,91 @@ export function AppShell({ children }: { children: ReactNode }) {
       <motion.nav
         aria-label="منوی اصلی"
         initial={false}
-        animate={{ y: navHidden ? 140 : 0, opacity: navHidden ? 0 : 1 }}
+        animate={{ y: navHidden ? 150 : 0, opacity: navHidden ? 0 : 1 }}
         transition={{ type: "spring", stiffness: 420, damping: 38 }}
-        className="glass fixed inset-x-3 z-40 mx-auto grid h-[4.6rem] max-w-md grid-cols-5 items-center rounded-[1.75rem] border px-1.5 shadow-float [bottom:max(0.75rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden"
+        className="hy-nav fixed inset-x-3.5 z-40 mx-auto grid h-[4.4rem] max-w-md grid-cols-5 items-center rounded-[1.75rem] px-1.5 [bottom:max(1.15rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+0.35rem))] lg:hidden"
       >
         <BottomNavItem href="/" label="خانه" active={isActive("/")} />
         <BottomNavItem href="/invoices" label="فاکتورها" active={isActive("/invoices")} />
 
-        {/* دکمهٔ + مرکزی */}
-        <div className="relative flex justify-center">
+        {/* دکمهٔ + مرکزی — برجسته، بالاتر از نوار */}
+        <div className="relative flex h-full flex-col items-center justify-end pb-[0.55rem]">
           <motion.button
             type="button"
             onClick={() => {
               haptic.medium()
-              if (addSheetOpen) closeAddSheet()
-              else openAddSheet()
+              router.push("/invoices/new")
             }}
             aria-label="فاکتور جدید"
-            whileTap={{ scale: 0.88 }}
-            className="relative -mt-7 grid size-[3.6rem] place-items-center rounded-[1.35rem] bg-primary text-primary-foreground shadow-fab ring-[5px] ring-background"
+            whileTap={reduceMotion ? undefined : { scale: 0.88, rotate: 90 }}
+            transition={{ type: "spring", stiffness: 520, damping: 24 }}
+            className="hy-fab absolute -top-[1.9rem] grid size-[3.9rem] place-items-center rounded-[1.4rem] text-primary-foreground"
           >
-            <motion.span
-              animate={{ rotate: addSheetOpen ? 135 : 0 }}
-              transition={{ type: "spring", stiffness: 380, damping: 20 }}
-              className="grid place-items-center"
-            >
-              <IconPlus className="size-7" strokeWidth={2.5} />
-            </motion.span>
+            <IconPlus className="relative size-7" strokeWidth={2.6} />
           </motion.button>
+          <span className="text-micro font-bold leading-none text-primary">فاکتور</span>
         </div>
 
         <BottomNavItem href="/calendar" label="تقویم" active={isActive("/calendar")} />
-
-        <button
-          type="button"
+        <NavButton
+          label="بیشتر"
+          active={moreActive}
           onClick={() => {
             haptic.tap()
             setMoreSheetOpen(true)
           }}
-          aria-label="بیشتر"
-          className="group relative flex h-full flex-col items-center justify-center gap-1"
-        >
-          {moreActive && <NavPill hue="var(--hue-settings)" />}
-          <span className={cn("relative z-10 transition-colors", moreActive ? "text-foreground" : "text-muted-foreground")}>
-            <IconApps active={moreActive} className="size-[1.4rem]" />
-          </span>
-          <span
-            className={cn(
-              "relative z-10 text-[0.62rem] leading-none transition-colors",
-              moreActive ? "font-extrabold text-foreground" : "font-medium text-muted-foreground"
-            )}
-          >
-            بیشتر
-          </span>
-        </button>
+          icon={<IconApps active={moreActive} className="size-[1.35rem]" />}
+        />
       </motion.nav>
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
-      
-      {/* ───────── شیت «فاکتور جدید» ───────── */}
+
+      {/* ───────── شیت «کار امروز» ───────── */}
       <BottomSheet
-        open={addSheetOpen}
-        onClose={closeAddSheet}
-        title="فاکتور جدید"
-        description="چه چیزی ثبت می‌کنید؟"
-        desktopMode="dialog"
+        open={alertsOpen}
+        onClose={() => setAlertsOpen(false)}
+        title="کار امروز"
+        description={dueCount ? `${toPersianDigits(dueCount)} چک سررسید امروز یا گذشته` : "همه‌چیز مرتب است"}
       >
-        <div className="grid grid-cols-2 gap-3">
-          {(
-            [
-              {
-                type: "SALE",
-                title: "فروش",
-                sub: "جنس دادم، پول گرفتم",
-                tone: "var(--sale)",
-                flow: ["+ پول", "− جنس"],
-              },
-              {
-                type: "PURCHASE",
-                title: "خرید",
-                sub: "جنس گرفتم، پول دادم",
-                tone: "var(--purchase)",
-                flow: ["+ جنس", "− پول"],
-              },
-            ] as const
-          ).map((o, i) => (
-            <motion.button
-              key={o.type}
-              type="button"
-              initial={reduceMotion ? false : { opacity: 0, y: 18, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: 0.06 + i * 0.07, type: "spring", stiffness: 420, damping: 28 }}
-              whileHover={{ y: -3 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={() => {
-                closeAddSheet()
-                go(`/invoices/new?type=${o.type}`)
-              }}
-              style={{ ["--tile" as string]: o.tone }}
-              className="group relative flex flex-col items-start overflow-hidden rounded-[1.6rem] border border-[color:color-mix(in_srgb,var(--tile)_22%,transparent)] bg-[linear-gradient(160deg,color-mix(in_srgb,var(--tile)_9%,white),color-mix(in_srgb,var(--tile)_3%,white))] p-4 text-start shadow-card transition-shadow hover:shadow-card-hover"
-            >
-              {/* هالهٔ رنگی پشت */}
-              <InvoiceTypeMark type={o.type} size={52} className="relative" />
-              <span className="relative mt-3.5 block text-[1.05rem] font-black">فاکتور {o.title}</span>
-              <span className="relative mt-0.5 block text-[0.7rem] text-muted-foreground">{o.sub}</span>
-              {/* جریان جنس/پول */}
-              <span className="relative mt-3 flex items-center gap-1.5 text-[0.6rem] font-bold">
-                <span className="nums rounded-full bg-[color:color-mix(in_srgb,var(--tile)_13%,transparent)] px-2 py-0.5 text-[color:var(--tile)]">
-                  {o.flow[0]}
-                </span>
-                <span className="nums rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{o.flow[1]}</span>
-              </span>
-            </motion.button>
-          ))}
-        </div>
-        <p className="mt-3 text-center text-[0.65rem] text-muted-foreground">
-          پیش‌نویس خودکار ذخیره می‌شود — هر وقت خواستی ادامه بده
-        </p>
+        {dueCount === 0 ? (
+          <div className="py-8 text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-full bg-income/10 text-income">
+              <IconBell className="size-6" />
+            </span>
+            <p className="mt-3 text-sm font-bold">چک سررسیدی برای امروز ندارید</p>
+            <p className="mt-1 text-caption text-muted-foreground">صبح هر روز یادآوری در تلگرام هم می‌آید.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/70">
+            {alerts?.dueChecks.map((c) => (
+              <Link
+                key={c.id}
+                href="/checks"
+                onClick={() => setAlertsOpen(false)}
+                className="flex items-center gap-3 py-3 transition-colors hover:bg-accent/40"
+              >
+                <BankLogo bankKey={c.bankKey} size={40} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-bold">{c.personName}</div>
+                  <div className="nums text-caption text-muted-foreground">
+                    {c.direction === "RECEIVED" ? "دریافتی" : "صادره"} · {formatJalaliShort(new Date(c.dueDate))}
+                  </div>
+                </div>
+                <div className="shrink-0 text-end">
+                  <div className="nums text-sm font-extrabold">{formatToman(c.amount, false)}</div>
+                  <span
+                    className={cn(
+                      "mt-0.5 inline-block rounded-full px-2 py-0.5 text-micro font-bold",
+                      c.daysLeft < 0 ? "bg-destructive/10 text-destructive" : "bg-warning/12 text-warning-ink"
+                    )}
+                  >
+                    {c.daysLeft < 0 ? `${toPersianDigits(-c.daysLeft)} روز گذشته` : "امروز"}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </BottomSheet>
 
       {/* ───────── شیت «بیشتر» ───────── */}
@@ -339,13 +367,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <span
                   className={cn(
-                    "icon-tile relative grid size-[3.6rem] place-items-center rounded-[1.25rem] transition-transform",
-                    active && "ring-2 ring-[color:var(--tile)] ring-offset-2 ring-offset-card"
+                    "relative grid size-[3.6rem] place-items-center rounded-[1.25rem] transition-colors",
+                    active ? "bg-primary text-primary-foreground" : "icon-soft"
                   )}
                 >
                   <Icon active duotone className="size-7" strokeWidth={2} />
+                  {item.href === "/checks" && dueCount > 0 && (
+                    <span className="nums absolute -end-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-micro font-bold text-white ring-2 ring-card">
+                      {toPersianDigits(dueCount)}
+                    </span>
+                  )}
                 </span>
-                <span className={cn("text-[0.72rem] leading-tight", active ? "font-extrabold" : "font-semibold")}>
+                <span className={cn("text-caption leading-tight", active ? "font-extrabold" : "font-semibold")}>
                   {item.short ?? item.label}
                 </span>
               </motion.button>
@@ -358,7 +391,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             setMoreSheetOpen(false)
             logout()
           }}
-          className="group mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-destructive/8 py-3 text-xs font-bold text-destructive transition-colors hover:bg-destructive/12 active:scale-[0.98]"
+          className="group mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-destructive/8 py-3 text-label font-bold text-destructive transition-colors hover:bg-destructive/12 active:scale-[0.98]"
         >
           <IconLogout className="size-4" />
           خروج از حساب
@@ -368,71 +401,143 @@ export function AppShell({ children }: { children: ReactNode }) {
   )
 }
 
-function SidebarItem({ item, active }: { item: NavItem; active: boolean }) {
-  const { icon: Icon, hue } = SECTION_META[item.href]
+function HeaderButton({
+  label,
+  onClick,
+  count = 0,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  count?: number
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={count ? `${label} — ${toPersianDigits(count)} مورد` : label}
+      className="group relative grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-card text-foreground transition-colors hover:bg-accent active:scale-95"
+    >
+      {children}
+      {count > 0 && (
+        <span className="nums absolute -end-1 -top-1 grid h-[1.15rem] min-w-[1.15rem] place-items-center rounded-full bg-destructive px-1 text-micro font-bold leading-none text-white ring-2 ring-background">
+          {toPersianDigits(count)}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function SidebarItem({ item, active, count }: { item: NavItem; active: boolean; count: number }) {
+  const { icon: Icon } = SECTION_META[item.href]
   return (
     <Link
       href={item.href}
-      style={{ ["--tile" as string]: hue }}
       className={cn(
-        "group relative flex items-center gap-3 rounded-2xl px-2.5 py-2 text-sm transition-colors",
-        active ? "font-bold text-foreground" : "font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+        "group relative flex h-10 items-center gap-2.5 rounded-xl px-3 text-sm transition-colors",
+        active ? "font-extrabold text-secondary-foreground" : "font-medium text-foreground/75 hover:bg-sidebar-accent hover:text-foreground"
       )}
     >
       {active && (
         <motion.span
           layoutId="sidebar-active"
-          className="absolute inset-0 rounded-2xl bg-sidebar-accent"
+          className="absolute inset-0 rounded-xl bg-primary/10"
           transition={{ type: "spring", stiffness: 500, damping: 40 }}
         />
       )}
-      <span
-        className={cn(
-          "relative grid size-8 place-items-center rounded-xl transition-all duration-300",
-          active ? "icon-tile" : "icon-soft"
-        )}
-      >
-        <Icon active={active} className="size-[1.05rem]" />
+      <span className={cn("relative transition-colors", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}>
+        <Icon active={active} className="size-[1.2rem]" />
       </span>
-      <span className="relative">{item.label}</span>
+      <span className="relative flex-1">{item.label}</span>
+      {count > 0 && (
+        <span className="nums relative rounded-full bg-warning/15 px-2 text-micro font-extrabold leading-5 text-warning-ink">
+          {toPersianDigits(count)}
+        </span>
+      )}
     </Link>
   )
 }
 
-/** نشانگر فعال نوار پایین — بین آیتم‌ها لیز می‌خورد */
-function NavPill({ hue }: { hue: string }) {
+/** نشانگر فعال نوار پایین — قرص پشت آیکون + خط درخشان لبهٔ بالا؛ هر دو با فنر بین آیتم‌ها لیز می‌خورند */
+function NavIndicator() {
   return (
-    <motion.span
-      layoutId="bottom-nav-pill"
-      style={{ ["--tile" as string]: hue }}
-      className="absolute inset-x-1.5 inset-y-1.5 rounded-[1.2rem] bg-[color-mix(in_srgb,var(--tile)_13%,transparent)]"
-      transition={{ type: "spring", stiffness: 480, damping: 36 }}
-    />
+    <>
+      <motion.span
+        layoutId="bottom-nav-glow"
+        aria-hidden
+        className="absolute -top-px left-1/2 h-[3px] w-7 -translate-x-1/2 rounded-b-full bg-primary shadow-[0_2px_10px_1px_color-mix(in_srgb,var(--primary)_55%,transparent)]"
+        transition={{ type: "spring", stiffness: 520, damping: 34 }}
+      />
+      <motion.span
+        layoutId="bottom-nav-pill"
+        aria-hidden
+        className="absolute inset-0 rounded-full bg-primary/12"
+        transition={{ type: "spring", stiffness: 520, damping: 34 }}
+      />
+    </>
+  )
+}
+
+function NavContent({ active, icon, label }: { active: boolean; icon: ReactNode; label: string }) {
+  return (
+    <>
+      <span className="relative grid h-8 w-14 place-items-center">
+        {active && <NavIndicator />}
+        <motion.span
+          className={cn("relative z-10 transition-colors duration-200", active ? "text-primary" : "text-muted-foreground")}
+          animate={{ y: active ? -1 : 0, scale: active ? 1.06 : 1 }}
+          transition={{ type: "spring", stiffness: 500, damping: 26 }}
+        >
+          {icon}
+        </motion.span>
+      </span>
+      <span
+        className={cn(
+          "relative z-10 text-micro leading-none transition-colors duration-200",
+          active ? "font-extrabold text-primary" : "font-medium text-muted-foreground"
+        )}
+      >
+        {label}
+      </span>
+    </>
   )
 }
 
 function BottomNavItem({ href, label, active }: { href: SectionHref; label: string; active: boolean }) {
-  const { icon: Icon, hue } = SECTION_META[href]
+  const { icon: Icon } = SECTION_META[href]
   const { haptic } = useTelegram()
   return (
     <Link
       href={href}
       onClick={() => haptic.tap()}
-      style={{ ["--tile" as string]: hue }}
-      className="group relative flex h-full flex-col items-center justify-center gap-1"
+      aria-current={active ? "page" : undefined}
+      className="group relative flex h-full flex-col items-center justify-center gap-1 active:scale-95"
     >
-      {active && <NavPill hue={hue} />}
-      <span className={cn("relative z-10 transition-colors", active ? "text-[color:var(--tile)]" : "text-muted-foreground")}>
-        <Icon active={active} className="size-[1.4rem]" />
-      </span>
-      <span
-        className={cn(
-          "relative z-10 text-[0.62rem] leading-none transition-colors",
-          active ? "font-extrabold text-foreground" : "font-medium text-muted-foreground"
-        )}
-      >
-        {label}
-      </span>
+      <NavContent active={active} label={label} icon={<Icon active={active} className="size-[1.35rem]" />} />
     </Link>
+  )
+}
+
+function NavButton({
+  label,
+  active,
+  onClick,
+  icon,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+  icon: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="group relative flex h-full flex-col items-center justify-center gap-1 active:scale-95"
+    >
+      <NavContent active={active} label={label} icon={icon} />
+    </button>
   )
 }

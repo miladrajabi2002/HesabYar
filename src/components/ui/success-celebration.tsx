@@ -42,7 +42,8 @@ export function SuccessCelebration({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <div className="absolute inset-0 bg-black/25 backdrop-blur-[3px]" />
+          {/* تیرگی ساده — backdrop-blur در وب‌اپ iOS بخشی از هدر را تار باقی می‌گذاشت */}
+          <div className="absolute inset-0 bg-black/30" />
           <motion.div
             initial={{ scale: 0.6, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}

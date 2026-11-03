@@ -6,7 +6,7 @@
  * IMP-05: دکمه ثبت بومی تلگرام • IMP-08: ذخیره خودکار پیش‌نویس
  * MO-02: جشن موفقیت + هپتیک • UI-08: جمع زنده با انیمیشن،
  * جابجایی اقلام با dnd-kit + اعتبارسنجی زندهٔ اقلام و تخفیف
- * ADV-05: عکس جنس جدید (اختیاری) در همین شیت + بندانگشتی عکس در انتخاب اجناس
+ * ADV-05: عکس کالا جدید (اختیاری) در همین شیت + بندانگشتی عکس در انتخاب کالاها
  */
 import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -57,13 +57,16 @@ import {
   ArrowRight,
   Clock3,
   ChevronDown,
+  Check,
+  Minus,
 } from "lucide-react"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
-import { formatToman, toPersianDigits } from "@/lib/money"
+import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { jalaliDayKey } from "@/lib/jalali"
 import { normalizeDigits } from "@/lib/digits"
 import { BankLogo } from "@/components/ui/bank-logo"
+import { PersonFields } from "@/components/people/person-fields"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { AmountInput } from "@/components/ui/amount-input"
 import { NumberInput } from "@/components/ui/number-input"
@@ -89,6 +92,8 @@ interface Person {
   role: string
   /** مانده حساب: مثبت = طلب ما، منفی = بدهی ما */
   balance?: number
+  /** روزهای باز ماندن مانده (حلقهٔ آواتار) */
+  openDays?: number | null
 }
 interface Product {
   id: string
@@ -98,8 +103,12 @@ interface Product {
   unit: string
   /** موجودی زندهٔ انبار (خرید − فروش + اولیه) — از GET /api/products */
   stock: number
-  /** عکس جنس (اختیاری) — شناسهٔ اولین پیوست تصویری (ADV-05) */
+  /** عکس کالا (اختیاری) — شناسهٔ اولین پیوست تصویری (ADV-05) */
   photoId: string | null
+  /** قیمت‌های مرجع برای پیشنهاد قیمت و نشان تغییر (از GET /api/products) */
+  avgCostPrice?: number
+  lastPurchasePrice?: number
+  lastSalePrice?: number
 }
 interface Account {
   id: string
@@ -338,6 +347,7 @@ function NewInvoicePageInner() {
   // شیت‌ها
   const [personSheet, setPersonSheet] = useState(false)
   const [personFormSheet, setPersonFormSheet] = useState(false)
+  const [quickName, setQuickName] = useState("")
   const [itemSheet, setItemSheet] = useState(false)
   const [accountSheet, setAccountSheet] = useState(false)
   const [checkSheet, setCheckSheet] = useState(false)
@@ -461,7 +471,7 @@ function NewInvoicePageInner() {
   const itemRowErrors = useMemo(
     () =>
       items.map((it) => {
-        if (!it.name?.trim()) return "نام جنس ناقص است"
+        if (!it.name?.trim()) return "نام کالا ناقص است"
         if (!(it.quantity > 0)) return "تعداد باید بیش از صفر باشد"
         if (it.unitPrice < 0) return "قیمت واحد نمی‌تواند منفی باشد"
         return null
@@ -630,7 +640,7 @@ function NewInvoicePageInner() {
     text: editId ? "ذخیره تغییرات" : "ثبت فاکتور",
     enabled: !!person && items.length > 0 && !saving && !hasErrors,
     loading: saving,
-    color: type === "SALE" ? "#0f9f6e" : "#4f5bd5",
+    color: type === "SALE" ? "#0a7d57" : "#4450c8",
     onClick: () => submitRef.current(),
   })
 
@@ -643,7 +653,7 @@ function NewInvoicePageInner() {
         )}
       </AnimatePresence>
       {lockedChecks && (
-        <p className="mb-3 rounded-2xl bg-warning/10 px-3 py-2.5 text-[0.7rem] font-medium text-warning">
+        <p className="mb-3 rounded-2xl bg-warning/10 px-3 py-2.5 text-caption font-medium text-warning-ink">
           این فاکتور چک نقدشده/برگشتی دارد و قابل ویرایش نیست — فقط مشاهده.
         </p>
       )}
@@ -662,8 +672,8 @@ function NewInvoicePageInner() {
           <h1 className="truncate text-lg font-extrabold leading-tight sm:text-xl">
             {editId ? `ویرایش فاکتور ${editData ? toPersianDigits(editData.invoice.number) : ""}` : "فاکتور جدید"}
           </h1>
-          <p className="text-[0.66rem] text-muted-foreground">
-            {editId ? "تغییرات بعد از «ذخیره» اعمال می‌شود" : type === "SALE" ? "جنس به مشتری دادم" : "جنس از فروشنده گرفتم"}
+          <p className="text-caption text-muted-foreground">
+            {editId ? "تغییرات بعد از «ذخیره» اعمال می‌شود" : type === "SALE" ? "کالا را به مشتری فروختم" : "کالا را از فروشنده خریدم"}
           </p>
         </div>
         <button
@@ -696,34 +706,44 @@ function NewInvoicePageInner() {
         />
       )}
 
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start lg:gap-6">
       <div className="space-y-4">
-        {/* ───────── شخص ───────── */}
+        {/* ───────── ۱. شخص ───────── */}
         <section
           ref={personSectionRef}
           className="rounded-3xl border border-border/70 bg-card p-4 shadow-card"
         >
-          <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-            <Users className="size-4 text-primary" />
-            {type === "SALE" ? "فروختم به" : "خریدم از"}
-          </div>
+          <StepHeader n={1} done={!!person} title={type === "SALE" ? "فروختم به" : "خریدم از"} />
           {person ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-3 py-2.5">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                {person.company ? <Building2 className="size-5" /> : <Users className="size-5" />}
-              </span>
+            <div className="flex items-center gap-3 rounded-2xl bg-muted/50 px-3 py-2.5">
+              <BalanceAvatar role={person.role} balance={person.balance ?? 0} openDays={person.openDays} size={42} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold">{person.name}</div>
-                <div className="nums truncate text-[0.7rem] text-muted-foreground">
-                  {[person.phone, person.company].filter(Boolean).join(" • ") || personTypeLabel}
-                </div>
+                <div className="truncate text-[0.95rem] font-bold">{person.name}</div>
+                {person.balance ? (
+                  <div className="nums truncate text-caption text-muted-foreground">
+                    {person.balance > 0 ? "از قبل به ما بدهکار است: " : "از قبل ما بدهکاریم: "}
+                    <b className={person.balance > 0 ? "text-warning-ink" : "text-purchase"}>
+                      {formatToman(Math.abs(person.balance), false)}
+                    </b>
+                    {person.openDays != null && person.openDays > 0 && (
+                      <span className={cn(person.openDays > 30 && "font-bold text-destructive")}>
+                        {" "}· {toPersianDigits(person.openDays)} روز
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="nums truncate text-caption text-muted-foreground">
+                    {[person.phone, person.company].filter(Boolean).join(" • ") || personTypeLabel}
+                  </div>
+                )}
               </div>
               <button
                 type="button"
                 onClick={() => setPersonSheet(true)}
-                className="rounded-xl p-2 text-muted-foreground hover:bg-accent"
+                className="shrink-0 rounded-xl px-2.5 py-2 text-label font-bold text-primary hover:bg-primary/10"
                 aria-label="تغییر شخص"
               >
-                <Pencil className="size-4" />
+                تغییر
               </button>
             </div>
           ) : (
@@ -742,7 +762,7 @@ function NewInvoicePageInner() {
             </button>
           )}
           {showPersonError && (
-            <p className="mt-1.5 text-[0.65rem] font-medium text-destructive">
+            <p className="mt-1.5 text-caption font-medium text-destructive">
               برای ثبت فاکتور، انتخاب {personTypeLabel} الزامی است
             </p>
           )}
@@ -750,15 +770,12 @@ function NewInvoicePageInner() {
 
         {/* ───────── اقلام ───────── */}
         <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
-          <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-            <Package className="size-4 text-primary" />
-            اقلام فاکتور
-            {items.length > 0 && (
-              <span className="nums rounded-full bg-primary/10 px-2 py-0.5 text-[0.65rem] font-bold text-primary">
-                {toPersianDigits(items.length)}
-              </span>
-            )}
-          </div>
+          <StepHeader
+            n={2}
+            done={items.length > 0}
+            title="اقلام فاکتور"
+            meta={items.length > 0 ? `${toPersianDigits(items.length)} قلم` : undefined}
+          />
 
           {/* UI-08: جابجایی ترتیب اقلام با درگ — دستگیرهٔ سمت راست هر ردیف */}
           <DndContext
@@ -786,10 +803,10 @@ function NewInvoicePageInner() {
                 <button
                   type="button"
                   onClick={() => setItemSheet(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-input py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary active:scale-[0.98]"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary/8 text-sm font-bold text-primary transition-colors hover:bg-primary/12 active:scale-[0.98]"
                 >
                   <PackagePlus className="size-4" />
-                  افزودن جنس
+                  افزودن کالا
                 </button>
               </div>
             </SortableContext>
@@ -803,56 +820,21 @@ function NewInvoicePageInner() {
           )}
         </section>
 
-        {/* ───────── تاریخ و تخفیف ───────── */}
-        <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
-          <div className="grid grid-cols-2 gap-3">
-            <div ref={dateFieldRef}>
-              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">تاریخ فاکتور</label>
-              <JalaliDateField value={date} onChange={setDate} />
-              {showDateError && (
-                <p className="mt-1 text-[0.65rem] font-medium text-destructive">تاریخ فاکتور را انتخاب کنید</p>
-              )}
-            </div>
-            <div ref={discountFieldRef}>
-              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">تخفیف (تومان)</label>
-              <AmountInput
-                value={discount}
-                onChange={(v) => {
-                  setDiscount(v)
-                  setDiscountTouched(true)
-                }}
-                placeholder="ندارد"
-                showWords={false}
-              />
-              {showDiscountError && (
-                <p className="mt-1 text-[0.65rem] font-medium text-destructive">تخفیف بیشتر از جمع اقلام است</p>
-              )}
-            </div>
-          </div>
-          <Input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="یادداشت فاکتور (اختیاری)"
-            className="mt-3 bg-card text-sm"
-          />
-        </section>
-
         {/* ───────── تسویه: نقد / چک / نسیه ───────── */}
         <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-sm font-bold">
-              <span className="grid size-7 place-items-center rounded-xl bg-primary/10 text-primary">
-                <Banknote className="size-4" />
-              </span>
-              {type === "SALE" ? "دریافت پول" : "پرداخت پول"}
-            </div>
-            <span className="nums text-[0.7rem] text-muted-foreground">
-              مبلغ فاکتور <b className="text-foreground">{formatToman(total, false)}</b>
-            </span>
-          </div>
+          <StepHeader
+            n={3}
+            done={total > 0 && credit === 0}
+            title={type === "SALE" ? "دریافت پول" : "پرداخت پول"}
+            meta={
+              <>
+                مبلغ <b className="text-foreground">{formatToman(total, false)}</b>
+              </>
+            }
+          />
 
           {editId && (editData?.invoice.items.length ?? 0) > 0 && (
-            <p className="mb-3 rounded-xl bg-primary/5 px-3 py-2 text-[0.68rem] leading-5 text-muted-foreground">
+            <p className="mb-3 rounded-xl bg-primary/5 px-3 py-2 text-caption leading-5 text-muted-foreground">
               تسویه‌های ثبت‌شدهٔ بعدی بابت این فاکتور حفظ می‌شوند.
             </p>
           )}
@@ -899,7 +881,7 @@ function NewInvoicePageInner() {
                 <button
                   type="button"
                   onClick={() => fillCash()}
-                  className="nums rounded-lg bg-primary/10 px-2 py-1 text-[0.65rem] font-bold text-primary transition-colors hover:bg-primary/20"
+                  className="nums rounded-lg bg-primary/10 px-2 py-1 text-caption font-bold text-primary transition-colors hover:bg-primary/20"
                 >
                   + باقی‌مانده ({formatToman(remaining, false)})
                 </button>
@@ -924,7 +906,7 @@ function NewInvoicePageInner() {
                   <>
                     <BankLogo bankKey={account.bankKey} size={28} />
                     <span className="min-w-0 flex-1 truncate text-start text-sm">{account.name}</span>
-                    <span className="text-[0.62rem] text-muted-foreground">تغییر</span>
+                    <span className="text-caption text-muted-foreground">تغییر</span>
                   </>
                 ) : (
                   <span
@@ -948,7 +930,7 @@ function NewInvoicePageInner() {
                 چک{type === "SALE" ? " دریافتی" : " صادره"}
               </span>
               {checks.length > 0 && (
-                <span className="nums text-[0.68rem] text-muted-foreground">جمع {formatToman(checkTotal, false)}</span>
+                <span className="nums text-caption text-muted-foreground">جمع {formatToman(checkTotal, false)}</span>
               )}
             </div>
             <div className="space-y-2">
@@ -968,18 +950,18 @@ function NewInvoicePageInner() {
                         <div className="flex items-center gap-1.5">
                           <span className="nums text-xs font-bold">{formatToman(c.amount, false)}</span>
                           {c.isRegistered ? (
-                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-income/10 px-1.5 py-px text-[0.56rem] font-bold text-income">
+                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-income/10 px-1.5 py-px text-micro font-bold text-income">
                               <BadgeCheck className="size-2.5" />
                               ثبت‌شده
                             </span>
                           ) : (
-                            <span className="shrink-0 rounded-md bg-warning/10 px-1.5 py-px text-[0.56rem] font-bold text-warning">
+                            <span className="shrink-0 rounded-md bg-warning/10 px-1.5 py-px text-micro font-bold text-warning-ink">
                               ثبت‌نشده
                             </span>
                           )}
                           {c.photo && <Paperclip className="size-2.5 shrink-0 text-muted-foreground" />}
                         </div>
-                        <div className="nums text-[0.62rem] text-muted-foreground">
+                        <div className="nums text-caption text-muted-foreground">
                           سررسید {toPersianDigits(c.dueDate.replace(/-/g, "/"))}
                           {c.serial ? ` • ${c.serial}` : ""}
                         </div>
@@ -1033,14 +1015,14 @@ function NewInvoicePageInner() {
                       ? "مازاد پرداخت → علی‌الحساب شخص"
                       : "تسویه کامل"}
               </div>
-              <div className="text-[0.62rem] text-muted-foreground">
+              <div className="text-caption text-muted-foreground">
                 {credit > 0
                   ? "بعداً از صفحهٔ شخص یا فاکتور تسویه می‌کنید"
                   : excess > 0
                     ? "در تراز شخص لحاظ می‌شود"
                     : total > 0
                       ? "چیزی باقی نمانده"
-                      : "اول جنس اضافه کنید"}
+                      : "اول کالا اضافه کنید"}
               </div>
             </div>
             <span className="nums shrink-0 text-base font-extrabold">
@@ -1048,27 +1030,129 @@ function NewInvoicePageInner() {
             </span>
           </motion.div>
         </section>
+
+        {/* ───────── جزئیات: تاریخ، تخفیف، یادداشت ───────── */}
+        <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card">
+          <h2 className="mb-3 text-[0.95rem] font-extrabold">جزئیات</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div ref={dateFieldRef}>
+              <label className="mb-1.5 block text-label font-bold text-foreground/80">تاریخ فاکتور</label>
+              <JalaliDateField value={date} onChange={setDate} />
+              {showDateError && (
+                <p className="mt-1 text-caption font-medium text-destructive">تاریخ فاکتور را انتخاب کنید</p>
+              )}
+            </div>
+            <div ref={discountFieldRef}>
+              <label className="mb-1.5 block text-label font-bold text-foreground/80">تخفیف (تومان)</label>
+              <AmountInput
+                value={discount}
+                onChange={(v) => {
+                  setDiscount(v)
+                  setDiscountTouched(true)
+                }}
+                placeholder="ندارد"
+                showWords={false}
+              />
+              {showDiscountError && (
+                <p className="mt-1 text-caption font-medium text-destructive">تخفیف بیشتر از جمع اقلام است</p>
+              )}
+            </div>
+          </div>
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="یادداشت فاکتور (اختیاری)"
+            className="mt-3 bg-card text-sm"
+          />
+        </section>
+
+      </div>
+
+      {/* ───────── خلاصهٔ فاکتور — دسکتاپ، کنار فرم (نسخهٔ ۷) ───────── */}
+      <aside className="sticky top-20 hidden rounded-3xl border border-border/80 bg-card p-5 lg:block">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-[0.95rem] font-extrabold">خلاصهٔ فاکتور {type === "SALE" ? "فروش" : "خرید"}</h2>
+          {!editId && <AutosaveStatus savedAt={draftSavedAt} />}
+          {editDirty && <span className="text-caption font-bold text-warning-ink">ذخیره‌نشده</span>}
+        </div>
+        <dl className="nums mt-4 space-y-2 text-label">
+          <div className="flex justify-between">
+            <dt className="text-muted-foreground">جمع اقلام ({toPersianDigits(items.length)} قلم)</dt>
+            <dd>{formatToman(subtotal, false)}</dd>
+          </div>
+          {discount > 0 && (
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">تخفیف</dt>
+              <dd className="text-destructive">−{formatToman(discount, false)}</dd>
+            </div>
+          )}
+          <div className="flex items-baseline justify-between border-t border-dashed border-border pt-2.5">
+            <dt className="font-bold">جمع کل</dt>
+            <dd className="text-[1.35rem] font-black tracking-tight">
+              <AnimatedNumber value={total} />
+            </dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-muted-foreground">نقد</dt>
+            <dd>{formatToman(paidCash, false)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-muted-foreground">چک</dt>
+            <dd>{formatToman(checkTotal, false)}</dd>
+          </div>
+          {(credit > 0 || excess > 0) && (
+            <div className={cn("flex justify-between font-bold", credit > 0 ? "text-warning-ink" : "text-primary")}>
+              <dt>{credit > 0 ? "نسیه (به حساب شخص)" : "مازاد پرداخت"}</dt>
+              <dd>{formatToman(credit > 0 ? credit : excess, false)}</dd>
+            </div>
+          )}
+        </dl>
+        <Button
+          onClick={submit}
+          disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors}
+          className={cn(
+            "mt-5 h-[3.25rem] w-full rounded-2xl text-[0.95rem] font-bold",
+            type === "SALE"
+              ? "bg-[color:var(--sale)] hover:bg-[color:var(--sale)]/90"
+              : "bg-[color:var(--purchase)] hover:bg-[color:var(--purchase)]/90"
+          )}
+        >
+          {saving ? <Loader2 className="size-4 animate-spin" /> : editId ? <Pencil className="size-4" /> : <FileText className="size-4" />}
+          {editId ? "ذخیره تغییرات" : "ثبت فاکتور"}
+        </Button>
+        <button
+          type="button"
+          onClick={leave}
+          className="mt-1.5 h-10 w-full rounded-xl text-label font-bold text-muted-foreground transition-colors hover:bg-destructive/8 hover:text-destructive"
+        >
+          انصراف
+        </button>
+      </aside>
       </div>
 
       {/* ───────── نوار چسبان پایین ───────── */}
-      <div className="fixed inset-x-3 z-30 [bottom:max(0.75rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:start-[calc(17rem+1.5rem)] lg:end-6">
-        <div className="glass mx-auto flex max-w-3xl items-center gap-3 rounded-[1.6rem] border p-2.5 ps-4 shadow-float">
+      {/* موبایل: چسبیده به لبهٔ پایین با خلاصهٔ «۳ قلم · نسیه X» (نسخهٔ ۷) — دسکتاپ: پنل خلاصهٔ کنار فرم */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/80 bg-card/95 px-4 pt-2.5 backdrop-blur-xl [padding-bottom:max(0.75rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden">
+        <div className="mx-auto flex max-w-3xl items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-[0.65rem] text-muted-foreground">
-              مبلغ نهایی
+            <div className="nums flex items-center gap-1.5 truncate text-caption text-muted-foreground">
+              {items.length > 0 ? `${toPersianDigits(items.length)} قلم` : "مبلغ نهایی"}
+              {credit > 0 && total > 0 && (
+                <span className="font-bold text-warning-ink">· نسیه {formatTomanCompact(credit)}</span>
+              )}
               {!editId && <AutosaveStatus savedAt={draftSavedAt} />}
-              {editDirty && <span className="font-bold text-warning">• ذخیره‌نشده</span>}
+              {editDirty && <span className="font-bold text-warning-ink">• ذخیره‌نشده</span>}
             </div>
-            <div className="nums truncate text-base font-extrabold sm:text-lg">
+            <div className="nums truncate text-lg font-black tracking-tight">
               <AnimatedNumber value={total} />
-              <span className="ms-1 text-[0.65rem] font-medium text-muted-foreground">تومان</span>
+              <span className="ms-1 text-caption font-semibold text-muted-foreground">تومان</span>
             </div>
           </div>
           <Button
             onClick={submit}
             disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors}
             className={cn(
-              "h-12 rounded-2xl px-8 text-sm font-bold shadow-fab",
+              "h-[3.25rem] rounded-2xl px-7 text-[0.95rem] font-bold",
               type === "SALE"
                 ? "bg-[color:var(--sale)] hover:bg-[color:var(--sale)]/90"
                 : "bg-[color:var(--purchase)] hover:bg-[color:var(--purchase)]/90"
@@ -1096,13 +1180,15 @@ function NewInvoicePageInner() {
           setPerson(p)
           setPersonSheet(false)
         }}
-        onQuickAdd={() => {
+        onQuickAdd={(name) => {
+          setQuickName(name)
           setPersonSheet(false)
           setPersonFormSheet(true)
         }}
       />
       <QuickPersonSheet
         open={personFormSheet}
+        initialName={quickName}
         onClose={() => setPersonFormSheet(false)}
         type={type}
         onCreated={(p) => {
@@ -1115,6 +1201,8 @@ function NewInvoicePageInner() {
         onClose={() => setItemSheet(false)}
         products={productsData?.products ?? []}
         invoiceType={type}
+        personId={person?.id}
+        excludeInvoiceId={editId ?? undefined}
         onAdd={(item) => {
           setItems((prev) => [...prev, { ...item, rowId: genRowId() }])
           setItemSheet(false)
@@ -1192,8 +1280,8 @@ function SortableItemRow({
         transition,
       }}
       className={cn(
-        "rounded-2xl border bg-muted/40 px-3 py-2.5",
-        error ? "border-destructive/60" : "border-border/60",
+        "rounded-2xl border bg-card px-2.5 py-2.5",
+        error ? "border-destructive/60" : "border-border/70",
         isDragging && "relative z-10 scale-[1.02] border-border bg-card shadow-lg"
       )}
     >
@@ -1210,11 +1298,11 @@ function SortableItemRow({
           <GripVertical className="size-4" />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-bold">
+          <div className="truncate text-sm font-bold">
             {item.name}
             {item.brand ? <span className="text-muted-foreground"> — {item.brand}</span> : null}
           </div>
-          <div className="nums mt-1 text-[0.7rem] text-muted-foreground">
+          <div className="nums mt-1 text-caption text-muted-foreground">
             {toPersianDigits(item.quantity)} {formatUnit(item.unit)} ×{" "}
             {formatToman(item.unitPrice, false)} ={" "}
             <span className="font-bold text-foreground">
@@ -1231,7 +1319,7 @@ function SortableItemRow({
           <Trash2 className="size-4" />
         </button>
       </div>
-      {error && <p className="mt-1 text-[0.65rem] font-medium text-destructive">{error}</p>}
+      {error && <p className="mt-1 text-caption font-medium text-destructive">{error}</p>}
     </div>
   )
 }
@@ -1250,7 +1338,7 @@ function PersonPickerSheet({
   people: Person[]
   type: "SALE" | "PURCHASE"
   onPick: (p: Person) => void
-  onQuickAdd: () => void
+  onQuickAdd: (name: string) => void
 }) {
   const [q, setQ] = useState("")
   const latinQ = normalizeDigits(q)
@@ -1260,33 +1348,43 @@ function PersonPickerSheet({
   const filtered = people.filter(
     (p) => !q || matches(p.name) || matches(p.company) || matches(p.phone)
   )
-  const maxAbs = Math.max(0, ...people.map((p) => Math.abs(p.balance ?? 0)))
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
       title={type === "SALE" ? "انتخاب مشتری" : "انتخاب فروشنده"}
+      description={`${toPersianDigits(people.length)} شخص · مانده هر نفر کنار نامش`}
       size="tall"
-      footer={
-        <Button onClick={onQuickAdd} className="h-12 w-full rounded-2xl font-bold">
-          <UserPlus className="size-4" />
-          افزودن شخص جدید
-        </Button>
-      }
     >
-      <div className="sticky -top-4 z-10 -mx-4 -mt-4 mb-2 bg-card px-4 pb-2 pt-4">
+      <div className="sticky -top-2 z-10 -mx-5 -mt-2 bg-card px-5 pb-2 pt-2">
         <div className="relative">
-          <Search className="absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
+          <Search className="absolute inset-y-0 start-3.5 my-auto size-4 text-muted-foreground" />
           <input
             autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="جستجوی نام، شرکت یا موبایل…"
-            className="field ps-10"
+            placeholder="نام، شرکت یا موبایل"
+            className="field border-transparent bg-muted ps-10 hover:border-transparent"
           />
         </div>
       </div>
-      <div className="space-y-1.5">
+      {/* نسخهٔ ۷: «شخص جدید» اولین ردیف فهرست، نه دکمهٔ جدا؛ ردیف‌ها بدون قاب و با خط جداکننده */}
+      <div className="divide-y divide-border/60">
+        <button
+          type="button"
+          onClick={() => onQuickAdd(q.trim().length >= 2 ? q.trim() : "")}
+          className="flex w-full items-center gap-3 py-2.5 text-start transition-colors hover:bg-accent/40"
+        >
+          <span className="grid size-11 shrink-0 place-items-center rounded-[32%] bg-primary/10 text-primary">
+            <UserPlus className="size-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-primary">
+              {q.trim().length >= 2 ? `«${q.trim()}» را اضافه کن` : type === "SALE" ? "مشتری جدید" : "فروشنده جدید"}
+            </span>
+            <span className="block text-caption text-muted-foreground">فقط نام کافی است، بقیه بعداً</span>
+          </span>
+        </button>
         {filtered.map((p) => {
           const bal = p.balance ?? 0
           return (
@@ -1294,12 +1392,12 @@ function PersonPickerSheet({
               key={p.id}
               type="button"
               onClick={() => onPick(p)}
-              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-2.5 text-start transition-all hover:border-primary/40 hover:bg-accent/50 active:scale-[0.99]"
+              className="flex w-full items-center gap-3 py-2.5 text-start transition-colors hover:bg-accent/40 active:bg-accent/60"
             >
-              <BalanceAvatar role={p.role} balance={p.balance ?? 0} maxAbs={maxAbs} size={44} />
+              <BalanceAvatar role={p.role} balance={p.balance ?? 0} openDays={p.openDays} size={44} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-bold">{p.name}</span>
-                <span className="nums mt-0.5 block truncate text-[0.7rem] text-muted-foreground">
+                <span className="nums mt-0.5 block truncate text-caption text-muted-foreground">
                   {[p.company, p.phone ? toPersianDigits(p.phone) : null].filter(Boolean).join(" • ") ||
                     ROLE_LABELS[p.role]}
                 </span>
@@ -1307,22 +1405,20 @@ function PersonPickerSheet({
               {bal !== 0 && (
                 <span
                   className={cn(
-                    "nums shrink-0 rounded-full px-2 py-0.5 text-[0.62rem] font-bold",
-                    bal > 0 ? "bg-warning/12 text-warning" : "bg-destructive/10 text-destructive"
+                    "nums shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                    bal > 0 ? "bg-warning/15 text-warning-ink" : "bg-purchase/10 text-purchase"
                   )}
                 >
-                  {bal > 0 ? "طلب" : "بدهی"} {formatToman(Math.abs(bal), false)}
+                  {bal > 0 ? "بدهکار" : "طلبکار"} {formatTomanCompact(Math.abs(bal))}
                 </span>
               )}
             </button>
           )
         })}
-        {filtered.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            شخصی پیدا نشد — با دکمهٔ پایین بسازید
-          </p>
-        )}
       </div>
+      {filtered.length === 0 && q && (
+        <p className="py-6 text-center text-label text-muted-foreground">کسی با «{q}» پیدا نشد — از ردیف اول اضافه کنید</p>
+      )}
     </BottomSheet>
   )
 }
@@ -1333,13 +1429,22 @@ function QuickPersonSheet({
   onClose,
   type,
   onCreated,
+  initialName = "",
 }: {
   open: boolean
   onClose: () => void
   type: "SALE" | "PURCHASE"
   onCreated: (p: Person) => void
+  /** نامی که در جستجوی شیت انتخاب تایپ شده بود */
+  initialName?: string
 }) {
-  const [name, setName] = useState("")
+  const [name, setName] = useState(initialName)
+  // نام تایپ‌شده در جستجو با هر بار باز شدن جایگزین می‌شود (الگوی «تنظیم state هنگام تغییر prop»)
+  const [seenName, setSeenName] = useState(initialName)
+  if (open && initialName !== seenName) {
+    setSeenName(initialName)
+    if (initialName) setName(initialName)
+  }
   const [phone, setPhone] = useState("")
   const [company, setCompany] = useState("")
   const [shopAddress, setShopAddress] = useState("")
@@ -1347,7 +1452,6 @@ function QuickPersonSheet({
   const [openingKind, setOpeningKind] = useState<"none" | "receivable" | "payable">("none")
   const [openingAmount, setOpeningAmount] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [more, setMore] = useState(false)
 
   const submit = async () => {
     if (name.trim().length < 2) return toast.error("نام را وارد کنید")
@@ -1393,107 +1497,180 @@ function QuickPersonSheet({
         </Button>
       }
     >
-      <div className="space-y-3">
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">نام *</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً آهنگری رحیمی" />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-            شماره موبایل
-          </label>
-          <Input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            inputMode="tel"
-            dir="ltr"
-            placeholder="09…"
-            className="nums text-end"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => setMore((v) => !v)}
-          aria-expanded={more}
-          className="flex w-full items-center justify-between rounded-xl border border-dashed border-border px-3 py-2 text-[0.72rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-        >
-          شرکت، آدرس و مانده اولیه
-          <ChevronDown className={cn("size-4 transition-transform", more && "rotate-180")} />
-        </button>
-        {more && (
-          <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-            اسم شرکت / کارگاه (اختیاری)
-          </label>
-          <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="مثلاً فنی قلندری" />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-            آدرس مغازه (اختیاری)
-          </label>
-          <Input
-            value={shopAddress}
-            onChange={(e) => setShopAddress(e.target.value)}
-            placeholder="مثلاً بازار آهن، پلاک ۴۵"
-          />
-        </div>
-        {/* ── مانده اولیه (حساب قدیمی) ── */}
-        <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-            مانده اولیه (حساب قبلی)
-          </label>
-          <div className="flex gap-1.5">
-            {(
-              [
-                { key: "none", label: "بدون مانده" },
-                { key: "receivable", label: "طلب اولیه" },
-                { key: "payable", label: "بدهی اولیه" },
-              ] as const
-            ).map((k) => (
-              <button
-                key={k.key}
-                type="button"
-                onClick={() => setOpeningKind(k.key)}
-                className={cn(
-                  "flex-1 rounded-xl border py-2 text-[0.7rem] font-bold transition-colors",
-                  openingKind === k.key
-                    ? k.key === "receivable"
-                      ? "border-warning bg-warning/10 text-warning"
-                      : k.key === "payable"
-                        ? "border-destructive bg-destructive/10 text-destructive"
-                        : "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground"
-                )}
-              >
-                {k.label}
-              </button>
-            ))}
-          </div>
-          {openingKind !== "none" && (
-            <div className="mt-2">
-              <AmountInput value={openingAmount} onChange={setOpeningAmount} showWords={false} />
-              <p className="mt-1 text-[0.62rem] text-muted-foreground">
-                {openingKind === "receivable"
-                  ? "این شخص از قبل به شما بدهکار است (طلب شما)"
-                  : "شما از قبل به این شخص بدهکار هستید"} — در تراز شخص لحاظ می‌شود
-              </p>
-            </div>
-          )}
-        </div>
-          </div>
-        )}
-      </div>
+      <PersonFields
+          name={name}
+          setName={setName}
+          phone={phone}
+          setPhone={setPhone}
+          company={company}
+          setCompany={setCompany}
+          shopAddress={shopAddress}
+          setShopAddress={setShopAddress}
+          openingKind={openingKind}
+          setOpeningKind={setOpeningKind}
+          openingAmount={openingAmount}
+          setOpeningAmount={setOpeningAmount}
+          autoFocusName
+        />
     </BottomSheet>
   )
 }
 
-// ═══════════════ شیت افزودن قلم (جنس) ═══════════════
+// ═══════════════ کارت اطلاعات کالا (داخل شیت افزودن قلم) ═══════════════
+/**
+ * یک کارت به‌جای چند نوار جدا: ردیف کاشی‌ها (موجودی، تمام‌شده، قیمت‌های مرجع — قیمت‌ها لمسی‌اند
+ * و قیمت واحد را پر می‌کنند) + نوار وضعیت رنگی (حاشیه سود در فروش، تغییر قیمت در خرید، کمبود موجودی).
+ */
+function ItemInsight({
+  product,
+  invoiceType,
+  quantity,
+  unitPrice,
+  ownLast,
+  onUse,
+}: {
+  product: Product
+  invoiceType: "SALE" | "PURCHASE"
+  quantity: number
+  unitPrice: number
+  /** آخرین قیمت همین کالا با همین شخص (۰ = ندارد) */
+  ownLast: number
+  onUse: (v: number) => void
+}) {
+  const isSale = invoiceType === "SALE"
+  const stock = product.stock ?? 0
+  const unit = formatUnit(product.unit)
+  const cost = product.avgCostPrice || product.lastPurchasePrice || 0
+  const lastSale = product.lastSalePrice ?? 0
+  const lastPurchase = product.lastPurchasePrice ?? 0
+
+  type Tile = { key: string; label: string; value: string; tone?: string; price?: number }
+  const tiles: Tile[] = [
+    {
+      key: "stock",
+      label: "موجودی انبار",
+      value: `${toPersianDigits(Number.isInteger(stock) ? String(stock) : stock.toFixed(1))} ${unit}`,
+      tone: isSale && (stock <= 0 || quantity > stock) ? "text-destructive" : undefined,
+    },
+  ]
+  if (isSale) {
+    if (cost > 0) tiles.push({ key: "cost", label: "تمام‌شده", value: formatToman(cost, false) })
+    if (ownLast > 0) tiles.push({ key: "own", label: "با همین شخص", value: formatToman(ownLast, false), price: ownLast })
+    if (lastSale > 0 && lastSale !== ownLast)
+      tiles.push({ key: "last", label: "آخرین فروش", value: formatToman(lastSale, false), price: lastSale })
+  } else {
+    const ref = ownLast || lastPurchase
+    if (ref > 0)
+      tiles.push({ key: "ref", label: ownLast ? "خرید قبلی از او" : "آخرین خرید", value: formatToman(ref, false), price: ref })
+    if (lastSale > 0) tiles.push({ key: "sale", label: "آخرین فروش", value: formatToman(lastSale, false) })
+  }
+
+  // نوار وضعیت
+  let strip: { tone: "good" | "warn" | "bad" | "muted"; main: string; side?: string; bar?: number } | null = null
+  if (isSale && cost > 0 && unitPrice > 0) {
+    const margin = ((unitPrice - cost) / unitPrice) * 100
+    const perUnit = unitPrice - cost
+    strip =
+      perUnit < 0
+        ? { tone: "bad", main: "زیر قیمت تمام‌شده می‌فروشید!", side: `ضرر هر ${unit}: ${formatToman(-perUnit, false)}` }
+        : {
+            tone: margin < 5 ? "warn" : "good",
+            main: `حاشیه سود ${toPersianDigits(Math.round(margin))}٪`,
+            side: `سود هر ${unit}: ${formatToman(perUnit, false)}`,
+            // پر شدن نوار: ۴۰٪ حاشیه و بیشتر = پر
+            bar: Math.min(1, margin / 40),
+          }
+  } else if (!isSale && unitPrice > 0) {
+    const ref = ownLast || lastPurchase
+    if (ref > 0) {
+      const diff = ((unitPrice - ref) / ref) * 100
+      const pct = Math.round(Math.abs(diff))
+      strip =
+        pct < 1
+          ? { tone: "muted", main: "همان قیمت خرید قبلی" }
+          : diff > 0
+            ? { tone: pct >= 10 ? "bad" : "warn", main: `▲ ${toPersianDigits(pct)}٪ گران‌تر از خرید قبلی`, side: pct >= 10 ? "قیمت را بررسی کنید" : undefined }
+            : { tone: "good", main: `▼ ${toPersianDigits(pct)}٪ ارزان‌تر از خرید قبلی` }
+    }
+  }
+  const short = isSale && quantity > stock
+
+  const toneCls = {
+    good: "bg-income/10 text-income",
+    warn: "bg-warning/10 text-warning-ink",
+    bad: "bg-destructive/10 text-destructive",
+    muted: "bg-muted/60 text-muted-foreground",
+  }
+
+  return (
+    <div className="col-span-2 overflow-hidden rounded-2xl border border-border/70 bg-card">
+      {/* کاشی‌ها — gap-px روی پس‌زمینهٔ border: خط جداکننده مستقل از جهت متن */}
+      <div className="grid gap-px bg-border/60" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
+        {tiles.map((t) => {
+          const active = t.price !== undefined && unitPrice === t.price
+          const body = (
+            <>
+              <span className="flex items-center gap-1 truncate text-micro text-muted-foreground">
+                {t.label}
+                {active && <CheckCircle2 className="size-3 shrink-0 text-primary" />}
+              </span>
+              <span className={cn("nums mt-0.5 block truncate text-label font-extrabold", t.tone, t.price !== undefined && "text-primary")}>
+                {t.value}
+              </span>
+            </>
+          )
+          return t.price !== undefined ? (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => onUse(t.price!)}
+              aria-label={`استفاده از قیمت ${t.label}`}
+              className={cn(
+                "min-w-0 px-2.5 py-2 text-start transition-colors active:bg-primary/15",
+                active ? "bg-primary/[0.07]" : "bg-card hover:bg-accent/60"
+              )}
+            >
+              {body}
+            </button>
+          ) : (
+            <div key={t.key} className="min-w-0 bg-card px-2.5 py-2">
+              {body}
+            </div>
+          )
+        })}
+      </div>
+
+      {strip && (
+        <div className={cn("nums border-t border-border/60 px-3 py-2 text-caption font-bold", toneCls[strip.tone])}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate">{strip.main}</span>
+            {strip.side && <span className="shrink-0 text-caption font-medium opacity-85">{strip.side}</span>}
+          </div>
+          {strip.bar !== undefined && (
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-current/15">
+              <div className="h-full rounded-full bg-current transition-[width] duration-300" style={{ width: `${Math.max(4, strip.bar * 100)}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {short && (
+        <p className="border-t border-border/60 bg-warning/10 px-3 py-1.5 text-caption font-bold text-warning-ink">
+          ⚠ تعداد بیشتر از موجودی است — با ثبت این فاکتور موجودی منفی می‌شود
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════ شیت افزودن قلم (کالا) ═══════════════
 function ItemPickerSheet({
   open,
   onClose,
   products,
   invoiceType,
+  personId,
+  excludeInvoiceId,
   onAdd,
 }: {
   open: boolean
@@ -1501,6 +1678,10 @@ function ItemPickerSheet({
   products: Product[]
   /** نوع فاکتور — در فروش، موجودی مهم است و هشدار کمبود داده می‌شود */
   invoiceType: "SALE" | "PURCHASE"
+  /** طرف حساب فاکتور — برای پیشنهاد «آخرین قیمت با همین شخص» */
+  personId?: string
+  /** در ویرایش: خود همین فاکتور «قیمت قبلی» حساب نشود */
+  excludeInvoiceId?: string
   onAdd: (item: DraftItem) => void
 }) {
   const [mode, setMode] = useState<"pick" | "new">("pick")
@@ -1508,14 +1689,20 @@ function ItemPickerSheet({
   const [selected, setSelected] = useState<Product | null>(null)
   const [quantity, setQuantity] = useState(0)
   const [unitPrice, setUnitPrice] = useState(0)
+  // تا وقتی کاربر خودش قیمت را نزده، قیمت پیشنهادی (آخرین قیمت) جایگزین می‌شود
+  const priceTouched = useRef(false)
+  const setPrice = (v: number) => {
+    priceTouched.current = true
+    setUnitPrice(v)
+  }
   const [unit, setUnit] = useState<string>("عدد")
-  // واحد مؤثر برای برچسب تعداد: در حالت جنس جدید واحد انتخابی، در حالت انتخاب واحد خود جنس
+  // واحد مؤثر برای برچسب تعداد: در حالت کالا جدید واحد انتخابی، در حالت انتخاب واحد خود کالا
   const activeUnit = mode === "new" ? unit : (selected?.unit ?? "عدد")
-  // جنس جدید
+  // کالا جدید
   const [name, setName] = useState("")
   const [brand, setBrand] = useState("")
   const [code, setCode] = useState("")
-  // عکس جنس جدید (ADV-05) — اختیاری؛ بعد از ساخت جنس آپلود می‌شود
+  // عکس کالا جدید (ADV-05) — اختیاری؛ بعد از ساخت کالا آپلود می‌شود
   const queryClient = useQueryClient()
   const photoInputRef = useRef<HTMLInputElement>(null)
   const [pendingPhotos, setPendingPhotos] = useState<{ file: File; url: string }[]>([])
@@ -1527,7 +1714,34 @@ function ItemPickerSheet({
     return () => urls.forEach((u) => URL.revokeObjectURL(u))
   }, [])
 
+  /** آخرین قیمت همین کالا با همین شخص */
+  const { data: ownPrice } = useQuery({
+    queryKey: ["last-price", selected?.id, personId, excludeInvoiceId],
+    queryFn: () =>
+      apiGet<{ sale: number; purchase: number }>(
+        `/api/products/${selected!.id}/last-price?personId=${personId}${excludeInvoiceId ? `&exclude=${excludeInvoiceId}` : ""}`
+      ),
+    enabled: open && mode === "pick" && !!selected && !!personId,
+    staleTime: 30_000,
+  })
+  const ownLast = (invoiceType === "SALE" ? ownPrice?.sale : ownPrice?.purchase) ?? 0
+  useEffect(() => {
+    if (!priceTouched.current && ownLast > 0) setUnitPrice(ownLast)
+    // selected?.id: دو کالا با «قیمت با همین شخص» برابر هم باید دوباره اعمال شود
+  }, [ownLast, selected?.id])
+
+  /** انتخاب کالا: قیمت پیشنهادی = آخرین فروش (در فروش) یا آخرین خرید (در خرید) */
+  const pickProduct = (p: Product) => {
+    if (selected?.id !== p.id) priceTouched.current = false
+    setSelected(p)
+    if (!priceTouched.current) {
+      const last = (invoiceType === "SALE" ? p.lastSalePrice : p.lastPurchasePrice) ?? 0
+      setUnitPrice(last)
+    }
+  }
+
   const reset = () => {
+    priceTouched.current = false
     setMode("pick")
     setQ("")
     setSelected(null)
@@ -1544,7 +1758,7 @@ function ItemPickerSheet({
   const filtered = products.filter(
     (p) => !q || matches(p.name) || matches(p.brand) || matches(p.code)
   )
-  // بندانگشتی عکس اجناس موجود در تب انتخاب (ADV-05)
+  // بندانگشتی عکس کالاها موجود در تب انتخاب (ADV-05)
   const pickPhotoIds = filtered.map((p) => p.photoId).filter((x): x is string => !!x)
   const pickPhotoUrls = useAttachmentUrls(pickPhotoIds)
 
@@ -1557,7 +1771,7 @@ function ItemPickerSheet({
     let finalUnit: string
 
     if (mode === "new") {
-      if (name.trim().length < 2) return toast.error("نام جنس را وارد کنید")
+      if (name.trim().length < 2) return toast.error("نام کالا را وارد کنید")
       try {
         const r = await apiPost<{ product: Product }>("/api/products", {
           name: name.trim(),
@@ -1570,7 +1784,7 @@ function ItemPickerSheet({
         finalBrand = r.product.brand
         finalCode = r.product.code
         finalUnit = r.product.unit
-        // آپلود عکس‌های انتخاب‌شده — بعد از ساخت جنس؛ خطای عکس مانع ثبت قلم نیست (ADV-05)
+        // آپلود عکس‌های انتخاب‌شده — بعد از ساخت کالا؛ خطای عکس مانع ثبت قلم نیست (ADV-05)
         if (pendingPhotos.length > 0) {
           let okCount = 0
           for (const p of pendingPhotos) {
@@ -1585,16 +1799,16 @@ function ItemPickerSheet({
               /* عکس این یکی آپلود نشد — بقیه ادامه می‌یابند */
             }
           }
-          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس جنس پیوست شد`)
+          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس کالا پیوست شد`)
           if (okCount < pendingPhotos.length) toast.error("برخی عکس‌ها آپلود نشدند")
           setPendingPhotos([])
           await queryClient.invalidateQueries({ queryKey: ["products"] })
         }
       } catch (e) {
-        return toast.error(e instanceof Error ? e.message : "خطا در ثبت جنس")
+        return toast.error(e instanceof Error ? e.message : "خطا در ثبت کالا")
       }
     } else {
-      if (!selected) return toast.error("جنس را انتخاب کنید")
+      if (!selected) return toast.error("کالا را انتخاب کنید")
       productId = selected.id
       finalName = selected.name
       finalBrand = selected.brand
@@ -1620,73 +1834,87 @@ function ItemPickerSheet({
         reset()
         onClose()
       }}
-      title="افزودن جنس به فاکتور"
+      title={mode === "pick" && selected ? selected.name : "افزودن کالا به فاکتور"}
+      description={
+        mode === "pick" && selected
+          ? [selected.brand, selected.code && `کد ${selected.code}`, `واحد: ${formatUnit(selected.unit)}`].filter(Boolean).join(" · ")
+          : undefined
+      }
       size="tall"
       footer={
         <>
             {(mode === "new" || selected) && (
         <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-2">
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-              {activeUnit === "عدد" ? "تعداد *" : `تعداد (${formatUnit(activeUnit)}) *`}
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
+              {activeUnit === "عدد" ? "تعداد" : `تعداد (${formatUnit(activeUnit)})`}
             </label>
-            <NumberInput value={quantity} onChange={setQuantity} placeholder="۱" />
+            {/* نسخهٔ ۷: شمارندهٔ +/− کنار فیلد عددی (هنوز تایپی هم هست — برای کیلو/اعشار) */}
+            <div className="flex h-12 items-stretch overflow-hidden rounded-2xl border border-input bg-card focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/15">
+              <button
+                type="button"
+                aria-label="یکی بیشتر"
+                onClick={() => setQuantity(Math.round((quantity + 1) * 1000) / 1000)}
+                className="grid w-11 shrink-0 place-items-center text-primary transition-colors hover:bg-primary/8 active:bg-primary/12"
+              >
+                <Plus className="size-4" strokeWidth={2.6} />
+              </button>
+              <NumberInput
+                value={quantity}
+                onChange={setQuantity}
+                placeholder="۱"
+                className="h-full min-w-0 rounded-none border-0 px-1 text-center text-base focus:ring-0 focus-visible:ring-0"
+              />
+              <button
+                type="button"
+                aria-label="یکی کمتر"
+                disabled={quantity <= 1}
+                onClick={() => setQuantity(Math.max(1, Math.round((quantity - 1) * 1000) / 1000))}
+                className="grid w-11 shrink-0 place-items-center text-primary transition-colors hover:bg-primary/8 active:bg-primary/12 disabled:text-muted-foreground/40"
+              >
+                <Minus className="size-4" strokeWidth={2.6} />
+              </button>
+            </div>
           </div>
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-              قیمت واحد (تومان) *
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
+              قیمت هر {formatUnit(activeUnit)} (تومان)
             </label>
-            <AmountInput value={unitPrice} onChange={setUnitPrice} showWords={false} />
+            <AmountInput value={unitPrice} onChange={setPrice} showWords={false} />
           </div>
-          {/* موجودی انبار جنس انتخابی + هشدار کمبود در فاکتور فروش */}
+          {/* موجودی، قیمت‌های مرجع (لمسی) و حاشیه سود / تغییر قیمت — همه در یک کارت */}
           {mode === "pick" && selected && (
-            <div className="col-span-2">
-              <div className="flex items-center justify-between rounded-xl bg-muted/60 px-3 py-1.5 text-[0.7rem]">
-                <span className="text-muted-foreground">موجودی فعلی انبار:</span>
-                <span
-                  className={cn(
-                    "nums font-bold",
-                    invoiceType === "SALE" && (selected.stock ?? 0) <= 0
-                      ? "text-destructive"
-                      : "text-foreground"
-                  )}
-                >
-                  {Number.isInteger(selected.stock ?? 0)
-                    ? toPersianDigits(String(selected.stock ?? 0))
-                    : toPersianDigits((selected.stock ?? 0).toFixed(1))}{" "}
-                  {formatUnit(selected.unit)}
-                </span>
-              </div>
-              {invoiceType === "SALE" && quantity > (selected.stock ?? 0) && (
-                <p className="mt-1.5 rounded-xl bg-warning/10 px-3 py-1.5 text-[0.65rem] font-bold text-warning">
-                  ⚠ تعداد واردشده بیشتر از موجودی انبار است — با ثبت این فاکتور موجودی منفی می‌شود
-                </p>
-              )}
-            </div>
+            <ItemInsight
+              product={selected}
+              invoiceType={invoiceType}
+              quantity={quantity}
+              unitPrice={unitPrice}
+              ownLast={ownLast}
+              onUse={setPrice}
+            />
           )}
-          <div className="col-span-2 flex items-center justify-between rounded-xl bg-muted/60 px-3 py-2 text-[0.7rem] text-muted-foreground">
-            <span className="nums">
-              {toPersianDigits(String(quantity))} {formatUnit(activeUnit)} × {formatToman(unitPrice, false)}
-            </span>
-            <span className="nums text-sm font-black text-foreground">
-              {formatToman(Math.round(quantity * unitPrice), false)} <span className="text-[0.62rem] font-medium">تومان</span>
-            </span>
-          </div>
         </div>
       )}
           <Button
             onClick={addItem}
             disabled={mode === "pick" ? !selected : name.trim().length < 2}
-            className="h-12 w-full rounded-2xl font-bold"
+            className="h-[3.25rem] w-full rounded-2xl text-[0.95rem] font-bold"
           >
             <Plus className="size-4" />
             افزودن به فاکتور
+            {quantity > 0 && unitPrice > 0 && (
+              <>
+                {/* خط جداکننده به‌جای «•» — نقطه کنار ارقام فارسی با صفر «۰» اشتباه می‌شد */}
+                <span className="mx-1 h-4 w-px bg-current/35" aria-hidden />
+                <span className="nums font-medium opacity-90">{formatToman(Math.round(quantity * unitPrice))}</span>
+              </>
+            )}
           </Button>
         </>
       }
     >
       {/* تب انتخاب/جدید */}
-      <div className="mb-3 flex rounded-2xl bg-muted p-1">
+      <div className="mb-3 flex rounded-[0.9rem] bg-muted p-1">
         <button
           type="button"
           onClick={() => {
@@ -1694,22 +1922,22 @@ function ItemPickerSheet({
             setSelected(null)
           }}
           className={cn(
-            "flex-1 rounded-xl py-2 text-xs font-bold transition-all",
-            mode === "pick" ? "bg-card shadow-sm" : "text-muted-foreground"
+            "h-9 flex-1 rounded-[0.65rem] text-label font-bold transition-all",
+            mode === "pick" ? "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]" : "text-muted-foreground"
           )}
         >
-          انتخاب از اجناس
+          انتخاب از کالاها
         </button>
         <button
           type="button"
           onClick={() => setMode("new")}
           className={cn(
-            "flex flex-1 items-center justify-center gap-1 rounded-xl py-2 text-xs font-bold transition-all",
-            mode === "new" ? "bg-card shadow-sm" : "text-muted-foreground"
+            "flex h-9 flex-1 items-center justify-center gap-1 rounded-[0.65rem] text-label font-bold transition-all",
+            mode === "new" ? "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]" : "text-muted-foreground"
           )}
         >
           <PackagePlus className="size-3.5" />
-          جنس جدید
+          کالا جدید
         </button>
       </div>
 
@@ -1721,13 +1949,13 @@ function ItemPickerSheet({
               autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="جستجوی نام جنس، برند یا کد…"
-              className="field ps-10"
+              placeholder="نام کالا، برند یا کد"
+              className="field border-transparent bg-muted ps-10 hover:border-transparent"
             />
           </div>
           <div className="space-y-1.5">
             {filtered.map((p) => {
-              // نمایش موجودی زندهٔ انبار کنار هر جنس — در فروش مهم‌تر است
+              // نمایش موجودی زندهٔ انبار کنار هر کالا — در فروش مهم‌تر است
               const stockNum = p.stock ?? 0
               const stockText =
                 Number.isInteger(stockNum)
@@ -1759,13 +1987,13 @@ function ItemPickerSheet({
                       .join(" • ") || `واحد: ${formatUnit(p.unit)}`
                   }
                   selected={selected?.id === p.id}
-                  onClick={() => setSelected(p)}
+                  onClick={() => pickProduct(p)}
                 />
               )
             })}
             {filtered.length === 0 && (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                جنس موجود نیست — از تب «جنس جدید» بسازید
+                کالا موجود نیست — از تب «کالا جدید» بسازید
               </p>
             )}
           </div>
@@ -1773,8 +2001,8 @@ function ItemPickerSheet({
       ) : (
         <div className="space-y-3">
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-              نام جنس *
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
+              نام کالا *
             </label>
             <Input
               value={name}
@@ -1784,20 +2012,20 @@ function ItemPickerSheet({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+              <label className="mb-1.5 block text-label font-bold text-foreground/80">
                 برند (اختیاری)
               </label>
               <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="اصفهان" />
             </div>
             <div>
-              <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
-                کد جنس (اختیاری)
+              <label className="mb-1.5 block text-label font-bold text-foreground/80">
+                کد کالا (اختیاری)
               </label>
               <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="E60-32" />
             </div>
           </div>
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">واحد</label>
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">واحد</label>
             <div className="flex flex-wrap gap-1.5">
               {PRODUCT_UNITS.map((u) => (
                 <button
@@ -1816,27 +2044,27 @@ function ItemPickerSheet({
               ))}
             </div>
           </div>
-          {/* عکس جنس (ADV-05) — اختیاری؛ با افزودن جنس پیوست می‌شود */}
+          {/* عکس کالا (ADV-05) — اختیاری؛ با افزودن کالا پیوست می‌شود */}
           <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+              <p className="flex items-center gap-1.5 text-caption font-medium text-muted-foreground">
                 <ImagePlus className="size-3.5" />
-                عکس جنس (اختیاری)
+                عکس کالا (اختیاری)
               </p>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => photoInputRef.current?.click()}
-                className="h-8 shrink-0 rounded-xl px-2.5 text-[0.7rem] font-bold"
+                className="h-8 shrink-0 rounded-xl px-2.5 text-caption font-bold"
               >
                 <ImagePlus className="size-3.5" />
                 انتخاب تصویر
               </Button>
             </div>
             {pendingPhotos.length === 0 ? (
-              <p className="rounded-xl bg-muted/40 px-2.5 py-3 text-center text-[0.68rem] leading-relaxed text-muted-foreground">
-                عکسی انتخاب نشده — با ثبت جنس، عکس در لیست اجناس هم آرشیو می‌شود.
+              <p className="rounded-xl bg-muted/40 px-2.5 py-3 text-center text-caption leading-relaxed text-muted-foreground">
+                عکسی انتخاب نشده — با ثبت کالا، عکس در لیست کالاها هم آرشیو می‌شود.
               </p>
             ) : (
               <div className="grid grid-cols-4 gap-2">
@@ -1994,21 +2222,21 @@ function QuickCheckSheet({
       <div className="space-y-3">
         {/* حساب هوشمند — وضعیت لحظه‌ای فاکتور */}
         <div className="rounded-2xl border border-primary/25 bg-primary/[0.05] p-3">
-          <div className="flex items-center justify-between text-[0.68rem]">
+          <div className="flex items-center justify-between text-caption">
             <span className="text-muted-foreground">مبلغ فاکتور</span>
             <span className="nums font-bold">{formatToman(invoiceTotal, false)}</span>
           </div>
-          <div className="mt-1 flex items-center justify-between text-[0.68rem]">
+          <div className="mt-1 flex items-center justify-between text-caption">
             <span className="text-muted-foreground">نقدی پرداخت‌شده</span>
             <span className="nums font-bold text-income">− {formatToman(paidCash, false)}</span>
           </div>
           {existingChecksTotal > 0 && (
-            <div className="mt-1 flex items-center justify-between text-[0.68rem]">
+            <div className="mt-1 flex items-center justify-between text-caption">
               <span className="text-muted-foreground">چک‌های افزوده‌شده</span>
               <span className="nums font-bold text-primary">− {formatToman(existingChecksTotal, false)}</span>
             </div>
           )}
-          <div className="mt-2 flex items-center justify-between border-t border-dashed pt-2 text-[0.72rem]">
+          <div className="mt-2 flex items-center justify-between border-t border-dashed pt-2 text-caption">
             <span className="font-bold text-muted-foreground">
               {remaining > 0 ? "مانده برای چک / نسیه" : "فاکتور با نقدی و چک‌ها تسویه است"}
             </span>
@@ -2020,7 +2248,7 @@ function QuickCheckSheet({
             <button
               type="button"
               onClick={() => setAmount(remaining)}
-              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary/10 py-2 text-[0.7rem] font-bold text-primary transition-colors hover:bg-primary/20 active:scale-[0.98]"
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary/10 py-2 text-caption font-bold text-primary transition-colors hover:bg-primary/20 active:scale-[0.98]"
             >
               <Sparkles className="size-3.5" />
               مبلغ این چک = کل مانده ({formatToman(remaining, false)})
@@ -2028,7 +2256,7 @@ function QuickCheckSheet({
           )}
           {/* پیش‌نمایش پس از این چک */}
           {amount > 0 && (
-            <p className="nums mt-2 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[0.62rem] leading-4 text-muted-foreground">
+            <p className="nums mt-2 rounded-lg bg-muted/60 px-2.5 py-1.5 text-caption leading-4 text-muted-foreground">
               {afterThisCheck > 0
                 ? `پس از این چک، مانده: ${formatToman(afterThisCheck, false)} تومان`
                 : afterThisCheck === 0
@@ -2039,13 +2267,13 @@ function QuickCheckSheet({
         </div>
 
         <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+          <label className="mb-1.5 block text-label font-bold text-foreground/80">
             مبلغ چک (تومان) *
           </label>
           <AmountInput value={amount} onChange={setAmount} />
         </div>
         <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+          <label className="mb-1.5 block text-label font-bold text-foreground/80">
             بانک چک *
           </label>
           <button
@@ -2055,12 +2283,12 @@ function QuickCheckSheet({
           >
             <BankLogo bankKey={bankKey} size={34} />
             <span className="flex-1 text-start text-sm">{getBank(bankKey).name}</span>
-            <span className="text-[0.65rem] text-muted-foreground">تغییر</span>
+            <span className="text-caption text-muted-foreground">تغییر</span>
           </button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
               شماره سریال
             </label>
             <Input
@@ -2073,7 +2301,7 @@ function QuickCheckSheet({
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
               سررسید *
             </label>
             <JalaliDateField value={dueDate} onChange={setDueDate} />
@@ -2097,7 +2325,7 @@ function QuickCheckSheet({
             </span>
             <span className="flex-1">
               <span className="block text-xs font-bold">چک ثبت شده است</span>
-              <span className="mt-0.5 block text-[0.62rem] leading-4 text-muted-foreground">
+              <span className="mt-0.5 block text-caption leading-4 text-muted-foreground">
                 {isReceived ? "چک به نام خودتان در بانک ثبت شده" : "چک به نام مشتری در بانک ثبت شده"}
               </span>
             </span>
@@ -2106,7 +2334,7 @@ function QuickCheckSheet({
           {isRegistered && (
             <div className="mt-3 space-y-2.5 border-t border-dashed pt-3">
               <div>
-                <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
+                <label className="mb-1.5 flex items-center gap-1 text-label font-bold text-foreground/80">
                   <UserRound className="size-3.5" />
                   نام صاحب حساب *
                 </label>
@@ -2117,7 +2345,7 @@ function QuickCheckSheet({
                 />
               </div>
               <div>
-                <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
+                <label className="mb-1.5 flex items-center gap-1 text-label font-bold text-foreground/80">
                   <IdCard className="size-3.5" />
                   کد ملی (اختیاری)
                 </label>
@@ -2130,7 +2358,7 @@ function QuickCheckSheet({
                   className="nums text-end"
                 />
               </div>
-              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-[0.6rem] leading-4 text-muted-foreground">
+              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-micro leading-4 text-muted-foreground">
                 چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود — اول باید به نام{" "}
                 {isReceived ? "شما" : "مشتری"} ثبت شود.
               </p>
@@ -2139,14 +2367,14 @@ function QuickCheckSheet({
 
           {/* ── عکس چک — مستقل از وضعیت ثبت؛ چک ثبت‌نشده هم می‌تواند عکس داشته باشد ── */}
           <div className="mt-3 border-t border-dashed pt-3">
-            <label className="mb-1.5 flex items-center gap-1 text-[0.68rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 flex items-center gap-1 text-label font-bold text-foreground/80">
               <ImagePlus className="size-3.5" />
               عکس چک (اختیاری) — بدون نیاز به ثبت
             </label>
             <button
               type="button"
               onClick={() => photoInputRef.current?.click()}
-              className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-input bg-card text-[0.68rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+              className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-input bg-card text-caption font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
             >
               {photo ? (
                 <>
@@ -2286,11 +2514,11 @@ function DraftBanner({
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <span className="relative grid size-11 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-fab">
             <FileText className="size-5" />
-            <span className="hy-ping absolute -end-0.5 -top-0.5 size-2.5 rounded-full bg-warning ring-2 ring-card" />
+            <span className="absolute -end-0.5 -top-0.5 size-2.5 rounded-full bg-warning ring-2 ring-card" />
           </span>
           <div className="min-w-0">
             <div className="text-sm font-extrabold">یک فاکتور نیمه‌کاره داری</div>
-            <div className="nums truncate text-[0.7rem] text-muted-foreground">
+            <div className="nums truncate text-caption text-muted-foreground">
               {parts.join(" • ")} — {relativeTime(draft.savedAt)}
             </div>
           </div>
@@ -2384,7 +2612,7 @@ function PaymentBar({ total, cash, checks }: { total: number; cash: number; chec
           transition={seg}
         />
       </div>
-      <div className="nums mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[0.62rem] text-muted-foreground">
+      <div className="nums mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-caption text-muted-foreground">
         <span className="flex items-center gap-1">
           <span className="size-1.5 rounded-full bg-[color:var(--sale)]" />
           نقد {formatToman(cash, false)}
@@ -2398,6 +2626,24 @@ function PaymentBar({ total, cash, checks }: { total: number; cash: number; chec
           نسیه {formatToman(Math.max(0, total - cash - checks), false)}
         </span>
       </div>
+    </div>
+  )
+}
+
+/** سربرگ مرحلهٔ فرم (نسخهٔ ۷) — شمارهٔ مرحلهٔ واقعی فرم (شخص ← اقلام ← تسویه)؛ تکمیل‌شده = تیک سبز */
+function StepHeader({ n, title, done, meta }: { n: number; title: string; done: boolean; meta?: React.ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <span
+        className={cn(
+          "nums grid size-6 shrink-0 place-items-center rounded-full text-caption font-extrabold transition-colors",
+          done ? "bg-primary text-primary-foreground" : "bg-muted text-foreground/70"
+        )}
+      >
+        {done ? <Check className="size-3.5" strokeWidth={3} /> : toPersianDigits(n)}
+      </span>
+      <h2 className="text-[0.95rem] font-extrabold">{title}</h2>
+      {meta && <span className="nums ms-auto truncate text-caption text-muted-foreground">{meta}</span>}
     </div>
   )
 }

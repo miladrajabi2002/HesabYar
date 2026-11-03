@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
     const buyMap = new Map(purchaseAgg.map((g) => [g.productId, g._sum.quantity ?? 0]))
     const saleMap = new Map(saleAgg.map((g) => [g.productId, g._sum.quantity ?? 0]))
     const csv = buildCsv(
-      ["نام جنس", "برند", "کد", "واحد", "موجودی اولیه", "مجموع خرید", "مجموع فروش", "موجودی فعلی", "حد هشدار"],
+      ["نام کالا", "برند", "کد", "واحد", "موجودی اولیه", "مجموع خرید", "مجموع فروش", "موجودی فعلی", "حد هشدار"],
       products.map((p) => [
         p.name,
         p.brand ?? "",

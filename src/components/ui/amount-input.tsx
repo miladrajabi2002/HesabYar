@@ -121,7 +121,7 @@ export function AmountInput({
         )}
       </div>
       {showWords && value > 0 && (
-        <p className="mt-1.5 text-[0.7rem] text-muted-foreground">
+        <p className="mt-1.5 text-caption text-muted-foreground">
           <span className="font-medium">{amountToWords(value)}</span>
         </p>
       )}

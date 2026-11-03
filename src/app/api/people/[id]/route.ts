@@ -4,7 +4,7 @@ import path from "node:path"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { personUpdateSchema } from "@/lib/validation"
-import { getPersonBalance } from "@/lib/finance"
+import { getPersonBalance, openBalanceDays } from "@/lib/finance"
 import { settlementInclude } from "@/lib/includes"
 
 export const dynamic = "force-dynamic"
@@ -38,7 +38,22 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         include: settlementInclude,
       }),
     ])
-    return ok({ person, balance, invoices, checks, settlements })
+    // قدمت مانده: قدیمی‌ترین فاکتور مانده‌دار در جهت تراز (حلقهٔ آواتار)
+    const oldestOpen =
+      balance === 0
+        ? null
+        : await db.invoice.findFirst({
+            where: { personId: id, type: balance > 0 ? "SALE" : "PURCHASE", credit: { gt: 0 } },
+            orderBy: { date: "asc" },
+            select: { date: true },
+          })
+    const openDays = openBalanceDays(balance, {
+      salesTotal: 0,
+      purchaseTotal: 0,
+      saleOpenSince: balance > 0 ? oldestOpen?.date ?? null : null,
+      purchaseOpenSince: balance < 0 ? oldestOpen?.date ?? null : null,
+    })
+    return ok({ person, balance, openDays, invoices, checks, settlements })
   } catch (e) {
     return serverError(e)
   }

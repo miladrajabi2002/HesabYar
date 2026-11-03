@@ -168,21 +168,21 @@ function SummaryChip({
       style={{ ["--tile" as string]: tone }}
       className="relative overflow-hidden rounded-3xl border border-border/70 bg-card p-3.5 shadow-card"
     >
-      <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
         <span className="icon-soft grid size-6 place-items-center rounded-lg">{icon}</span>
         {label}
       </div>
       <p className="nums mt-2 text-base font-extrabold sm:text-lg" style={{ color: "color-mix(in srgb, var(--tile) 85%, black)" }}>
         {value}
       </p>
-      <p className="nums mt-0.5 text-[0.62rem] text-muted-foreground">{sub}</p>
+      <p className="nums mt-0.5 text-caption text-muted-foreground">{sub}</p>
     </motion.div>
   )
 }
 
 function SheetSectionTitle({ dot, label, count }: { dot: string; label: string; count: number }) {
   return (
-    <h3 className="mb-2 flex items-center gap-1.5 text-[0.7rem] font-bold text-muted-foreground">
+    <h3 className="mb-2 flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
       <span className={cn("size-1.5 rounded-full", dot)} aria-hidden="true" />
       {label}
       <span className="nums font-medium">({toPersianDigits(count)})</span>
@@ -283,7 +283,7 @@ function MonthPickerSheet({
         </button>
         <div className="text-center">
           <div className="nums text-xl font-black leading-none">{toPersianDigits(year)}</div>
-          <div className="mt-1 text-[0.62rem] text-muted-foreground">
+          <div className="mt-1 text-caption text-muted-foreground">
             {year === curYear ? "سال جاری" : year < curYear ? `${toPersianDigits(curYear - year)} سال قبل` : `${toPersianDigits(year - curYear)} سال بعد`}
           </div>
         </div>
@@ -317,8 +317,8 @@ function MonthPickerSheet({
                   : "border-border bg-card hover:border-primary/40 hover:bg-accent/50"
               )}
             >
-              <span className="text-[0.82rem] font-extrabold">{name}</span>
-              <span className={cn("nums text-[0.62rem]", selected ? "opacity-80" : "text-muted-foreground")}>
+              <span className="text-label font-extrabold">{name}</span>
+              <span className={cn("nums text-caption", selected ? "opacity-80" : "text-muted-foreground")}>
                 {toPersianDigits(i + 1)}
               </span>
               {isCurrent && (
@@ -332,7 +332,7 @@ function MonthPickerSheet({
         })}
       </div>
 
-      <p className="mb-2 mt-4 text-[0.68rem] font-bold text-muted-foreground">پرش سریع از ماه انتخاب‌شده</p>
+      <p className="mb-2 mt-4 text-caption font-bold text-muted-foreground">پرش سریع از ماه انتخاب‌شده</p>
       <div className="flex flex-wrap gap-1.5">
         {jumps.map((j) => (
           <button
@@ -342,7 +342,7 @@ function MonthPickerSheet({
               onPick(shiftMonth(month, j.n))
               onClose()
             }}
-            className="rounded-full border border-border bg-card px-3 py-1.5 text-[0.7rem] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground active:scale-95"
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-caption font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground active:scale-95"
           >
             {j.label}
           </button>
@@ -447,17 +447,6 @@ export default function CalendarPage() {
     setDir(1)
     setMonth(nextMonthKey(month))
   }
-
-  // شدت رنگ پس‌زمینهٔ هر روز بر اساس حجم فروش (نقشهٔ حرارتی ملایم)
-  const maxDaySales = useMemo(() => {
-    if (!data) return 0
-    let m = 0
-    for (const d of Object.values(data.days)) {
-      const v = d.invoices.filter((i) => i.type === "SALE").reduce((a, i) => a + i.total, 0)
-      if (v > m) m = v
-    }
-    return m
-  }, [data])
   const jumpTo = (key: string) => {
     if (key === month) return
     setDir(key > month ? 1 : -1)
@@ -568,13 +557,13 @@ export default function CalendarPage() {
           )}
 
           {/* شبکه تقویم — شنبه‌محور */}
-          <section aria-label="تقویم ماه" className="rounded-3xl border border-border/70 bg-card p-3 shadow-card sm:p-4">
+          <section aria-label="تقویم ماه" className="rounded-3xl border border-border/80 bg-card p-3 sm:p-4">
             <div className="grid grid-cols-7 gap-1 pb-2">
               {WEEKDAYS.map((w, i) => (
                 <div
                   key={w}
                   className={cn(
-                    "text-center text-[0.6rem] font-bold whitespace-nowrap sm:text-[0.7rem]",
+                    "text-center text-micro font-bold whitespace-nowrap sm:text-caption",
                     i === 6 ? "text-destructive/70" : "text-muted-foreground"
                   )}
                 >
@@ -645,7 +634,7 @@ export default function CalendarPage() {
                       >
                         <span className={cn("size-1.5 rounded-full", k.dot)} aria-hidden="true" />
                         {k.count > 1 && (
-                          <span className="nums text-[0.55rem] font-bold leading-none text-muted-foreground">
+                          <span className="nums text-micro font-bold leading-none text-muted-foreground">
                             {toPersianDigits(k.count)}
                           </span>
                         )}
@@ -681,17 +670,15 @@ export default function CalendarPage() {
                     onClick={() => setSelectedDay(dayKey)}
                     aria-label={`${toPersianDigits(dayNumber)} ${monthKeyLabel(data.month)} — ${toPersianDigits(totalCount)} رویداد`}
                     whileTap={{ scale: 0.92 }}
-                    style={{
-                      background: `color-mix(in srgb, var(--sale) ${Math.round(4 + (maxDaySales ? (daySales / maxDaySales) * 16 : 0))}%, var(--card))`,
-                    }}
+                    // نسخهٔ ۷: بدون نقشهٔ حرارتی — نقطه‌های رنگی نوع رویداد کافی است؛ امروز با حلقه
                     className={cn(
-                      "flex min-h-[3.4rem] flex-col items-center justify-between gap-1 rounded-2xl border p-1.5 transition-shadow hover:shadow-card-hover lg:min-h-24",
-                      isToday ? "border-primary/40 ring-2 ring-primary" : "border-[color:color-mix(in_srgb,var(--sale)_18%,transparent)]"
+                      "flex min-h-[3.4rem] flex-col items-center justify-between gap-1 rounded-2xl border border-transparent bg-muted/45 p-1.5 transition-colors hover:bg-accent lg:min-h-24",
+                      isToday && "bg-card ring-2 ring-primary"
                     )}
                   >
                     <span className={numberBadge}>{toPersianDigits(dayNumber)}</span>
                     {daySales > 0 && (
-                      <span className="nums hidden text-[0.62rem] font-bold text-[color:color-mix(in_srgb,var(--sale)_80%,black)] lg:block">
+                      <span className="nums hidden text-caption font-bold text-[color:color-mix(in_srgb,var(--sale)_80%,black)] lg:block">
                         {formatTomanCompact(daySales).replace(" تومان", "")}
                       </span>
                     )}
@@ -707,7 +694,7 @@ export default function CalendarPage() {
               {LEGEND.map((l) => (
                 <span
                   key={l.label}
-                  className="flex items-center gap-1 text-[0.65rem] font-medium text-muted-foreground"
+                  className="flex items-center gap-1 text-caption font-medium text-muted-foreground"
                 >
                   <span className={cn("size-2 rounded-full", l.dot)} aria-hidden="true" />
                   {l.label}
@@ -734,7 +721,7 @@ export default function CalendarPage() {
             {/* چک‌ها */}
             {selectedEvents.checks.length > 0 && (
               <section aria-label="چک‌های سررسید">
-                <SheetSectionTitle dot="bg-destructive" label="چک‌های سررسید" count={selectedEvents.checks.length} />
+                <SheetSectionTitle dot="bg-warning" label="چک‌های سررسید" count={selectedEvents.checks.length} />
                 <div className="space-y-2">
                   {selectedEvents.checks.map((c) => (
                     <div
@@ -747,7 +734,7 @@ export default function CalendarPage() {
                           <span className="truncate text-sm font-bold">{c.person.name}</span>
                           <CheckDirectionBadge direction={c.direction} size="sm" />
                         </div>
-                        <p className="nums mt-0.5 truncate text-[0.65rem] text-muted-foreground">
+                        <p className="nums mt-0.5 truncate text-caption text-muted-foreground">
                           {getBank(c.bankKey).name} • سریال {toPersianDigits(c.serial)}
                         </p>
                       </div>
@@ -757,7 +744,7 @@ export default function CalendarPage() {
                         </p>
                         <span
                           className={cn(
-                            "mt-0.5 inline-block rounded-lg px-1.5 py-px text-[0.6rem] font-bold",
+                            "mt-0.5 inline-block rounded-lg px-1.5 py-px text-micro font-bold",
                             CHECK_STATUS_BADGE[c.status] ?? "bg-muted text-muted-foreground"
                           )}
                         >
@@ -791,7 +778,7 @@ export default function CalendarPage() {
                           فاکتور {inv.type === "PURCHASE" ? "خرید" : "فروش"}
                           <span className="nums"> #{toPersianDigits(inv.number)}</span>
                         </p>
-                        <p className="mt-0.5 truncate text-[0.65rem] text-muted-foreground">{inv.person.name}</p>
+                        <p className="mt-0.5 truncate text-caption text-muted-foreground">{inv.person.name}</p>
                       </div>
                       <p className="nums shrink-0 text-sm font-extrabold">{formatToman(inv.total, false)}</p>
                     </button>
@@ -815,7 +802,7 @@ export default function CalendarPage() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold">{s.person.name}</p>
-                        <p className="mt-0.5 truncate text-[0.65rem] text-muted-foreground">
+                        <p className="mt-0.5 truncate text-caption text-muted-foreground">
                           {s.direction === "RECEIVE" ? "دریافت" : "پرداخت"} {s.method === "CASH" ? "نقدی" : "چکی"}
                         </p>
                       </div>

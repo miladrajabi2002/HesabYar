@@ -43,12 +43,27 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-ink: var(--warning-ink);
+  --color-sale: var(--sale);
+  --color-purchase: var(--purchase);
   --color-income: var(--income);
   --color-expense: var(--expense);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* نسخهٔ ۷ — مقیاس متن نام‌دار (به‌جای ۲۶ اندازهٔ دلخواه) + گوشهٔ کارت ۲۰px
+   micro ۱۱px فقط برای نشان‌های تنگ، caption ۱۲px کمترین متن معمولی، label ۱۳px */
+@theme {
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.125rem;
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.25rem;
+  --radius-3xl: 1.25rem;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -59,7 +74,7 @@
 :root {
   color-scheme: light;
   --radius: 0.875rem; /* ۱۴px دکمه و input — کارت ۲۰px و باتم‌شیت ۲۸px */
-  --background: #f4f6f5;
+  --background: #f2f4f3;
   --foreground: #0f1a17;
   --card: #ffffff;
   --card-foreground: #0f1a17;
@@ -70,20 +85,21 @@
   --secondary: #e6f3ef;
   --secondary-foreground: #075543;
   --muted: #eef1f0;
-  --muted-foreground: #66726e;
+  --muted-foreground: #5d6965;
   --accent: #e9f4f0;
   --accent-foreground: #075543;
-  --destructive: #e5484d;
+  --destructive: #c8373d;
   --destructive-foreground: #ffffff;
-  --border: #e5eae8;
+  --border: #e1e7e4;
   --input: #dde3e1;
   --ring: #0b7a62;
-  --success: #12a150;
+  --success: #0b7f4f;
   --success-foreground: #ffffff;
-  --warning: #f59e0b;
+  --warning: #f0a020;
+  --warning-ink: #9a5500; /* متن کهربایی روی سفید — کنتراست AA */
   --warning-foreground: #ffffff;
-  --income: #12a150;
-  --expense: #e5484d;
+  --income: #0b7f4f;
+  --expense: #c8373d;
   --chart-1: #0b7a62;
   --chart-2: #14b8a6;
   --chart-3: #f59e0b;
@@ -102,18 +118,20 @@
   --hue-dashboard: #0b7a62;
   --hue-invoices: #0b7a62;
   --hue-calendar: #0b7a62;
-  --hue-checks: #e08a00; /* تنها بخشی که رنگ معنایی دارد: در جریان / سررسید */
+  --hue-checks: #a65f00; /* تنها بخشی که رنگ معنایی دارد: در جریان / سررسید */
   --hue-people: #0b7a62;
   --hue-products: #0b7a62;
   --hue-accounts: #0b7a62;
   --hue-reports: #0b7a62;
   --hue-settings: #0b7a62;
 
-  /* نوع فاکتور و نقش اشخاص (نسخهٔ ۵) — فروش زمردی، خرید نیلی (نه قرمز خطا) */
-  --sale: #0f9f6e;
-  --purchase: #4f5bd5;
-  --role-customer: #0f9f6e;
-  --role-supplier: #4f5bd5;
+  /* نوع فاکتور و نقش اشخاص — یک زبان رنگ برای پول (نسخهٔ ۷):
+     سبز = پول آمد (فروش/دریافتی)، نیلی = پول رفت (خرید/صادره)، کهربایی = منتظر (طلب/در جریان)،
+     قرمز فقط برای خطا، معوق و برگشتی */
+  --sale: #0a7d57;
+  --purchase: #4450c8;
+  --role-customer: #0a7d57;
+  --role-supplier: #4450c8;
 
   /* حرکت — یک زبان مشترک برای همهٔ انیمیشن‌ها */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -157,16 +175,14 @@
 }
 
 /* سایه دولایه بسیار ملایم کارت‌ها */
+/* نسخهٔ ۷ — سه سطح ارتفاع: «سطح» (کارت؛ فقط حاشیه، بدون سایه)، «برجسته» (دکمهٔ اصلی: shadow-fab)،
+   «شناور» (نوار پایین، شیت، اعلان: shadow-float). shadow-card عمداً تخت است تا همهٔ کارت‌ها یکجا تخت شوند. */
 @utility shadow-card {
-  box-shadow:
-    0 1px 2px rgba(16, 24, 40, 0.04),
-    0 6px 20px -4px rgba(16, 24, 40, 0.05);
+  box-shadow: none;
 }
 
 @utility shadow-card-hover {
-  box-shadow:
-    0 1px 2px rgba(16, 24, 40, 0.05),
-    0 12px 32px -6px rgba(16, 24, 40, 0.09);
+  box-shadow: 0 8px 24px -12px rgba(16, 24, 40, 0.14);
 }
 
 @utility shadow-fab {
@@ -194,15 +210,11 @@
     inset 0 1px 0 rgb(255 255 255 / 0.28);
 }
 
-/* نشان نوع فاکتور — کاشی نرم گرادیانی با لبهٔ روشن */
+/* نشان نوع فاکتور — کاشی نرم تخت */
 .type-mark {
   color: var(--tile);
-  background:
-    radial-gradient(120% 90% at 25% 0%, rgb(255 255 255 / 0.9), transparent 60%),
-    linear-gradient(155deg, color-mix(in srgb, var(--tile) 10%, white), color-mix(in srgb, var(--tile) 20%, white));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--tile) 18%, transparent),
-    0 4px 10px -4px color-mix(in srgb, var(--tile) 40%, transparent);
+  /* نسخهٔ ۷: تخت — فقط زمینهٔ کم‌رنگ همان رنگ */
+  background: color-mix(in srgb, var(--tile) 11%, white);
 }
 .type-mark-glyph { transition: transform 0.35s var(--ease-spring); }
 @media (hover: hover) {
@@ -319,8 +331,39 @@
   --width: min(92vw, 380px);
   --border-radius: 999px;
 }
+/* جای اعلان: زیر هدر موبایل (روی عنوان/جستجو نمی‌نشیند)؛ در دسکتاپ هدر نیست → بالای صفحه.
+   ارتفاع هدر = padding بالا (safe-area + ۰٫۷۵rem) + کارت ۴٫۵rem + padding پایین ۰٫۵rem */
+:root {
+  --hy-toast-bottom: calc(max(1.15rem, calc(env(safe-area-inset-bottom, 0px) + var(--tg-safe-bottom, 0px) + 0.35rem)) + 4.4rem + 0.75rem);
+  --hy-toast-top: calc(env(safe-area-inset-top, 0px) + 0.75rem + 4.5rem + 0.5rem + 0.5rem);
+}
+@media (min-width: 1024px) {
+  :root { --hy-toast-top: 1rem; }
+}
 .toaster [data-sonner-toaster] {
   direction: rtl;
+}
+/* موبایل: sonner هم left و هم right و width:100% می‌دهد؛ در RTL فقط right اعمال می‌شد و کل اعلان
+   ~۳۲px به چپ می‌رفت. اینجا جعبه را دقیقاً هم‌عرض صفحه می‌کنیم و قرص با margin:auto وسط می‌نشیند. */
+/* هدر موبایل شناور: پوسته شفاف است و محتوا آزادانه پشت کارت شیشه‌ای رد می‌شود.
+   فقط ناحیهٔ نوار وضعیت (notch) پوشانده می‌شود تا متن زیر ساعت/باتری نرود؛ در مرورگر عادی ارتفاعش صفر است. */
+.hy-mobile-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--background);
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  [data-sonner-toaster] {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    transform: none !important;
+  }
 }
 
 .cn-toast {
@@ -337,10 +380,10 @@
   padding: 0.5rem 0.55rem 0.5rem 1.15rem !important; /* RTL: آیکون سمت راست */
   border-radius: 1.6rem !important;
   border: 1px solid rgb(255 255 255 / 0.06) !important;
-  background: color-mix(in oklab, var(--island) 94%, transparent) !important;
+  /* کاملاً مات و بدون backdrop-filter: در وب‌اپ iOS، بلورِ پشت اعلان هنگام محو شدن روی هدر
+     می‌ماند و بخشی از هدر تار می‌شد */
+  background: var(--island) !important;
   color: var(--island-foreground) !important;
-  backdrop-filter: blur(16px) saturate(1.5);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
   box-shadow:
     0 10px 30px -8px rgb(0 0 0 / 0.35),
     0 2px 6px rgb(0 0 0 / 0.12) !important;
@@ -351,6 +394,11 @@
 .cn-toast [data-icon] {
   display: grid !important;
   place-items: center;
+  /* sonner روی این جعبه justify-content: flex-start می‌گذارد؛ در RTL یعنی ستون grid
+     به راست می‌چسبید و تیک ~۷px از مرکز دایره بیرون می‌زد */
+  justify-content: center !important;
+  align-content: center !important;
+  position: relative !important;
   width: 2rem !important;
   height: 2rem !important;
   margin: 0 !important;
@@ -406,6 +454,10 @@
 }
 .cn-toast [data-icon] svg {
   overflow: visible;
+  /* وسط‌چین مطلق: مستقل از flex/grid و حاشیه‌های sonner (RTL، iOS) */
+  position: absolute !important;
+  inset: 0 !important;
+  margin: auto !important;
 }
 
 /* ── آیکون‌های متحرک اعلان (CSS خالص؛ با mount اجرا می‌شوند) ── */
@@ -475,4 +527,55 @@
   .hy-rise { animation: none; }
   .hy-toast-icon path, .hy-toast-icon line { animation: none; stroke-dashoffset: 0; }
   .cn-toast [data-icon], .hy-ping::after { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   نوار پایین موبایل (نسخهٔ ۷) — شیشهٔ روشن با لبهٔ نوری بالا و سایهٔ شناور نرم
+   دکمهٔ + : گرادیان زمردی با درخشش بالا، حلقهٔ هم‌رنگ پس‌زمینه تا از نوار «جدا» دیده شود
+   ═══════════════════════════════════════════════════════════════ */
+.hy-nav {
+  background:
+    linear-gradient(to bottom, rgb(255 255 255 / 0.96), rgb(255 255 255 / 0.86));
+  border: 1px solid rgb(15 26 23 / 0.07);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 2px 6px -1px rgb(15 26 23 / 0.06),
+    0 22px 48px -14px rgb(15 26 23 / 0.3);
+  backdrop-filter: blur(22px) saturate(1.7);
+  -webkit-backdrop-filter: blur(22px) saturate(1.7);
+}
+.hy-fab {
+  background:
+    radial-gradient(120% 80% at 30% 0%, rgb(255 255 255 / 0.38), transparent 55%),
+    linear-gradient(160deg, #17a887 0%, var(--primary) 55%, #065444 100%);
+  box-shadow:
+    0 0 0 6px var(--background),
+    0 12px 24px -6px color-mix(in srgb, var(--primary) 60%, transparent),
+    0 3px 6px color-mix(in srgb, var(--primary) 30%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    inset 0 -2px 0 rgb(0 0 0 / 0.12);
+}
+.hy-fab::after {
+  /* هالهٔ آرام دور دکمه — فقط وقتی حرکت مجاز است */
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 1.65rem;
+  border: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hy-fab::after { animation: hy-fab-halo 2.6s var(--ease-out) 1.2s 3; }
+}
+@keyframes hy-fab-halo {
+  0% { transform: scale(0.92); opacity: 0.7; }
+  60%, 100% { transform: scale(1.18); opacity: 0; }
+}
+
+/* کارت قهرمان داشبورد (نسخهٔ ۷) — زمردی یکدست با یک نور ملایم؛ بدون بافت نقطه‌ای */
+.hero-solid {
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgb(255 255 255 / 0.13), transparent 60%),
+    #0a6a55;
 }

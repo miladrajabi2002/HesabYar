@@ -1,9 +1,9 @@
 "use client"
 
 /**
- * اجناس — موجودی زنده انبار + قیمت آخرین خرید/فروش
- * کلیک روی هر جنس: شیت جزئیات (آمار خرید/فروش + گردش اخیر)
- * + عکس جنس (ADV-05): اختیاری؛ در فرم جنس اضافه می‌شود، بندانگشتی در لیست و گالری جزئیات
+ * کالاها — موجودی زنده انبار + قیمت آخرین خرید/فروش
+ * کلیک روی هر کالا: شیت جزئیات (آمار خرید/فروش + گردش اخیر)
+ * + عکس کالا (ADV-05): اختیاری؛ در فرم کالا اضافه می‌شود، بندانگشتی در لیست و گالری جزئیات
  */
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
@@ -17,8 +17,6 @@ import {
   Pencil,
   Boxes,
   Banknote,
-  ArrowDownLeft,
-  ArrowUpRight,
   Barcode,
   Scale,
   TrendingUp,
@@ -34,6 +32,7 @@ import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort } from "@/lib/jalali"
 import { formatUnit, PRODUCT_UNITS } from "@/lib/units"
 import { AmountInput } from "@/components/ui/amount-input"
+import { EmptyState } from "@/components/ui/empty-state"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,6 +40,7 @@ import { Attachment, postAttachmentForm, useAttachmentUrls } from "@/lib/attachm
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import { Segmented } from "@/components/ui/segmented"
+import { PriceHistoryChart, type PricePoint } from "@/components/charts/price-history-chart"
 
 interface Product {
   id: string
@@ -48,7 +48,7 @@ interface Product {
   brand: string | null
   code: string | null
   unit: string
-  /** عکس جنس (اختیاری) — شناسهٔ اولین پیوست تصویری (ADV-05) */
+  /** عکس کالا (اختیاری) — شناسهٔ اولین پیوست تصویری (ADV-05) */
   photoId: string | null
   stock: number
   initialStock: number
@@ -56,6 +56,15 @@ interface Product {
   avgCostPrice: number
   lastPurchasePrice: number
   lastSalePrice: number
+  /** حد هشدار موجودی (۰ = بدون حد) */
+  minStock?: number
+}
+
+/** وضعیت موجودی بر اساس حد هشدار هر کالا (نسخهٔ ۷) — به‌جای نوار نسبت به پرموجودترین کالا */
+function stockState(p: Pick<Product, "stock" | "minStock">): "out" | "low" | "ok" {
+  if (p.stock <= 0) return "out"
+  if ((p.minStock ?? 0) > 0 && p.stock <= (p.minStock ?? 0)) return "low"
+  return "ok"
 }
 
 interface Movement {
@@ -73,7 +82,7 @@ interface Movement {
 
 interface ProductDetails {
   product: Product
-  /** عکس‌های پیوست جنس (ADV-05) */
+  /** عکس‌های پیوست کالا (ADV-05) */
   attachments: Attachment[]
   stats: {
     stock: number
@@ -87,6 +96,7 @@ interface ProductDetails {
     lastSalePrice: number
   }
   movements: Movement[]
+  priceHistory?: PricePoint[]
 }
 
 function ProductForm({
@@ -112,11 +122,11 @@ function ProductForm({
   )
   const [saving, setSaving] = useState(false)
 
-  /* ── عکس جنس (ADV-05) — اختیاری؛ در جنس جدید بعد از ذخیره پیوست می‌شود ── */
+  /* ── عکس کالا (ADV-05) — اختیاری؛ در کالا جدید بعد از ذخیره پیوست می‌شود ── */
   const photoInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<{ url: string; filename: string; size?: number } | null>(null)
-  // عکس‌های ثبت‌شدهٔ جنس (فقط حالت ویرایش)
+  // عکس‌های ثبت‌شدهٔ کالا (فقط حالت ویرایش)
   const { data: attData, refetch: refetchPhotos } = useQuery({
     queryKey: ["attachments", "PRODUCT", editing?.id ?? "new"],
     queryFn: () =>
@@ -129,7 +139,7 @@ function ProductForm({
   const savedUrls = useAttachmentUrls(
     savedPhotos.filter((a) => a.mime.startsWith("image/")).map((a) => a.id)
   )
-  // عکس‌های انتخاب‌شدهٔ هنوز آپلودنشده (جنس جدید) — پیش‌نمایش محلی
+  // عکس‌های انتخاب‌شدهٔ هنوز آپلودنشده (کالا جدید) — پیش‌نمایش محلی
   const [pending, setPending] = useState<{ file: File; url: string }[]>([])
   const pendingUrlsRef = useRef<string[]>([])
 
@@ -169,7 +179,7 @@ function ProductForm({
     if (failCount > 0) toast.error("برخی فایل‌ها آپلود نشدند — فقط تصویر تا ۸ مگابایت")
   }
 
-  /** انتخاب فایل: ویرایش ← آپلود فوری؛ جدید ← صف تا بعد از ذخیرهٔ جنس */
+  /** انتخاب فایل: ویرایش ← آپلود فوری؛ جدید ← صف تا بعد از ذخیرهٔ کالا */
   const onPickPhotos = (files: FileList | null) => {
     if (!files || files.length === 0) return
     if (editing) {
@@ -202,7 +212,7 @@ function ProductForm({
   }
 
   const submit = async () => {
-    if (name.trim().length < 2) return toast.error("نام جنس را وارد کنید")
+    if (name.trim().length < 2) return toast.error("نام کالا را وارد کنید")
     setSaving(true)
     try {
       if (editing) {
@@ -214,7 +224,7 @@ function ProductForm({
           initialStock: initialStock.trim() === "" ? 0 : initialStock.trim(),
           initialStockCostPrice: initialStockCost,
         })
-        toast.success("جنس ویرایش شد")
+        toast.success("کالا ویرایش شد")
       } else {
         const r = await apiPost<{ product: { id: string } }>("/api/products", {
           name: name.trim(),
@@ -224,8 +234,8 @@ function ProductForm({
           initialStock: initialStock.trim() === "" ? 0 : initialStock.trim(),
           initialStockCostPrice: initialStockCost,
         })
-        toast.success("جنس اضافه شد")
-        // آپلود عکس‌های انتخاب‌شده — بعد از ساخت جنس؛ خطای عکس مانع ثبت جنس نیست (ADV-05)
+        toast.success("کالا اضافه شد")
+        // آپلود عکس‌های انتخاب‌شده — بعد از ساخت کالا؛ خطای عکس مانع ثبت کالا نیست (ADV-05)
         if (pending.length > 0 && r?.product?.id) {
           let okCount = 0
           for (const p of pending) {
@@ -240,7 +250,7 @@ function ProductForm({
               /* عکس این یکی آپلود نشد — بقیه ادامه می‌یابند */
             }
           }
-          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس جنس پیوست شد`)
+          if (okCount > 0) toast.success(`${toPersianDigits(okCount)} عکس کالا پیوست شد`)
           if (okCount < pending.length) toast.error("برخی عکس‌ها آپلود نشدند")
           setPending([])
         }
@@ -259,7 +269,7 @@ function ProductForm({
       <BottomSheet
       open={open}
       onClose={onClose}
-      title={editing ? "ویرایش جنس" : "جنس جدید"}
+      title={editing ? "ویرایش کالا" : "کالا جدید"}
       size="tall"
       footer={
         <Button onClick={submit} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
@@ -270,7 +280,7 @@ function ProductForm({
     >
       <div className="space-y-3">
         <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">نام جنس *</label>
+          <label className="mb-1.5 block text-label font-bold text-foreground/80">نام کالا *</label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -279,16 +289,16 @@ function ProductForm({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">برند</label>
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">برند</label>
             <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="اصفهان" />
           </div>
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">کد جنس</label>
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">کد کالا</label>
             <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="E70-32" />
           </div>
         </div>
         <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">واحد شمارش</label>
+          <label className="mb-1.5 block text-label font-bold text-foreground/80">واحد شمارش</label>
           <div className="flex flex-wrap gap-1.5">
             {PRODUCT_UNITS.map((u) => (
               <button
@@ -307,12 +317,12 @@ function ProductForm({
             ))}
           </div>
         </div>
-        {/* عکس جنس (ADV-05) — اختیاری و مستقل از هر وضعیت */}
+        {/* عکس کالا (ADV-05) — اختیاری و مستقل از هر وضعیت */}
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3.5">
           <div className="mb-1.5 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-caption font-medium text-muted-foreground">
               <ImagePlus className="size-3.5" />
-              عکس جنس (اختیاری)
+              عکس کالا (اختیاری)
             </p>
             <Button
               type="button"
@@ -320,20 +330,20 @@ function ProductForm({
               size="sm"
               onClick={() => photoInputRef.current?.click()}
               disabled={uploading}
-              className="h-8 shrink-0 rounded-xl px-2.5 text-[0.7rem] font-bold"
+              className="h-8 shrink-0 rounded-xl px-2.5 text-caption font-bold"
             >
               {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
               {uploading ? "در حال بارگذاری…" : "افزودن تصویر"}
             </Button>
           </div>
-          <p className="mb-2 text-[0.62rem] leading-relaxed text-muted-foreground">
-            عکس در لیست اجناس و هنگام انتخاب جنس در فاکتور نمایش داده می‌شود — اجباری نیست.
-            {editing ? "" : " بعد از ذخیرهٔ جنس پیوست می‌شود."}
+          <p className="mb-2 text-caption leading-relaxed text-muted-foreground">
+            عکس در لیست کالاها و هنگام انتخاب کالا در فاکتور نمایش داده می‌شود — اجباری نیست.
+            {editing ? "" : " بعد از ذخیرهٔ کالا پیوست می‌شود."}
           </p>
 
           {savedPhotos.length === 0 && pending.length === 0 ? (
-            <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-[0.68rem] text-muted-foreground">
-              هنوز عکسی ندارد — می‌توانید همین‌جا عکس جنس را بگیرید یا انتخاب کنید.
+            <p className="rounded-xl bg-muted/40 px-2.5 py-4 text-center text-caption text-muted-foreground">
+              هنوز عکسی ندارد — می‌توانید همین‌جا عکس کالا را بگیرید یا انتخاب کنید.
             </p>
           ) : (
             <div className="grid grid-cols-4 gap-2">
@@ -363,7 +373,7 @@ function ProductForm({
                     ) : (
                       <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
                         <FileText className="size-5 text-muted-foreground" />
-                        <span className="w-full truncate text-[0.55rem] text-muted-foreground">{att.filename}</span>
+                        <span className="w-full truncate text-micro text-muted-foreground">{att.filename}</span>
                       </div>
                     )}
                     <button
@@ -383,7 +393,7 @@ function ProductForm({
                   className="relative aspect-square overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/5"
                 >
                   <img src={p.url} alt={p.file.name} className="size-full object-cover" />
-                  <span className="absolute inset-x-0 bottom-0 bg-primary/80 py-px text-center text-[0.5rem] font-bold text-white">
+                  <span className="absolute inset-x-0 bottom-0 bg-primary/80 py-px text-center text-micro font-bold text-white">
                     جدید
                   </span>
                   <button
@@ -412,7 +422,7 @@ function ProductForm({
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+          <label className="mb-1.5 block text-label font-bold text-foreground/80">
             موجودی اولیه انبار
           </label>
           <Input
@@ -421,14 +431,14 @@ function ProductForm({
             inputMode="decimal"
             placeholder="مثلاً ۵۰ — اختیاری"
           />
-          <p className="mt-1.5 text-[0.62rem] leading-relaxed text-muted-foreground">
-            اگر از این جنس الان در انبار دارید، تعدادش را وارد کنید تا به موجودی انبار اضافه شود؛ بعد از این،
+          <p className="mt-1.5 text-caption leading-relaxed text-muted-foreground">
+            اگر از این کالا الان در انبار دارید، تعدادش را وارد کنید تا به موجودی انبار اضافه شود؛ بعد از این،
             موجودی با فاکتورهای خرید و فروش به‌روز می‌شود.
           </p>
         </div>
         {Number(initialStock.replace(/[^\d.-]/g, "")) > 0 && (
           <div>
-            <label className="mb-1.5 block text-[0.7rem] font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-label font-bold text-foreground/80">
               قیمت خرید هر واحد (تومان)
             </label>
             <AmountInput
@@ -437,19 +447,19 @@ function ProductForm({
               placeholder="مثلاً ۵۰۰٬۰۰۰"
               showWords={false}
             />
-            <p className="mt-1.5 text-[0.62rem] leading-relaxed text-muted-foreground">
-              قیمت خرید هر واحد از موجودی اولیه — برای محاسبه صحیح سود موقع فروش این اجناس
+            <p className="mt-1.5 text-caption leading-relaxed text-muted-foreground">
+              قیمت خرید هر واحد از موجودی اولیه — برای محاسبه صحیح سود موقع فروش این کالاها
             </p>
           </div>
         )}
       </div>
     </BottomSheet>
 
-      {/* پیش‌نمایش عکس جنس */}
+      {/* پیش‌نمایش عکس کالا */}
       <BottomSheet
         open={!!preview}
         onClose={() => setPreview(null)}
-        title="پیش‌نمایش عکس جنس"
+        title="پیش‌نمایش عکس کالا"
         description={preview?.filename}
       >
         <div className="space-y-3">
@@ -474,7 +484,7 @@ function ProductForm({
   )
 }
 
-/** شیت جزئیات جنس — کلیک روی کارت جنس */
+/** شیت جزئیات کالا — کلیک روی کارت کالا */
 function ProductDetailsSheet({
   product,
   onClose,
@@ -492,7 +502,7 @@ function ProductDetailsSheet({
 
   const s = data?.stats
 
-  /* گالری عکس جنس (ADV-05) — پیش‌نمایش با کلیک */
+  /* گالری عکس کالا (ADV-05) — پیش‌نمایش با کلیک */
   const galleryPhotos = data?.attachments ?? []
   const galleryUrls = useAttachmentUrls(
     galleryPhotos.filter((a) => a.mime.startsWith("image/")).map((a) => a.id)
@@ -513,7 +523,7 @@ function ProductDetailsSheet({
           className="h-12 w-full rounded-2xl font-bold"
         >
           <Pencil className="size-4" />
-          ویرایش جنس
+          ویرایش کالا
         </Button>
       }
     >
@@ -523,13 +533,13 @@ function ProductDetailsSheet({
         </div>
       ) : (
         <div className="space-y-4">
-          {/* گالری عکس جنس (ADV-05) — اختیاری؛ کلیک = پیش‌نمایش */}
+          {/* گالری عکس کالا (ADV-05) — اختیاری؛ کلیک = پیش‌نمایش */}
           {galleryPhotos.length > 0 && (
             <div>
               <div className="mb-2 flex items-center gap-1.5 text-xs font-bold">
                 <ImagePlus className="size-3.5 text-primary" />
-                عکس‌های جنس
-                <span className="nums rounded-full bg-muted px-1.5 py-px text-[0.6rem] font-bold text-muted-foreground">
+                عکس‌های کالا
+                <span className="nums rounded-full bg-muted px-1.5 py-px text-micro font-bold text-muted-foreground">
                   {toPersianDigits(galleryPhotos.length)}
                 </span>
               </div>
@@ -560,7 +570,7 @@ function ProductDetailsSheet({
                       ) : (
                         <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
                           <FileText className="size-5 text-muted-foreground" />
-                          <span className="w-full truncate text-[0.55rem] text-muted-foreground">{att.filename}</span>
+                          <span className="w-full truncate text-micro text-muted-foreground">{att.filename}</span>
                         </div>
                       )}
                     </div>
@@ -573,7 +583,7 @@ function ProductDetailsSheet({
           {/* آمار اصلی */}
           <div className="grid grid-cols-2 gap-2.5">
             <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
-              <div className="flex items-center gap-1 text-[0.65rem] text-primary">
+              <div className="flex items-center gap-1 text-caption text-primary">
                 <Scale className="size-3" />
                 موجودی فعلی
               </div>
@@ -581,7 +591,7 @@ function ProductDetailsSheet({
                 {toPersianDigits(s.stock)} {formatUnit(data?.product.unit)}
               </p>
               {(data?.product.initialStock ?? 0) > 0 && (
-                <p className="nums mt-0.5 text-[0.58rem] text-primary/70">
+                <p className="nums mt-0.5 text-micro text-primary/70">
                   شامل موجودی اولیه: {toPersianDigits(data!.product.initialStock)}
                   {(data!.product.initialStockCostPrice ?? 0) > 0 &&
                     ` • خرید هر واحد: ${formatToman(data!.product.initialStockCostPrice, false)}`}
@@ -589,7 +599,7 @@ function ProductDetailsSheet({
               )}
             </div>
             <div className="rounded-2xl border border-border/70 bg-card p-3">
-              <div className="flex items-center gap-1 text-[0.65rem] text-muted-foreground">
+              <div className="flex items-center gap-1 text-caption text-muted-foreground">
                 <Wallet className="size-3" />
                 ارزش موجودی (خرید)
               </div>
@@ -599,37 +609,12 @@ function ProductDetailsSheet({
             </div>
           </div>
 
-          {/* خرید/فروش */}
-          <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-2xl bg-destructive/5 p-3">
-              <div className="flex items-center gap-1 text-[0.65rem] text-destructive">
-                <ArrowDownLeft className="size-3" />
-                مجموع خرید
-              </div>
-              <p className="nums mt-1 text-[0.8rem] font-extrabold text-destructive">
-                {toPersianDigits(s.purchasedQty)} {formatUnit(data?.product.unit)} • {formatTomanCompact(s.purchasedAmount)}
-              </p>
-              <div className="nums mt-1 text-[0.6rem] text-muted-foreground">
-                {s.avgPurchasePrice > 0 ? `میانگین: ${formatToman(s.avgPurchasePrice, false)}` : "خریدی ثبت نشده"}
-              </div>
-            </div>
-            <div className="rounded-2xl bg-income/5 p-3">
-              <div className="flex items-center gap-1 text-[0.65rem] text-income">
-                <ArrowUpRight className="size-3" />
-                مجموع فروش
-              </div>
-              <p className="nums mt-1 text-[0.8rem] font-extrabold text-income">
-                {toPersianDigits(s.soldQty)} {formatUnit(data?.product.unit)} • {formatTomanCompact(s.soldAmount)}
-              </p>
-              <div className="nums mt-1 text-[0.6rem] text-muted-foreground">
-                {s.avgSalePrice > 0 ? `میانگین: ${formatToman(s.avgSalePrice, false)}` : "فروشی ثبت نشده"}
-              </div>
-            </div>
-          </div>
+          {/* نمودار روند قیمت خرید/فروش */}
+          <PriceHistoryChart history={data?.priceHistory ?? []} />
 
           {/* آخرین قیمت‌ها */}
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-card px-3 py-2.5 text-[0.68rem]">
+            <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-card px-3 py-2.5 text-caption">
               <span className="flex items-center gap-1 text-muted-foreground">
                 <TrendingDown className="size-3.5" />
                 {s.lastPurchasePrice > 0 ? "آخرین خرید" : "قیمت خرید اولیه"}
@@ -638,7 +623,7 @@ function ProductDetailsSheet({
                 {formatToman(s.lastPurchasePrice || data!.product.initialStockCostPrice, false)}
               </span>
             </div>
-            <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-card px-3 py-2.5 text-[0.68rem]">
+            <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-card px-3 py-2.5 text-caption">
               <span className="flex items-center gap-1 text-muted-foreground">
                 <TrendingUp className="size-3.5" />
                 آخرین فروش
@@ -655,7 +640,7 @@ function ProductDetailsSheet({
             </div>
             {data!.movements.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-border py-5 text-center text-xs text-muted-foreground">
-                هنوز خرید یا فروشی برای این جنس ثبت نشده
+                هنوز خرید یا فروشی برای این کالا ثبت نشده
               </p>
             ) : (
               <div className="space-y-1.5">
@@ -669,16 +654,16 @@ function ProductDetailsSheet({
                     >
                       <InvoiceTypeMark type={isPurchase ? "PURCHASE" : "SALE"} size={34} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[0.7rem] font-bold">{m.personName}</div>
-                        <div className="nums text-[0.6rem] text-muted-foreground">
+                        <div className="truncate text-caption font-bold">{m.personName}</div>
+                        <div className="nums text-micro text-muted-foreground">
                           {formatJalaliShort(new Date(m.date))} • فاکتور {toPersianDigits(m.invoiceNumber)} •{" "}
                           {toPersianDigits(m.quantity)} {formatUnit(m.unit)} × {formatToman(m.unitPrice, false)}
                         </div>
                       </div>
                       <span
                         className={cn(
-                          "nums shrink-0 text-[0.68rem] font-extrabold",
-                          isPurchase ? "text-destructive" : "text-income"
+                          "nums shrink-0 text-caption font-extrabold",
+                          isPurchase ? "text-purchase" : "text-income"
                         )}
                       >
                         {formatTomanCompact(m.total)}
@@ -693,11 +678,11 @@ function ProductDetailsSheet({
       )}
     </BottomSheet>
 
-    {/* پیش‌نمایش عکس جنس */}
+    {/* پیش‌نمایش عکس کالا */}
     <BottomSheet
       open={!!preview}
       onClose={() => setPreview(null)}
-      title="پیش‌نمایش عکس جنس"
+      title="پیش‌نمایش عکس کالا"
       description={preview?.filename}
     >
       <div className="space-y-3">
@@ -729,7 +714,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null)
   const [detail, setDetail] = useState<Product | null>(null)
   const [exporting, setExporting] = useState(false)
-  const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all")
+  const [stockFilter, setStockFilter] = useState<"all" | "low" | "out">("all")
 
   // ADV-02: دانلود مطمئن CSV — window.location.href داخل مینی‌اپ تلگرام کوکی نشست ندارد
   // (احراز هویت فقط با هدر x-telegram-init-data)؛ پس با fetch + blob دانلود می‌کنیم.
@@ -769,12 +754,10 @@ export default function ProductsPage() {
   })
 
   const allProducts = data?.products ?? []
-  const outCount = allProducts.filter((p) => p.stock <= 0).length
-  const maxStock = Math.max(1, ...allProducts.map((p) => p.stock))
   const products = allProducts.filter((p) =>
-    stockFilter === "all" ? true : stockFilter === "in" ? p.stock > 0 : p.stock <= 0
+    stockFilter === "all" ? true : stockFilter === "low" ? stockState(p) === "low" : p.stock <= 0
   )
-  // بندانگشتی عکس اجناس (ADV-05) — فقط اجناسی که عکس دارند
+  // بندانگشتی عکس کالاها (ADV-05) — فقط کالاهایی که عکس دارند
   const photoIds = products.map((p) => p.photoId).filter((x): x is string => !!x)
   const photoUrls = useAttachmentUrls(photoIds)
   const totalValue = allProducts.reduce(
@@ -785,14 +768,14 @@ export default function ProductsPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="hidden text-lg font-extrabold lg:block lg:text-xl">اجناس</h1>
+        <h1 className="hidden text-2xl font-extrabold tracking-tight lg:block">کالاها</h1>
         <div className="flex items-center gap-2">
           <Button
             onClick={() => downloadCsv("products")}
             variant="outline"
             disabled={exporting}
             className="h-10 rounded-2xl px-4 text-xs font-bold hover:bg-accent"
-            aria-label="خروجی اکسل اجناس"
+            aria-label="خروجی اکسل کالاها"
           >
             {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
             <span className="hidden sm:inline">اکسل</span>
@@ -802,51 +785,34 @@ export default function ProductsPage() {
               setEditing(null)
               setSheet(true)
             }}
-            className="h-10 rounded-2xl px-4 text-xs font-bold shadow-fab"
+            className="h-10 rounded-xl px-4 text-label font-bold"
           >
             <Plus className="size-4" />
-            جنس جدید
+            کالای جدید
           </Button>
         </div>
       </div>
 
       {/* خلاصه */}
-      <div className="mb-4 grid grid-cols-3 gap-2.5 sm:gap-3">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3">
         <div className="rounded-3xl border border-border/70 bg-card p-3.5 shadow-card">
-          <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
             <span className="icon-soft grid size-6 place-items-center rounded-lg" style={{ ["--tile" as string]: "var(--hue-products)" }}>
               <Boxes className="size-3.5" />
             </span>
-            <span className="truncate">تعداد اجناس</span>
+            <span className="truncate">تعداد کالاها</span>
           </div>
           <p className="nums mt-2 text-base font-extrabold sm:text-lg">{toPersianDigits(allProducts.length)}</p>
         </div>
-        <div className="rounded-3xl border border-primary/25 bg-primary/10 p-3.5">
-          <div className="flex items-center gap-1.5 text-[0.68rem] font-bold text-primary">
+        <div className="rounded-3xl border border-border/70 bg-card p-3.5">
+          <div className="flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
             <Banknote className="size-3.5 shrink-0" />
             <span className="truncate">ارزش موجودی</span>
           </div>
-          <p className="nums mt-2 truncate text-base font-extrabold text-primary sm:text-lg">
+          <p className="nums mt-2 truncate text-base font-extrabold sm:text-lg">
             {formatTomanCompact(totalValue)}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setStockFilter(stockFilter === "out" ? "all" : "out")}
-          className={cn(
-            "rounded-3xl border p-3.5 text-start transition-all active:scale-[0.98]",
-            outCount > 0 ? "border-destructive/25 bg-destructive/5" : "border-border/70 bg-card",
-            stockFilter === "out" && "ring-2 ring-destructive/25"
-          )}
-        >
-          <div className={cn("flex items-center gap-1.5 text-[0.68rem] font-bold", outCount > 0 ? "text-destructive" : "text-muted-foreground")}>
-            <Package className="size-3.5 shrink-0" />
-            <span className="truncate">تمام‌شده</span>
-          </div>
-          <p className={cn("nums mt-2 text-base font-extrabold sm:text-lg", outCount > 0 && "text-destructive")}>
-            {toPersianDigits(outCount)}
-          </p>
-        </button>
       </div>
 
       {/* جستجو */}
@@ -856,7 +822,7 @@ export default function ProductsPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="جستجوی نام، برند یا کد…"
+            placeholder="جستجوی نام، برند یا کد کالا"
             className="field ps-10"
           />
         </div>
@@ -864,9 +830,9 @@ export default function ProductsPage() {
           value={stockFilter}
           onChange={setStockFilter}
           options={[
-            { key: "all", label: "همه" },
-            { key: "in", label: "موجود", tone: "var(--income)" },
-            { key: "out", label: "تمام‌شده", tone: "var(--destructive)" },
+            { key: "all", label: "همه", count: allProducts.length },
+            { key: "low", label: "کم‌موجود", tone: "var(--warning-ink)", count: allProducts.filter((p) => stockState(p) === "low").length },
+            { key: "out", label: "تمام‌شده", tone: "var(--destructive)", count: allProducts.filter((p) => p.stock <= 0).length },
           ]}
           className="mt-2 sm:max-w-sm"
         />
@@ -878,15 +844,27 @@ export default function ProductsPage() {
           <Loader2 className="size-8 animate-spin text-primary" />
         </div>
       ) : products.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-border bg-card p-10 text-center">
-          <Package className="mx-auto size-10 text-muted-foreground/40" />
-          <p className="mt-3 text-sm font-bold">جنسی ثبت نشده</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            اجناس را همین‌جا بسازید یا موقع ثبت فاکتور سریع اضافه کنید
-          </p>
-        </div>
+        <EmptyState
+          icon={q || stockFilter !== "all" ? Search : Package}
+          title={q ? `کالایی با «${q}» پیدا نشد` : stockFilter !== "all" ? "کالایی در این دسته نیست" : "کالایی ثبت نشده"}
+          description={
+            q || stockFilter !== "all"
+              ? "عبارت دیگری جستجو کنید یا فیلتر را بردارید."
+              : "کالاها را همین‌جا بسازید یا موقع ثبت فاکتور سریع اضافه کنید."
+          }
+          secondaryLabel={q || stockFilter !== "all" ? "پاک کردن فیلترها" : undefined}
+          onSecondary={
+            q || stockFilter !== "all"
+              ? () => {
+                  setQ("")
+                  setStockFilter("all")
+                }
+              : undefined
+          }
+        />
       ) : (
-        <div className="grid gap-2.5 lg:grid-cols-2">
+        // grid-cols-1 = minmax(0,1fr): ستون ضمنی auto با محتوای پهن کارت (تا عکس‌ها برسند) از صفحه بیرون می‌زد
+        <div className="grid grid-cols-1 divide-y divide-border/60 overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
           {products.map((p) => (
             <div
               key={p.id}
@@ -894,36 +872,56 @@ export default function ProductsPage() {
               tabIndex={0}
               onClick={() => setDetail(p)}
               onKeyDown={(e) => e.key === "Enter" && setDetail(p)}
-              className="cursor-pointer rounded-3xl border border-border/70 bg-card p-4 shadow-card transition-all hover:shadow-card-hover active:scale-[0.995]"
+              className="min-w-0 cursor-pointer px-3.5 py-3 transition-colors hover:bg-accent/40 active:bg-accent/60"
             >
               <div className="flex items-center gap-3">
-                {/* عکس جنس اگر داشته باشد، وگرنه آیکون پیش‌فرض (ADV-05) */}
+                {/* عکس کالا اگر داشته باشد، وگرنه آیکون پیش‌فرض (ADV-05) */}
                 {p.photoId && photoUrls[p.photoId] ? (
                   <img
                     src={photoUrls[p.photoId]}
                     alt={p.name}
                     loading="lazy"
-                    className="size-11 shrink-0 rounded-2xl border border-border/60 object-cover"
+                    width={44}
+                    height={44}
+                    className="size-11 shrink-0 rounded-2xl border border-border/60 bg-muted object-cover"
                   />
                 ) : (
-                  <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
                     <Package className="size-5" />
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-extrabold">
+                  <div className="truncate text-[0.95rem] font-bold">
                     {p.name}
                     {p.brand ? <span className="font-medium text-muted-foreground"> — {p.brand}</span> : null}
                   </div>
-                  <div className="mt-0.5 truncate text-[0.65rem] text-muted-foreground">
-                    {[p.code ? `کد ${p.code}` : null].filter(Boolean).join(" • ") || `واحد: ${formatUnit(p.unit)}`}
+                  <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
+                    {[
+                      p.code ? `کد ${p.code}` : null,
+                      p.lastSalePrice > 0 ? `فروش ${formatToman(p.lastSalePrice, false)}` : null,
+                      p.lastPurchasePrice > 0 ? `خرید ${formatToman(p.lastPurchasePrice, false)}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || `واحد: ${formatUnit(p.unit)}`}
                   </div>
                 </div>
                 <div className="shrink-0 text-end">
-                  <div className={cn("nums text-sm font-extrabold", p.stock <= 0 ? "text-destructive" : "text-primary")}>
-                    {p.stock <= 0 ? "تمام شد" : `${toPersianDigits(p.stock)} ${formatUnit(p.unit)}`}
+                  <div className="nums text-sm font-extrabold">
+                    {toPersianDigits(Math.max(0, p.stock))} <span className="text-caption font-semibold text-muted-foreground">{formatUnit(p.unit)}</span>
                   </div>
-                  <div className="text-[0.6rem] text-muted-foreground">موجودی</div>
+                  {(() => {
+                    const st = stockState(p)
+                    return (
+                      <span
+                        className={cn(
+                          "mt-1 inline-block rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                          st === "out" ? "bg-destructive/10 text-destructive" : st === "low" ? "bg-warning/15 text-warning-ink" : "bg-income/10 text-income"
+                        )}
+                      >
+                        {st === "out" ? "تمام شده" : st === "low" ? "کم" : "کافی"}
+                      </span>
+                    )
+                  })()}
                 </div>
                 <button
                   type="button"
@@ -938,31 +936,6 @@ export default function ProductsPage() {
                   <Pencil className="size-4" />
                 </button>
               </div>
-              {/* نوار موجودی نسبت به پرموجودترین جنس */}
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-                <div
-                  className={cn("h-full rounded-full", p.stock <= 0 ? "bg-destructive/60" : "bg-primary")}
-                  style={{ width: `${p.stock <= 0 ? 4 : Math.max(6, Math.min(100, (p.stock / maxStock) * 100))}%` }}
-                />
-              </div>
-              {(p.lastPurchasePrice > 0 || p.lastSalePrice > 0) && (
-                <div className="mt-2.5 flex gap-2 border-t border-dashed pt-2.5 text-[0.62rem]">
-                  {p.lastPurchasePrice > 0 ? (
-                    <span className="nums rounded-lg bg-destructive/5 px-2 py-1 text-destructive">
-                      آخرین خرید: {formatToman(p.lastPurchasePrice, false)}
-                    </span>
-                  ) : p.avgCostPrice > 0 ? (
-                    <span className="nums rounded-lg bg-destructive/5 px-2 py-1 text-destructive">
-                      قیمت خرید: {formatToman(p.avgCostPrice, false)}
-                    </span>
-                  ) : null}
-                  {p.lastSalePrice > 0 && (
-                    <span className="nums rounded-lg bg-income/5 px-2 py-1 text-income">
-                      آخرین فروش: {formatToman(p.lastSalePrice, false)}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
           ))}
         </div>

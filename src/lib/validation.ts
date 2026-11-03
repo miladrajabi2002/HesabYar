@@ -79,10 +79,10 @@ export const personUpdateSchema = personCreateSchema.partial().extend({
   isArchived: z.boolean().optional(),
 })
 
-// ───────────────────────── اجناس ─────────────────────────
+// ───────────────────────── کالاها ─────────────────────────
 
 export const productCreateSchema = z.object({
-  name: requiredText(2, 150, "نام جنس"),
+  name: requiredText(2, 150, "نام کالا"),
   brand: optionalText(80),
   code: optionalText(50),
   unit: z.enum(["عدد", "کیلوگرم", "پاکت", "کارتن", "متر", "بسته"], {
@@ -97,7 +97,7 @@ export const productCreateSchema = z.object({
       const n = Number(toLatinDigits(String(v)).replace(/[^\d.-]/g, ""))
       return Number.isFinite(n) && n > 0 ? n : 0
     }),
-  // موجودی اولیه انبار هنگام ثبت جنس — اگر ارسال نشود (ویرایش) دست‌نخورده می‌ماند
+  // موجودی اولیه انبار هنگام ثبت کالا — اگر ارسال نشود (ویرایش) دست‌نخورده می‌ماند
   initialStock: z
     .union([z.number(), z.string()])
     .optional()
@@ -166,12 +166,12 @@ export const transferSchema = z.object({
 // ───────────────────────── اقلام فاکتور ─────────────────────────
 
 export const invoiceItemSchema = z.object({
-  productId: z.string().min(1, "جنس را انتخاب کنید"),
+  productId: z.string().min(1, "کالا را انتخاب کنید"),
   quantity: quantitySchema,
   unitPrice: nonNegativeAmount,
 })
 
-/** جنس جدید به همراه قیمت — برای افزودن سریع در فاکتور */
+/** کالا جدید به همراه قیمت — برای افزودن سریع در فاکتور */
 export const productQuickCreateSchema = productCreateSchema.extend({
   unitPrice: nonNegativeAmount.optional().default(0),
 })

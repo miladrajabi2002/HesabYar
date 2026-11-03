@@ -2,8 +2,8 @@
 
 /**
  * نشان نوع فاکتور (نسخهٔ ۵) — جایگزین آیکون‌های قدیمی سبد/رسید
- *  • فروش: کاشی زمردی + برگهٔ فاکتور با فلش «بیرون» (جنس رفت، پول آمد)
- *  • خرید: کاشی نیلی + جعبهٔ کالا با فلش «داخل» (جنس آمد، پول رفت)
+ *  • فروش: کاشی زمردی + برگهٔ فاکتور با فلش «بیرون» (کالا رفت، پول آمد)
+ *  • خرید: کاشی نیلی + جعبهٔ کالا با فلش «داخل» (کالا آمد، پول رفت)
  *  یک کاشی نرم با گرادیان ملایم و لبهٔ روشن؛ هاور: آیکون کمی بالا می‌پرد.
  * رنگ‌ها: --sale / --purchase (globals.css)
  */
@@ -68,7 +68,7 @@ export function InvoiceTypePill({ type, className }: { type: string; className?:
     <span
       style={{ ["--tile" as string]: sale ? "var(--sale)" : "var(--purchase)" }}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:color-mix(in_srgb,var(--tile)_11%,transparent)] px-2 py-0.5 text-[0.6rem] font-bold text-[color:var(--tile)]",
+        "inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:color-mix(in_srgb,var(--tile)_11%,transparent)] px-2 py-0.5 text-micro font-bold text-[color:var(--tile)]",
         className
       )}
     >

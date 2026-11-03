@@ -2,7 +2,7 @@
 
 /**
  * جستجوی سراسری یکپارچه (ADV-01) — یک میانبر که بین
- * فاکتور، شخص، جنس و چک هم‌زمان جستجو می‌کند.
+ * فاکتور، شخص، کالا و چک هم‌زمان جستجو می‌کند.
  * باز شدن: دکمه جستجو در هدر + میانبر Ctrl+K / Cmd+K
  */
 import { useEffect, useRef, useState } from "react"
@@ -81,7 +81,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
     !!r && (r.invoices.length > 0 || r.people.length > 0 || r.products.length > 0 || r.checks.length > 0)
 
   return (
-    <BottomSheet open={open} onClose={onClose} title="جستجوی سراسری" description="فاکتور، شخص، جنس، چک…" size="tall">
+    <BottomSheet open={open} onClose={onClose} title="جستجوی سراسری" description="فاکتور، شخص، کالا، چک…" size="tall" desktopMode="dialog">
       <div className="relative mb-3">
         <Search className="absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
         <input
@@ -102,13 +102,13 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           {[
             { icon: FileText, label: "فاکتورها", hint: "شماره یا شخص" },
             { icon: Users, label: "اشخاص", hint: "نام یا موبایل" },
-            { icon: Package, label: "اجناس", hint: "نام، برند یا کد" },
+            { icon: Package, label: "کالاها", hint: "نام، برند یا کد" },
             { icon: CheckSquare2, label: "چک‌ها", hint: "سریال یا مبلغ" },
           ].map((s) => (
             <div key={s.label} className="rounded-2xl border border-border/70 bg-muted/40 p-3 text-center">
               <s.icon className="mx-auto size-5 text-primary" />
-              <p className="mt-1.5 text-[0.7rem] font-bold">{s.label}</p>
-              <p className="text-[0.6rem] text-muted-foreground">{s.hint}</p>
+              <p className="mt-1.5 text-caption font-bold">{s.label}</p>
+              <p className="text-micro text-muted-foreground">{s.hint}</p>
             </div>
           ))}
         </div>
@@ -121,7 +121,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           {/* فاکتورها */}
           {r && r.invoices.length > 0 && (
             <section>
-              <p className="mb-1.5 flex items-center gap-1.5 text-[0.65rem] font-bold text-muted-foreground">
+              <p className="mb-1.5 flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
                 <FileText className="size-3.5" /> فاکتورها
               </p>
               <div className="space-y-1.5">
@@ -137,7 +137,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                       <span className="block truncate text-xs font-bold">
                         {inv.person.name} — فاکتور {inv.number}
                       </span>
-                      <span className="nums block text-[0.65rem] text-muted-foreground">
+                      <span className="nums block text-caption text-muted-foreground">
                         {formatJalaliShort(new Date(inv.date))} • {inv.type === "SALE" ? "فروش" : "خرید"}
                         {inv.credit > 0 ? ` • مانده ${formatTomanCompact(inv.credit)}` : " • تسویه"}
                       </span>
@@ -154,7 +154,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           {/* اشخاص */}
           {r && r.people.length > 0 && (
             <section>
-              <p className="mb-1.5 flex items-center gap-1.5 text-[0.65rem] font-bold text-muted-foreground">
+              <p className="mb-1.5 flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
                 <Users className="size-3.5" /> اشخاص
               </p>
               <div className="space-y-1.5">
@@ -168,14 +168,14 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                     <RoleAvatar role={p.role} name={p.name} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-bold">{p.name}</span>
-                      <span className="nums block truncate text-[0.65rem] text-muted-foreground">
+                      <span className="nums block truncate text-caption text-muted-foreground">
                         {[p.phone, p.company].filter(Boolean).join(" • ") || "شخص"}
                       </span>
                     </span>
                     {p.balance !== 0 && (
                       <span
-                        className={`nums shrink-0 text-[0.7rem] font-bold ${
-                          p.balance > 0 ? "text-warning" : "text-destructive"
+                        className={`nums shrink-0 text-caption font-bold ${
+                          p.balance > 0 ? "text-warning-ink" : "text-destructive"
                         }`}
                       >
                         {formatTomanCompact(Math.abs(p.balance))}
@@ -187,11 +187,11 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
             </section>
           )}
 
-          {/* اجناس */}
+          {/* کالاها */}
           {r && r.products.length > 0 && (
             <section>
-              <p className="mb-1.5 flex items-center gap-1.5 text-[0.65rem] font-bold text-muted-foreground">
-                <Package className="size-3.5" /> اجناس
+              <p className="mb-1.5 flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
+                <Package className="size-3.5" /> کالاها
               </p>
               <div className="space-y-1.5">
                 {r.products.map((p) => (
@@ -219,7 +219,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           {/* چک‌ها */}
           {r && r.checks.length > 0 && (
             <section>
-              <p className="mb-1.5 flex items-center gap-1.5 text-[0.65rem] font-bold text-muted-foreground">
+              <p className="mb-1.5 flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
                 <CheckSquare2 className="size-3.5" /> چک‌ها
               </p>
               <div className="space-y-1.5">
@@ -233,7 +233,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                     <BankLogo bankKey={c.bankKey} size={34} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-bold">{c.person.name}</span>
-                      <span className="nums block text-[0.65rem] text-muted-foreground">
+                      <span className="nums block text-caption text-muted-foreground">
                         {c.direction === "RECEIVED" ? "دریافتی" : "صادره"} • سررسید{" "}
                         {formatJalaliShort(new Date(c.dueDate))}
                         {c.serial ? ` • ${c.serial}` : ""}
@@ -259,7 +259,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
         </div>
       )}
 
-      <p className="mt-3 flex items-center justify-center gap-1 text-[0.6rem] text-muted-foreground">
+      <p className="mt-3 flex items-center justify-center gap-1 text-micro text-muted-foreground">
         <CornerDownLeft className="size-3" />
         برای باز شدن جزئیات روی نتیجه بزنید
       </p>

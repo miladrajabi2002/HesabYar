@@ -6,7 +6,7 @@ import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-help
 import { productUpdateSchema } from "@/lib/validation"
 import { getProductStock } from "@/lib/finance"
 
-/** حذف پیوست‌های تصویری یک جنس (رکورد + فایل) — برای پاک‌سازی موقع حذف جنس */
+/** حذف پیوست‌های تصویری یک کالا (رکورد + فایل) — برای پاک‌سازی موقع حذف کالا */
 async function deleteProductAttachments(productId: string) {
   const atts = await db.attachment.findMany({ where: { refType: "PRODUCT", refId: productId } })
   for (const att of atts) {
@@ -21,14 +21,14 @@ async function deleteProductAttachments(productId: string) {
 
 export const dynamic = "force-dynamic"
 
-/** GET /api/products/[id] — جزئیات جنس: آمار خرید/فروش + گردش اخیر */
+/** GET /api/products/[id] — جزئیات کالا: آمار خرید/فروش + گردش اخیر */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
   try {
     const { id } = await ctx.params
     const product = await db.product.findUnique({ where: { id } })
-    if (!product || product.isArchived) return fail("جنس پیدا نشد", 404)
+    if (!product || product.isArchived) return fail("کالا پیدا نشد", 404)
 
     const items = await db.invoiceItem.findMany({
       where: { productId: id },
@@ -86,7 +86,18 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       total: it.total,
     }))
 
-    // عکس‌های جنس (ADV-05) — برای گالری شیت جزئیات
+    // تاریخچهٔ قیمت (قدیم → جدید) برای نمودار روند خرید/فروش
+    const priceHistory = items
+      .map((it) => ({
+        date: it.invoice.date,
+        type: it.invoice.type,
+        unitPrice: it.unitPrice,
+        personId: it.invoice.person.id,
+        personName: it.invoice.person.name,
+      }))
+      .reverse()
+
+    // عکس‌های کالا (ADV-05) — برای گالری شیت جزئیات
     const attachments = await db.attachment.findMany({
       where: { refType: "PRODUCT", refId: id },
       orderBy: { createdAt: "desc" },
@@ -108,13 +119,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         lastSalePrice,
       },
       movements,
+      priceHistory,
     })
   } catch (e) {
     return serverError(e)
   }
 }
 
-/** PATCH /api/products/[id] — ویرایش جنس */
+/** PATCH /api/products/[id] — ویرایش کالا */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
@@ -123,7 +135,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const { data, error } = await parseBody(req, productUpdateSchema)
     if (error) return error
     const exists = await db.product.findUnique({ where: { id } })
-    if (!exists) return fail("جنس پیدا نشد", 404)
+    if (!exists) return fail("کالا پیدا نشد", 404)
     const product = await db.product.update({ where: { id }, data })
     return ok({ product })
   } catch (e) {
@@ -138,11 +150,11 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   try {
     const { id } = await ctx.params
     const used = await db.invoiceItem.count({ where: { productId: id } })
-    if (used > 0) return fail("این جنس در فاکتورها استفاده شده و قابل حذف نیست؛ بایگانیش کنید", 400)
+    if (used > 0) return fail("این کالا در فاکتورها استفاده شده و قابل حذف نیست؛ بایگانیش کنید", 400)
     const stock = await getProductStock(id)
-    if (stock !== 0) return fail("موجودی این جنس صفر نیست", 400)
+    if (stock !== 0) return fail("موجودی این کالا صفر نیست", 400)
     await db.product.delete({ where: { id } })
-    // عکس‌های جنس هم پاک شوند تا یتیم نمانند (ADV-05)
+    // عکس‌های کالا هم پاک شوند تا یتیم نمانند (ADV-05)
     await deleteProductAttachments(id)
     return ok({ ok: true })
   } catch (e) {
