@@ -520,11 +520,21 @@
   animation-delay: calc(min(var(--i, 0), 10) * 35ms);
 }
 
+/* نوار باریک «در حال جستجو» زیر فیلد جستجوی سراسری */
+@keyframes hy-search-progress {
+  from { inset-inline-start: -33%; }
+  to { inset-inline-start: 100%; }
+}
+.hy-search-progress {
+  animation: hy-search-progress 0.9s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
 /* درخشش اسکلتی ملایم */
 @keyframes hy-shimmer { to { background-position: -200% 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .hy-rise { animation: none; }
+  .hy-search-progress { animation-duration: 2.4s; }
   .hy-toast-icon path, .hy-toast-icon line { animation: none; stroke-dashoffset: 0; }
   .cn-toast [data-icon], .hy-ping::after { animation: none; }
 }

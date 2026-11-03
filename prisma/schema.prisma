@@ -250,3 +250,15 @@ model Attachment {
 
   @@index([refType, refId])
 }
+
+// ───────────────────────── وضعیت اعلان‌های زنگ «کار امروز» ─────────────────────────
+// کلید هر اعلان با وضعیتی که آن را ساخته عوض می‌شود (مثلاً «امروز» → «گذشته»، تغییر مانده یا موجودی)،
+// پس اعلانِ بسته‌شده فقط وقتی دوباره می‌آید که خبر تازه‌ای داشته باشد.
+model AlertState {
+  key         String    @id // check:<id>:today|overdue | sale:<id>:<credit> | stock:<id>:<stock>
+  seenAt      DateTime?
+  dismissedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  @@index([updatedAt])
+}

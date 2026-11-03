@@ -5,7 +5,7 @@
  * مرتب‌سازی: بیشترین مانده / بیشترین فروش / بیشترین خرید / قدیمی‌ترین مانده
  * حلقهٔ آواتار = چند روز است حساب باز مانده (بیش از ۳۰ روز قرمز)
  */
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AmountInput } from "@/components/ui/amount-input"
 import { BalanceAvatar, BalanceTag, ROLE_LABELS, formatOpenDays } from "@/components/ui/role-avatar"
+import { SearchField } from "@/components/ui/search-field"
 import { Segmented } from "@/components/ui/segmented"
 import { SwipeRow } from "@/components/ui/swipe-row"
 import { cn } from "@/lib/utils"
@@ -64,7 +65,20 @@ function PeoplePageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const [q, setQ] = useState("")
+  const qParam = searchParams.get("q") ?? ""
+  const [q, setQ] = useState(qParam)
+  // «همه در صفحهٔ خودش» از جستجوی سراسری: ?q= تازه فیلد را پر می‌کند
+  const [lastQParam, setLastQParam] = useState(qParam)
+  if (qParam !== lastQParam) {
+    setLastQParam(qParam)
+    setQ(qParam)
+  }
+  // هر حرف یک درخواست نفرستد
+  const [debouncedQ, setDebouncedQ] = useState(qParam.trim())
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 250)
+    return () => clearTimeout(t)
+  }, [q])
   const [role, setRole] = useState<"ALL" | "CUSTOMER" | "SUPPLIER">("ALL")
   const [balanceFilter, setBalanceFilter] = useState<"all" | "debtors" | "creditors">(() => {
     const f = searchParams.get("filter")
@@ -105,11 +119,13 @@ function PeoplePageInner() {
 
   const params = new URLSearchParams()
   if (role !== "ALL") params.set("role", role)
-  if (q) params.set("q", q)
+  if (debouncedQ) params.set("q", debouncedQ)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["people", role, q],
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["people", role, debouncedQ],
     queryFn: () => apiGet<{ people: Person[] }>(`/api/people?${params}`),
+    // هنگام تایپ فهرست قبلی می‌ماند تا نتیجهٔ تازه برسد (بدون چشمک اسکلت)
+    placeholderData: (prev) => prev,
   })
 
   let people = data?.people ?? []
@@ -182,25 +198,26 @@ function PeoplePageInner() {
 
       {/* فیلترها */}
       <div className="mb-4 space-y-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute inset-y-0 start-3.5 my-auto size-4 text-muted-foreground" />
-          <input
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <SearchField
             value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="جستجوی نام، موبایل، شرکت یا آدرس"
-            className="field ps-10"
+            onChange={setQ}
+            placeholder="نام، موبایل، شرکت یا آدرس"
+            loading={isFetching && !!debouncedQ}
+            hotkey
+            className="lg:flex-1"
+          />
+          <Segmented
+            value={role}
+            onChange={setRole}
+            options={[
+              { key: "ALL", label: "همه" },
+              { key: "CUSTOMER", label: "مشتری‌ها", tone: "var(--role-customer)" },
+              { key: "SUPPLIER", label: "فروشنده‌ها", tone: "var(--role-supplier)" },
+            ]}
+            className="sm:max-w-md lg:w-96"
           />
         </div>
-        <Segmented
-          value={role}
-          onChange={setRole}
-          options={[
-            { key: "ALL", label: "همه" },
-            { key: "CUSTOMER", label: "مشتری‌ها", tone: "var(--role-customer)" },
-            { key: "SUPPLIER", label: "فروشنده‌ها", tone: "var(--role-supplier)" },
-          ]}
-          className="sm:max-w-md"
-        />
         <Segmented
           value={sort}
           onChange={setSort}
@@ -241,8 +258,8 @@ function PeoplePageInner() {
         </div>
       ) : people.length === 0 ? (
         <EmptyState
-          icon={q ? Search : Users}
-          title={q ? `کسی با «${q}» پیدا نشد` : role !== "ALL" || balanceFilter !== "all" ? "کسی با این فیلتر نیست" : "شخصی ثبت نشده"}
+          icon={debouncedQ ? Search : Users}
+          title={debouncedQ ? `کسی با «${debouncedQ}» پیدا نشد` : role !== "ALL" || balanceFilter !== "all" ? "کسی با این فیلتر نیست" : "شخصی ثبت نشده"}
           description="هنگام ثبت فاکتور هم می‌توانید سریع شخص اضافه کنید."
           actionLabel={q || role !== "ALL" || balanceFilter !== "all" ? undefined : "افزودن شخص"}
           onAction={q || role !== "ALL" || balanceFilter !== "all" ? undefined : () => setAddSheet(true)}
@@ -276,6 +293,7 @@ function PeoplePageInner() {
                     label: p.balance < 0 ? "پرداخت" : "دریافت",
                     icon: HandCoins,
                     tone: p.balance < 0 ? "supplier" : "warning",
+                    navigates: true,
                     onAction: () => router.push(`/people/${p.id}?settle=${p.balance < 0 ? "PAY" : "RECEIVE"}`),
                   },
                 ]}

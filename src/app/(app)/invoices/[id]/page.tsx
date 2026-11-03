@@ -233,6 +233,22 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     enabled: settleSheet,
   })
 
+  // «ثبت دریافت» از زنگ کار امروز (?settle=1): شیت تسویه با کل مانده باز می‌شود
+  // (یک بار، همان رندری که فاکتور می‌رسد — طبق الگوی «تنظیم state هنگام رندر» ری‌اکت)
+  const [settleHandled, setSettleHandled] = useState(false)
+  const wantsSettle = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("settle") === "1"
+  if (data && !settleHandled) {
+    setSettleHandled(true)
+    if (wantsSettle && data.invoice.credit > 0) {
+      setSettleAmount(data.invoice.credit)
+      setCheckAmount(data.invoice.credit)
+      setSettleSheet(true)
+    }
+  }
+  useEffect(() => {
+    if (settleHandled && wantsSettle) router.replace(`/invoices/${id}`, { scroll: false })
+  }, [settleHandled])
+
   if (isLoading || !data) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">

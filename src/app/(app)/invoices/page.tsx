@@ -39,6 +39,7 @@ import { useTelegram } from "@/hooks/use-telegram"
 import { deferDelete } from "@/components/ui/undo-toast"
 import { useUIStore } from "@/lib/ui-store"
 import { Segmented, FilterChip } from "@/components/ui/segmented"
+import { SearchField } from "@/components/ui/search-field"
 import { SwipeRow } from "@/components/ui/swipe-row"
 import { InvoiceTypeMark, InvoiceTypePill } from "@/components/ui/type-mark"
 import { useRouter } from "next/navigation"
@@ -81,10 +82,17 @@ function InvoicesPageInner() {
   const [type, setType] = useState<"ALL" | "SALE" | "PURCHASE">("ALL")
   const [personId, setPersonId] = useState<string | null>(searchParams.get("person"))
   const [personName, setPersonName] = useState<string | null>(null)
-  const [q, setQ] = useState("")
+  const qParam = searchParams.get("q") ?? ""
+  const [q, setQ] = useState(qParam)
+  // «همه در صفحهٔ خودش» از جستجوی سراسری: ?q= تازه فیلد را پر می‌کند
+  const [lastQParam, setLastQParam] = useState(qParam)
+  if (qParam !== lastQParam) {
+    setLastQParam(qParam)
+    setQ(qParam)
+  }
   const [personSheet, setPersonSheet] = useState(false)
   // IMP-01: جستجوی debounce شده سمت سرور + صفحه‌بندی
-  const [debouncedQ, setDebouncedQ] = useState("")
+  const [debouncedQ, setDebouncedQ] = useState(qParam.trim())
   const [page, setPage] = useState(1)
   // فقط نسیه‌های بیش از ۳۰ روز (از بنر هشدار)
   const [overdueOnly, setOverdueOnly] = useState(searchParams.get("overdue") === "1")
@@ -250,19 +258,14 @@ function InvoicesPageInner() {
       {/* فیلترها — قرص لغزان نوع + جستجو + چیپ‌ها (معوق، شخص) */}
       <div className="mb-3 space-y-2.5">
         <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute inset-y-0 start-3.5 my-auto size-4 text-muted-foreground" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="جستجوی شخص، شماره فاکتور یا کالا"
-              className="field ps-10"
-              inputMode="search"
-            />
-            {isFetching && debouncedQ && (
-              <Loader2 className="absolute inset-y-0 end-3.5 my-auto size-4 animate-spin text-muted-foreground" />
-            )}
-          </div>
+          <SearchField
+            value={q}
+            onChange={setQ}
+            placeholder="شخص، شمارهٔ فاکتور، کالا یا مبلغ"
+            loading={isFetching && !!debouncedQ}
+            hotkey
+            className="flex-1"
+          />
           <Segmented
             value={type}
             onChange={(k) => {
@@ -495,6 +498,7 @@ function InvoicesPageInner() {
                               label: "ویرایش",
                               icon: Pencil,
                               tone: "brand",
+                              navigates: true,
                               onAction: () => router.push(`/invoices/new?edit=${inv.id}`),
                             },
                           ]}

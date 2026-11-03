@@ -6,6 +6,8 @@ import { dayKeyToDate } from "@/lib/jalali"
 import { getAveragePurchasePrice, nextInvoiceNumber, OVERDUE_DAYS } from "@/lib/finance"
 import { invoiceTotal, itemsSubtotal, paymentSplit } from "@/lib/finance-math"
 import { invoiceInclude } from "@/lib/includes"
+import { normalizeDigits } from "@/lib/digits"
+import { searchVariants } from "@/lib/search-text"
 
 export const dynamic = "force-dynamic"
 
@@ -20,7 +22,9 @@ export async function GET(req: NextRequest) {
     if (error) return error
 
     // IMP-01: جستجوی سروری — روی شماره فاکتور، نام شخص و نام کالا اقلام
-    const numberQuery = Number((f.q || "").replace(/[^\d]/g, ""))
+    // ارقام فارسی به لاتین؛ فقط عبارت عددی («۱۲۴»، «1,500,000») شماره/مبلغ حساب می‌شود
+    const qLatin = normalizeDigits(f.q || "")
+    const numberQuery = /^[\d\s,٬.#-]+$/.test(qLatin) ? Number(qLatin.replace(/[^\d]/g, "")) : NaN
     // نسیهٔ معوق: مانده‌دار و قدیمی‌تر از ۳۰ روز
     const overdueBefore = new Date(Date.now() - OVERDUE_DAYS * 86_400_000)
     const overdueWhere = { credit: { gt: 0 }, date: { lt: overdueBefore } }
@@ -32,10 +36,12 @@ export async function GET(req: NextRequest) {
         ? {
             OR: [
               ...(Number.isFinite(numberQuery) && numberQuery > 0
-                ? [{ number: numberQuery }]
+                ? [{ number: numberQuery }, { total: numberQuery }]
                 : []),
-              { person: { name: { contains: f.q } } },
-              { items: { some: { productName: { contains: f.q } } } },
+              ...searchVariants(f.q).flatMap((v) => [
+                { person: { name: { contains: v } } },
+                { items: { some: { productName: { contains: v } } } },
+              ]),
             ],
           }
         : {}),

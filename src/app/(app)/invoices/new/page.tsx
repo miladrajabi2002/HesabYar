@@ -66,6 +66,8 @@ import { BankLogo } from "@/components/ui/bank-logo"
 import { PersonFields } from "@/components/people/person-fields"
 import { ProductFields } from "@/components/products/product-fields"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
+import { SearchField } from "@/components/ui/search-field"
+import { foldSearchText } from "@/lib/search-text"
 import { Sparkline } from "@/components/charts/finance-charts"
 import { AmountInput } from "@/components/ui/amount-input"
 import { NumberInput } from "@/components/ui/number-input"
@@ -1326,12 +1328,11 @@ function PersonPickerSheet({
   onQuickAdd: (name: string) => void
 }) {
   const [q, setQ] = useState("")
-  const latinQ = normalizeDigits(q)
-  // جستجو با ارقام فارسی/لاتین: مثلاً موبایل «۰۹۱۲…» یا «0912…» هر دو پیدا می‌شوند
-  const matches = (s: string | null | undefined) =>
-    !!s && (s.includes(q) || normalizeDigits(s).includes(latinQ))
+  // یکدست‌سازی: ارقام فارسی/لاتین («۰۹۱۲» = «0912»)، ي/ك عربی و نیم‌فاصله یکی دیده می‌شوند
+  const fq = foldSearchText(q.trim())
+  const matches = (s: string | null | undefined) => !!s && foldSearchText(s).includes(fq)
   const filtered = people.filter(
-    (p) => !q || matches(p.name) || matches(p.company) || matches(p.phone)
+    (p) => !fq || matches(p.name) || matches(p.company) || matches(p.phone)
   )
   return (
     <BottomSheet
@@ -1342,16 +1343,13 @@ function PersonPickerSheet({
       size="tall"
     >
       <div className="sticky -top-2 z-10 -mx-5 -mt-2 bg-card px-5 pb-2 pt-2">
-        <div className="relative">
-          <Search className="absolute inset-y-0 start-3.5 my-auto size-4 text-muted-foreground" />
-          <input
-            autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="نام، شرکت یا موبایل"
-            className="field border-transparent bg-muted ps-10 hover:border-transparent"
-          />
-        </div>
+        <SearchField
+          autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
+          value={q}
+          onChange={setQ}
+          placeholder="نام، شرکت یا موبایل"
+          variant="filled"
+        />
       </div>
       {/* نسخهٔ ۷: «شخص جدید» اولین ردیف فهرست، نه دکمهٔ جدا؛ ردیف‌ها بدون قاب و با خط جداکننده */}
       <div className="divide-y divide-border/60">
@@ -1830,10 +1828,10 @@ function ItemPickerSheet({
     setPendingPhotos([])
   }
 
-  const matches = (s: string | null | undefined) =>
-    !!s && (s.includes(q) || normalizeDigits(s).includes(normalizeDigits(q)))
+  const fq = foldSearchText(q.trim())
+  const matches = (s: string | null | undefined) => !!s && foldSearchText(s).includes(fq)
   const filtered = products.filter(
-    (p) => !q || matches(p.name) || matches(p.brand) || matches(p.code)
+    (p) => !fq || matches(p.name) || matches(p.brand) || matches(p.code)
   )
   // بندانگشتی عکس کالاها موجود در فهرست (ADV-05)
   const pickPhotoIds = filtered.map((p) => p.photoId).filter((x): x is string => !!x)
@@ -2118,16 +2116,13 @@ function ItemPickerSheet({
         <>
           {/* هم‌الگوی شیت انتخاب شخص: جستجو + «کالای جدید» ردیف اول فهرست */}
           <div className="sticky -top-2 z-10 -mx-5 -mt-2 bg-card px-5 pb-2 pt-2">
-            <div className="relative">
-              <Search className="absolute inset-y-0 start-3.5 my-auto size-4 text-muted-foreground" />
-              <input
-                autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="نام کالا، برند یا کد"
-                className="field border-transparent bg-muted ps-10 hover:border-transparent"
-              />
-            </div>
+            <SearchField
+              autoFocus={typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches}
+              value={q}
+              onChange={setQ}
+              placeholder="نام کالا، برند یا کد"
+              variant="filled"
+            />
           </div>
           <div className="divide-y divide-border/60">
             <button

@@ -5,8 +5,9 @@
  * کلیک روی هر کالا: شیت جزئیات (آمار خرید/فروش + گردش اخیر)
  * + عکس کالا (ADV-05): اختیاری؛ در فرم کالا اضافه می‌شود، بندانگشتی در لیست و گالری جزئیات
  */
-import { useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
@@ -37,6 +38,7 @@ import { Attachment, postAttachmentForm, useAttachmentUrls } from "@/lib/attachm
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import { Segmented } from "@/components/ui/segmented"
+import { SearchField } from "@/components/ui/search-field"
 import { usePageSub } from "@/components/layout/page-header"
 import { PriceHistoryChart, type PricePoint } from "@/components/charts/price-history-chart"
 import { ProductFields } from "@/components/products/product-fields"
@@ -575,8 +577,36 @@ function ProductDetailsSheet({
 }
 
 export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <ProductsPageInner />
+    </Suspense>
+  )
+}
+
+function ProductsPageInner() {
   const queryClient = useQueryClient()
-  const [q, setQ] = useState("")
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const qParam = searchParams.get("q") ?? ""
+  const [q, setQ] = useState(qParam)
+  // «همه در صفحهٔ خودش» از جستجوی سراسری: ?q= تازه فیلد را پر می‌کند
+  const [lastQParam, setLastQParam] = useState(qParam)
+  if (qParam !== lastQParam) {
+    setLastQParam(qParam)
+    setQ(qParam)
+  }
+  const [debouncedQ, setDebouncedQ] = useState(qParam.trim())
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 250)
+    return () => clearTimeout(t)
+  }, [q])
   const [sheet, setSheet] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
   const [detail, setDetail] = useState<Product | null>(null)
@@ -613,12 +643,27 @@ export default function ProductsPage() {
   }
 
   const params = new URLSearchParams()
-  if (q) params.set("q", q)
+  if (debouncedQ) params.set("q", debouncedQ)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["products", q],
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["products", debouncedQ],
     queryFn: () => apiGet<{ products: Product[] }>(`/api/products?${params}`),
+    // هنگام تایپ فهرست قبلی می‌ماند تا نتیجهٔ تازه برسد (بدون چشمک اسکلت)
+    placeholderData: (prev) => prev,
   })
+
+  // ?open=<id> (از جستجوی سراسری): جزئیات همان کالا باز می‌شود
+  const openId = searchParams.get("open")
+  const [handledOpen, setHandledOpen] = useState<string | null>(null)
+  if (!openId && handledOpen) setHandledOpen(null)
+  if (openId && openId !== handledOpen && data) {
+    setHandledOpen(openId)
+    const hit = data.products.find((p) => p.id === openId)
+    if (hit) setDetail(hit)
+  }
+  useEffect(() => {
+    if (handledOpen) router.replace("/products", { scroll: false })
+  }, [handledOpen, router])
 
   const allProducts = data?.products ?? []
   const products = allProducts.filter((p) =>
@@ -691,16 +736,15 @@ export default function ProductsPage() {
       </div>
 
       {/* جستجو */}
-      <div className="mb-4">
-        <div className="relative">
-          <Search className="absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="جستجوی نام، برند یا کد کالا"
-            className="field ps-10"
-          />
-        </div>
+      <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
+        <SearchField
+          value={q}
+          onChange={setQ}
+          placeholder="نام، برند یا کد کالا"
+          loading={isFetching && !!debouncedQ}
+          hotkey
+          className="lg:flex-1"
+        />
         <Segmented
           value={stockFilter}
           onChange={setStockFilter}
@@ -709,7 +753,7 @@ export default function ProductsPage() {
             { key: "low", label: "کم‌موجود", tone: "var(--warning-ink)", count: allProducts.filter((p) => stockState(p) === "low").length },
             { key: "out", label: "ناموجود", tone: "var(--destructive)", count: allProducts.filter((p) => p.stock <= 0).length },
           ]}
-          className="mt-2 sm:max-w-sm"
+          className="sm:max-w-sm lg:w-96"
         />
       </div>
 
@@ -721,7 +765,7 @@ export default function ProductsPage() {
       ) : products.length === 0 ? (
         <EmptyState
           icon={q || stockFilter !== "all" ? Search : Package}
-          title={q ? `کالایی با «${q}» پیدا نشد` : stockFilter !== "all" ? "کالایی در این دسته نیست" : "کالایی ثبت نشده"}
+          title={debouncedQ ? `کالایی با «${debouncedQ}» پیدا نشد` : stockFilter !== "all" ? "کالایی در این دسته نیست" : "کالایی ثبت نشده"}
           description={
             q || stockFilter !== "all"
               ? "عبارت دیگری جستجو کنید یا فیلتر را بردارید."

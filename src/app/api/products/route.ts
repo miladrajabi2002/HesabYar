@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
+import { searchVariants } from "@/lib/search-text"
 import { ok, fail, parseBody, parseQuery, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { productCreateSchema } from "@/lib/validation"
 import { getProductStocks } from "@/lib/finance"
@@ -24,11 +25,12 @@ export async function GET(req: NextRequest) {
         isArchived: false,
         ...(f.q
           ? {
-              OR: [
-                { name: { contains: f.q } },
-                { brand: { contains: f.q } },
-                { code: { contains: f.q } },
-              ],
+              // ي/ك عربی و ارقام فارسی/لاتین یکی دیده می‌شوند
+              OR: searchVariants(f.q).flatMap((v) => [
+                { name: { contains: v } },
+                { brand: { contains: v } },
+                { code: { contains: v } },
+              ]),
             }
           : {}),
       },

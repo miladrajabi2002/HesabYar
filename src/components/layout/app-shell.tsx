@@ -6,9 +6,10 @@
  *  • موبایل: هدر جمع‌وجور (عنوان بزرگ + جستجو + زنگ «کار امروز») — بدون لوگو تا محتوا جا داشته باشد
  *  | نوار پایین شناور مینیمال با دکمهٔ + برجسته؛ نشانگر فعال (قرص پشت آیکون) با فنر بین آیتم‌ها لیز می‌خورد
  *    با اسکرول به پایین کنار می‌رود و در صفحات فرم (فاکتور جدید) پنهان است
- *  • زنگ: چک‌های در جریانِ سررسید امروز/گذشته (همان معیار یادآوری صبحگاهی تلگرام) — /api/alerts
+ *  • زنگ: اعلان‌های «کار امروز» (چک سررسیدشده، نسیهٔ معوق، کالای رو به اتمام) — /api/alerts و AlertsSheet
+ *    عدد زنگ = اعلان‌های دیده‌نشده
  */
-import { useEffect, ReactNode, useState, useRef } from "react"
+import { useEffect, ReactNode, useState, useRef, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
@@ -17,13 +18,13 @@ import { cn } from "@/lib/utils"
 import { apiGet } from "@/lib/api-client"
 import { useTelegram } from "@/hooks/use-telegram"
 import { useUIStore } from "@/lib/ui-store"
-import { formatJalali, formatJalaliShort, formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
-import { formatToman, toPersianDigits } from "@/lib/money"
+import { formatJalali, formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
+import { toPersianDigits } from "@/lib/money"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
-import { BankLogo } from "@/components/ui/bank-logo"
 import { GlobalSearch } from "@/components/search/global-search"
+import { AlertsSheet, type AlertsData } from "@/components/layout/alerts-sheet"
 import { BrandLogo } from "@/components/ui/brand-logo"
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, PackageX, Store, TriangleAlert } from "lucide-react"
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, Store } from "lucide-react"
 import {
   IconApps,
   IconBell,
@@ -63,23 +64,6 @@ function titleFor(pathname: string): string {
   return hit?.label ?? "حساب‌یار"
 }
 
-type AlertsData = {
-  dueCount: number
-  totalCount: number
-  overdueSales: { count: number; amount: number; days: number }
-  lowStock: { id: string; name: string; unit: string; stock: number; minStock: number }[]
-  lowStockCount: number
-  dueChecks: {
-    id: string
-    amount: number
-    dueDate: string
-    direction: string
-    bankKey: string
-    personName: string
-    daysLeft: number
-  }[]
-}
-
 /** نوار پایین با اسکرول به پایین پنهان و با اسکرول به بالا ظاهر می‌شود */
 function useHideOnScroll() {
   const [hidden, setHidden] = useState(false)
@@ -108,6 +92,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [alertsOpen, setAlertsOpen] = useState(false)
   const scrolledAway = useHideOnScroll()
+  const isMac = useSyncExternalStore(
+    () => () => {},
+    () => /Mac|iPhone|iPad/.test(navigator.platform),
+    () => false
+  )
   const reduceMotion = useReducedMotion()
   const showSidebar = !isTelegram
   const now = nowTehran()
@@ -119,9 +108,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     refetchInterval: 120_000,
     staleTime: 60_000,
   })
-  const dueCount = alerts?.dueCount ?? 0
-  // عدد زنگ: همهٔ «کار امروز» (چک سررسیدی + نسیهٔ معوق + کالای تمام‌شده)
-  const todoCount = alerts?.totalCount ?? dueCount
+  // شمارندهٔ «چک‌ها» در سایدبار: چک‌های سررسیدشده‌ای که هنوز در فهرست اعلان‌اند
+  const dueCount = alerts?.items.filter((i) => i.kind === "check").length ?? 0
+  // عدد زنگ: اعلان‌هایی که هنوز دیده نشده‌اند (با باز کردن شیت صفر می‌شود)
+  const todoCount = alerts?.unreadCount ?? 0
+  const hasAlerts = (alerts?.totalCount ?? 0) > 0
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href))
   const isFormRoute = FORM_ROUTES.some((r) => pathname.startsWith(r))
@@ -214,7 +205,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <IconSearch className="size-[1.2rem]" />
             </HeaderButton>
             <HeaderButton label="کار امروز" onClick={() => setAlertsOpen(true)} count={todoCount}>
-              <IconBell className="size-[1.2rem]" active={todoCount > 0} />
+              <IconBell className="size-[1.2rem]" active={hasAlerts} />
             </HeaderButton>
           </div>
         </header>
@@ -224,18 +215,24 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="group flex h-10 w-full max-w-[27.5rem] items-center gap-2 rounded-xl border border-border bg-card px-3 text-label text-muted-foreground transition-colors hover:border-primary/40"
+            aria-keyshortcuts="Control+K Meta+K"
+            className="group flex h-10 w-full max-w-[30rem] items-center gap-2.5 rounded-xl bg-muted/80 ps-3.5 pe-2 text-label text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <IconSearch className="size-4" />
-            جستجوی فاکتور، شخص، کالا یا چک…
-            <kbd className="ms-auto rounded-md border border-border bg-muted/60 px-1.5 font-sans text-caption font-bold" dir="ltr">
-              Ctrl K
-            </kbd>
+            <IconSearch className="size-[1.05rem] shrink-0" />
+            <span className="truncate">جستجوی فاکتور، شخص، کالا یا چک…</span>
+            <span className="ms-auto flex shrink-0 items-center gap-0.5" dir="ltr">
+              <kbd className="grid h-6 place-items-center rounded-md border border-border bg-card px-1.5 font-sans text-caption font-bold text-foreground/65 shadow-[0_1px_0_var(--border)]">
+                {isMac ? "⌘" : "Ctrl"}
+              </kbd>
+              <kbd className="grid h-6 min-w-6 place-items-center rounded-md border border-border bg-card px-1.5 font-sans text-caption font-bold text-foreground/65 shadow-[0_1px_0_var(--border)]">
+                K
+              </kbd>
+            </span>
           </button>
           <span className="flex-1" />
           <span className="nums text-label font-medium text-muted-foreground">{today}</span>
           <HeaderButton label="کار امروز" onClick={() => setAlertsOpen(true)} count={todoCount}>
-            <IconBell className="size-[1.15rem]" active={todoCount > 0} />
+            <IconBell className="size-[1.15rem]" active={hasAlerts} />
           </HeaderButton>
         </div>
 
@@ -292,108 +289,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
 
-      {/* ───────── شیت «کار امروز» — چک‌های سررسیدی، نسیهٔ معوق، کالای تمام‌شده ───────── */}
-      <BottomSheet
-        open={alertsOpen}
-        onClose={() => setAlertsOpen(false)}
-        title="کار امروز"
-        description={todoCount ? `${toPersianDigits(todoCount)} مورد نیاز به پیگیری دارد` : "همه‌چیز مرتب است"}
-      >
-        {todoCount === 0 && !alerts?.lowStockCount ? (
-          <div className="py-8 text-center">
-            <span className="mx-auto grid size-14 place-items-center rounded-full bg-income/10 text-income">
-              <IconBell className="size-6" />
-            </span>
-            <p className="mt-3 text-sm font-bold">امروز کار عقب‌افتاده‌ای ندارید</p>
-            <p className="mt-1 text-caption text-muted-foreground">چک سررسیدی، نسیهٔ معوق یا کالای تمام‌شده نیست.</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {dueCount > 0 && (
-              <section>
-                <h3 className="mb-1 text-label font-extrabold text-foreground/80">چک‌های سررسید امروز یا گذشته</h3>
-                <div className="divide-y divide-border/70">
-                  {alerts?.dueChecks.map((c) => (
-                    <Link
-                      key={c.id}
-                      href="/checks"
-                      onClick={() => setAlertsOpen(false)}
-                      className="flex items-center gap-3 py-3 transition-colors hover:bg-accent/40"
-                    >
-                      <BankLogo bankKey={c.bankKey} size={40} />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-bold">{c.personName}</div>
-                        <div className="nums text-caption text-muted-foreground">
-                          {c.direction === "RECEIVED" ? "دریافتی" : "صادره"} | {formatJalaliShort(new Date(c.dueDate))}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-end">
-                        <div className="nums text-sm font-extrabold">{formatToman(c.amount, false)}</div>
-                        <span
-                          className={cn(
-                            "mt-0.5 inline-block rounded-full px-2 py-0.5 text-caption font-bold",
-                            c.daysLeft < 0 ? "bg-destructive/10 text-destructive" : "bg-warning/12 text-warning-ink"
-                          )}
-                        >
-                          {c.daysLeft < 0 ? `${toPersianDigits(-c.daysLeft)} روز گذشته` : "امروز"}
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-            {(alerts?.overdueSales.count ?? 0) > 0 && (
-              <Link
-                href="/invoices?overdue=1"
-                onClick={() => setAlertsOpen(false)}
-                className="flex items-center gap-3 rounded-2xl bg-destructive/[0.06] px-3 py-3 transition-colors hover:bg-destructive/10"
-              >
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-destructive/10 text-destructive">
-                  <TriangleAlert className="size-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-bold">
-                    {toPersianDigits(alerts!.overdueSales.count)} فاکتور نسیهٔ معوق
-                  </div>
-                  <div className="text-caption text-muted-foreground">
-                    بیش از {toPersianDigits(alerts!.overdueSales.days)} روز بدون تسویه
-                  </div>
-                </div>
-                <span className="nums shrink-0 text-sm font-extrabold">{formatToman(alerts!.overdueSales.amount, false)}</span>
-              </Link>
-            )}
-            {(alerts?.lowStockCount ?? 0) > 0 && (
-              <section>
-                <h3 className="mb-1 text-label font-extrabold text-foreground/80">موجودی انبار</h3>
-                <div className="divide-y divide-border/70">
-                  {alerts!.lowStock.map((p) => (
-                    <Link
-                      key={p.id}
-                      href="/products"
-                      onClick={() => setAlertsOpen(false)}
-                      className="flex items-center gap-3 py-2.5 transition-colors hover:bg-accent/40"
-                    >
-                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
-                        <PackageX className="size-[1.1rem]" />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{p.name}</span>
-                      <span
-                        className={cn(
-                          "nums shrink-0 rounded-full px-2 py-0.5 text-caption font-bold",
-                          p.stock <= 0 ? "bg-destructive/10 text-destructive" : "bg-warning/12 text-warning-ink"
-                        )}
-                      >
-                        {p.stock <= 0 ? "تمام شده" : `کم · ${toPersianDigits(p.stock)} ${p.unit}`}
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
-      </BottomSheet>
+      {/* ───────── شیت «کار امروز» — اعلان‌های قابل اقدام و بستن ───────── */}
+      <AlertsSheet open={alertsOpen} onClose={() => setAlertsOpen(false)} data={alerts} />
 
       {/* ───────── شیت «بیشتر» ───────── */}
       <BottomSheet open={moreSheetOpen} onClose={() => setMoreSheetOpen(false)} title="همهٔ بخش‌ها" desktopMode="dialog">

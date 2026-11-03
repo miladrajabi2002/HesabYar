@@ -12,6 +12,8 @@
  *    کاری نمی‌کند، پس هر اکشن باید در منو یا صفحهٔ جزئیات ردیف هم باشد.
  *  • با `hint`، اولین ردیفی که کامل روی صفحه است هر بار که صفحه باز می‌شود اکشن‌هایش را کمی نشان
  *    می‌دهد؛ اگر در همان بازدید خودشان ردیفی را بکشند، دیگر در آن صفحه اشاره نمی‌کند.
+ *  • کشیدن کامل ردیف را تا لبه بیرون می‌برد و رنگ اکشن کل ردیف را می‌گیرد؛ اکشن `navigates` همین‌طور
+ *    می‌ماند تا صفحهٔ بعد باز شود، بقیه بعد از مکثی کوتاه با فنر برمی‌گردند.
  *  • بعد از اکشن، ردیف `removes` بیرون می‌لغزد و جمع می‌شود تا فهرست پیش از تازه‌سازی بسته شود؛ بقیهٔ
  *    ردیف‌ها با فنر برمی‌گردند و آیکون اکشن برای تأیید یک تپش کوچک می‌زند.
  */
@@ -28,6 +30,8 @@ export interface SwipeAction {
   tone?: "danger" | "brand" | "ok" | "warning" | "supplier" | "neutral"
   /** ردیف بعد از موفقیت از فهرست می‌رود (حذف) */
   removes?: boolean
+  /** به صفحهٔ دیگری می‌رود: ردیف کامل کنار می‌رود و رنگ اکشن تا باز شدن صفحهٔ بعد می‌ماند */
+  navigates?: boolean
   /** اگر شکست خورد `false` برگردانید تا ردیف `removes` برگردد */
   onAction: () => void | boolean | Promise<unknown>
 }
@@ -40,6 +44,10 @@ const OPEN_VELOCITY = 450 // px/s
 const SNAP = { type: "spring" as const, stiffness: 560, damping: 44, mass: 0.7 }
 /** برگشت بعد از اکشنی که ردیف را حذف نمی‌کند: کمی نرم‌تر، تا «انجام شد» خوانده شود */
 const RETURN = { type: "spring" as const, stiffness: 380, damping: 30, mass: 0.8 }
+/** کشیدن کامل: ردیف تا لبه بیرون می‌رود و رنگ اکشن کل ردیف را می‌گیرد */
+const COMMIT = { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const }
+/** مکث کوتاه روی رنگ پرشده پیش از برگشت، تا اجرا شدن دیده شود */
+const COMMIT_HOLD = 180
 const HINT_PEEK = 56
 /** سینی تا این اندازه زیر ردیف ادامه دارد تا گوشه‌های گرد ردیف هیچ‌وقت شکاف نشان ندهند */
 const RAIL_TUCK = 28
@@ -173,6 +181,14 @@ export function SwipeRow({
     else navigator.vibrate?.(10)
   }
 
+  const commitTick = () => {
+    const haptic = webApp?.HapticFeedback
+    if (haptic) haptic.notificationOccurred("success")
+    else navigator.vibrate?.([12, 40, 12])
+  }
+
+  const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
   async function perform(action: SwipeAction) {
     try {
       return (await action.onAction()) !== false
@@ -181,12 +197,49 @@ export function SwipeRow({
     }
   }
 
-  async function run(action: SwipeAction, side: "leading" | "trailing") {
+  /** `full` یعنی با کشیدن کامل اجرا شد، نه با لمس دکمهٔ سینی باز */
+  async function run(action: SwipeAction, side: "leading" | "trailing", full = false) {
     if (stateRef.current.busy) return
     setBusy(true)
     markLearned()
     if (openRow === handle) openRow = null
     const root = rootRef.current
+
+    // فقط اکشن اول کل ردیف را پر می‌کند.
+    const first = actionsFor(side)[0] === action
+    if (action.navigates && first && root) {
+      // رنگ اکشن کل ردیف را می‌گیرد و همین‌طور می‌ماند تا صفحهٔ بعد جایش را بگیرد.
+      setArmed(side)
+      setOpenSide(null)
+      setConfirmed(side)
+      commitTick()
+      await Promise.all([animate(x, signFor(side) * root.offsetWidth, reduceMotion ? { duration: 0 } : COMMIT), perform(action)])
+      await wait(REMOVE_FALLBACK)
+      // ناوبری انجام نشد یا برگشتند؛ ردیف را سر جایش بیاور.
+      if (!root.isConnected) return
+      setArmed(null)
+      setConfirmed(null)
+      await animate(x, 0, reduceMotion ? { duration: 0 } : RETURN)
+      setBusy(false)
+      return
+    }
+
+    if (full && first && !action.removes && root) {
+      // ردیف تا لبه می‌رود، رنگ پر می‌شود و آیکون تپش می‌زند؛ بعد از اجرا با فنر برمی‌گردد.
+      setArmed(side)
+      setOpenSide(null)
+      setConfirmed(side)
+      commitTick()
+      await Promise.all([
+        animate(x, signFor(side) * root.offsetWidth, reduceMotion ? { duration: 0 } : COMMIT).then(() => wait(reduceMotion ? 0 : COMMIT_HOLD)),
+        perform(action),
+      ])
+      setArmed(null)
+      await animate(x, 0, reduceMotion ? { duration: 0 } : RETURN)
+      setConfirmed(null)
+      setBusy(false)
+      return
+    }
 
     if (!action.removes || !root) {
       // ردیف هم‌زمان با اجرای اکشن با فنر برمی‌گردد؛ تپش آیکون می‌گوید انجام شد.
@@ -207,7 +260,7 @@ export function SwipeRow({
     const fold = animate(root, { height: [height, 0], opacity: [1, 0] }, { duration: reduceMotion ? 0 : 0.26, ease: [0.32, 0.72, 0, 1] })
     const [ok] = await Promise.all([perform(action), fold])
     if (ok) {
-      await new Promise((resolve) => window.setTimeout(resolve, REMOVE_FALLBACK))
+      await wait(REMOVE_FALLBACK)
       // معمولاً تا الان تازه‌سازی آن را برداشته؛ وگرنه برش گردان.
       if (!root.isConnected) return
     }
@@ -307,7 +360,7 @@ export function SwipeRow({
       }
       const first = actionsFor(side)[0]
       if (Math.abs(offset) > width * FULL_SWIPE && first) {
-        void run(first, side)
+        void run(first, side, true)
         return
       }
       const rail = railWidth(side)
@@ -430,7 +483,8 @@ export function SwipeRow({
           />
         )
       })}
-      <motion.div style={{ x }} className="relative z-10 touch-pan-y bg-inherit">
+      {/* لایهٔ ردیف باید مات باشد: پس‌زمینهٔ نیمه‌شفاف ردیف (حالت لمس، کارت تازه) وگرنه رنگ سینی زیرش را نشان می‌دهد. */}
+      <motion.div style={{ x }} className="relative z-10 touch-pan-y bg-card">
         {children}
       </motion.div>
     </div>

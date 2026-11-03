@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
+import { searchVariants } from "@/lib/search-text"
 import { ok, fail, parseBody, parseQuery, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { personCreateSchema, personFilterSchema } from "@/lib/validation"
 import { getPersonActivity, getPersonBalances, openBalanceDays } from "@/lib/finance"
@@ -20,12 +21,13 @@ export async function GET(req: NextRequest) {
         ...(f.role ? { role: f.role } : {}),
         ...(f.q
           ? {
-              OR: [
-                { name: { contains: f.q } },
-                { company: { contains: f.q } },
-                { phone: { contains: f.q } },
-                { shopAddress: { contains: f.q } },
-              ],
+              // ي/ك عربی و ارقام فارسی/لاتین یکی دیده می‌شوند
+              OR: searchVariants(f.q).flatMap((v) => [
+                { name: { contains: v } },
+                { company: { contains: v } },
+                { phone: { contains: v } },
+                { shopAddress: { contains: v } },
+              ]),
             }
           : {}),
       },

@@ -7,8 +7,9 @@
  * + ثبت چک به نام (نسخهٔ ۳): چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود
  *   دریافتی → به نام ما • صادره → به نام مشتری (نام + کد ملی)
  */
-import { useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { motion } from "framer-motion"
@@ -110,7 +111,17 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 export default function ChecksPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChecksPageInner />
+    </Suspense>
+  )
+}
+
+function ChecksPageInner() {
   const queryClient = useQueryClient()
+  const router = useRouter()
+  const openId = useSearchParams().get("open")
   const { confirm } = useConfirm()
   const [direction, setDirection] = useState<"ALL" | "RECEIVED" | "ISSUED">("ALL")
   const [status, setStatus] = useState<"PENDING" | "CASHED" | "BOUNCED" | "ALL">("PENDING")
@@ -137,6 +148,21 @@ export default function ChecksPage() {
         summary: { pendingReceived: number; pendingIssued: number; cashedReceived: number; cashedIssued: number }
       }>(`/api/checks?${params}`),
   })
+
+  // «رسیدگی به چک» از زنگ کار امروز (?open=<id>): شیت عملیات همان چک باز می‌شود
+  useEffect(() => {
+    if (!openId) return
+    let cancelled = false
+    apiGet<{ check: Check }>(`/api/checks/${openId}`)
+      .then(({ check }) => {
+        if (!cancelled) setActionSheet(check)
+      })
+      .catch(() => toast.error("چک پیدا نشد"))
+      .finally(() => router.replace("/checks", { scroll: false }))
+    return () => {
+      cancelled = true
+    }
+  }, [openId])
 
   const { data: accountsData } = useQuery({
     queryKey: ["accounts"],
