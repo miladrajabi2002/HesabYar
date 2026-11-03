@@ -46,7 +46,7 @@ function InlineField({
 }
 
 const bareInput =
-  "h-9 w-full bg-transparent text-[0.95rem] font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
+  "h-9 w-full bg-transparent text-body font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
 
 function AddRow({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -197,7 +197,7 @@ export function PersonFields({
       <section>
         <GroupTitle title="حساب از قبل" hint="قبل از حساب‌یار" />
         <div className="rounded-2xl border border-border/80 bg-card p-3">
-          <div className="flex rounded-[0.9rem] bg-muted p-1">
+          <div className="flex rounded-md bg-muted p-1">
             {OPENING.map((k) => {
               const on = openingKind === k.key
               return (
@@ -207,7 +207,7 @@ export function PersonFields({
                   onClick={() => setOpeningKind(k.key)}
                   aria-pressed={on}
                   className={cn(
-                    "h-9 flex-1 rounded-[0.65rem] px-1 text-label font-bold transition-colors",
+                    "h-9 flex-1 rounded-sm px-1 text-label font-bold transition-colors",
                     on
                       ? cn(
                           "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]",

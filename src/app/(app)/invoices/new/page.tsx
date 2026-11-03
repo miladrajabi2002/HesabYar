@@ -69,6 +69,7 @@ import { normalizeDigits } from "@/lib/digits"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { PersonFields } from "@/components/people/person-fields"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
+import { Sparkline } from "@/components/charts/finance-charts"
 import { AmountInput } from "@/components/ui/amount-input"
 import { NumberInput } from "@/components/ui/number-input"
 import { JalaliDateField, todayKey } from "@/components/ui/jalali-date-picker"
@@ -681,7 +682,7 @@ function NewInvoicePageInner() {
           <X className="size-[1.1rem]" />
         </motion.button>
         <div className="min-w-0 flex-1 text-center">
-          <h1 className="truncate text-[1.05rem] font-extrabold leading-tight">
+          <h1 className="truncate text-title font-extrabold leading-tight">
             {editId
               ? `ویرایش فاکتور ${editData ? toPersianDigits(editData.invoice.number) : ""}`
               : type === "SALE"
@@ -750,7 +751,7 @@ function NewInvoicePageInner() {
             <div className="flex items-center gap-3 rounded-2xl bg-muted/50 px-3 py-2.5">
               <BalanceAvatar role={person.role} balance={person.balance ?? 0} openDays={person.openDays} size={42} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[0.95rem] font-bold">{person.name}</div>
+                <div className="truncate text-body font-bold">{person.name}</div>
                 {person.balance ? (
                   <div className="nums truncate text-caption text-muted-foreground">
                     {person.balance > 0 ? "از قبل به ما بدهکار است: " : "از قبل ما بدهکاریم: "}
@@ -980,7 +981,7 @@ function NewInvoicePageInner() {
                           <span className="nums text-sm font-bold">{formatToman(c.amount, false)}</span>
                           <span
                             className={cn(
-                              "shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                              "shrink-0 rounded-full px-2 py-0.5 text-caption font-bold leading-4",
                               c.isRegistered ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
                             )}
                           >
@@ -1051,7 +1052,7 @@ function NewInvoicePageInner() {
 
         {/* ───────── جزئیات: تاریخ، تخفیف، یادداشت — ردیف‌های فهرستی ───────── */}
         <section className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-card">
-          <h2 className="px-4 pb-1 pt-4 text-[0.95rem] font-extrabold">جزئیات</h2>
+          <h2 className="px-4 pb-1 pt-4 text-body font-extrabold">جزئیات</h2>
           <div className="divide-y divide-border/60">
             <div ref={dateFieldRef}>
               <JalaliDateField variant="cell" label="تاریخ" value={date} onChange={setDate} />
@@ -1096,7 +1097,7 @@ function NewInvoicePageInner() {
       {/* ───────── خلاصهٔ فاکتور — دسکتاپ، کنار فرم (نسخهٔ ۷) ───────── */}
       <aside className="sticky top-20 hidden rounded-3xl border border-border/80 bg-card p-5 lg:block">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-[0.95rem] font-extrabold">خلاصهٔ فاکتور {type === "SALE" ? "فروش" : "خرید"}</h2>
+          <h2 className="text-body font-extrabold">خلاصهٔ فاکتور {type === "SALE" ? "فروش" : "خرید"}</h2>
           {!editId && <AutosaveStatus savedAt={draftSavedAt} />}
           {editDirty && <span className="text-caption font-bold text-warning-ink">ذخیره‌نشده</span>}
         </div>
@@ -1113,7 +1114,7 @@ function NewInvoicePageInner() {
           )}
           <div className="flex items-baseline justify-between border-t border-dashed border-border pt-2.5">
             <dt className="font-bold">جمع کل</dt>
-            <dd className="text-[1.35rem] font-black tracking-tight">
+            <dd className="text-2xl font-black tracking-tight">
               <AnimatedNumber value={total} />
             </dd>
           </div>
@@ -1136,7 +1137,7 @@ function NewInvoicePageInner() {
           onClick={submit}
           disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors}
           className={cn(
-            "mt-5 h-[3.25rem] w-full rounded-2xl text-[0.95rem] font-bold",
+            "mt-5 h-[3.25rem] w-full rounded-2xl text-body font-bold",
             type === "SALE"
               ? "bg-[color:var(--sale)] hover:bg-[color:var(--sale)]/90"
               : "bg-[color:var(--purchase)] hover:bg-[color:var(--purchase)]/90"
@@ -1176,7 +1177,7 @@ function NewInvoicePageInner() {
             onClick={submit}
             disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors}
             className={cn(
-              "h-[3.25rem] rounded-2xl px-7 text-[0.95rem] font-bold",
+              "h-[3.25rem] rounded-2xl px-7 text-body font-bold",
               type === "SALE"
                 ? "bg-[color:var(--sale)] hover:bg-[color:var(--sale)]/90"
                 : "bg-[color:var(--purchase)] hover:bg-[color:var(--purchase)]/90"
@@ -1436,7 +1437,7 @@ function PersonPickerSheet({
               {bal !== 0 && (
                 <span
                   className={cn(
-                    "nums shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                    "nums shrink-0 rounded-full px-2 py-0.5 text-caption font-bold leading-4",
                     bal > 0 ? "bg-warning/15 text-warning-ink" : "bg-purchase/10 text-purchase"
                   )}
                 >
@@ -1559,6 +1560,8 @@ function ItemInsight({
   unitPrice,
   ownLast,
   onUse,
+  part,
+  trend,
 }: {
   product: Product
   invoiceType: "SALE" | "PURCHASE"
@@ -1567,6 +1570,10 @@ function ItemInsight({
   /** آخرین قیمت همین کالا با همین شخص (۰ = ندارد) */
   ownLast: number
   onUse: (v: number) => void
+  /** «chips» = قیمت‌های مرجع لمسی (داخل گروه قیمت) | «status» = نوار سود و هشدار موجودی */
+  part: "chips" | "status"
+  /** روند قیمت خرید (قدیمی → جدید) برای مینی‌نمودار */
+  trend?: number[]
 }) {
   const isSale = invoiceType === "SALE"
   const stock = product.stock ?? 0
@@ -1627,11 +1634,11 @@ function ItemInsight({
     muted: "bg-muted/60 text-muted-foreground",
   }
 
-  // نسخهٔ ۷: چیپ‌های قیمت مرجع (لمس = همان قیمت) + یک ردیف وضعیت سود/تغییر قیمت
-  return (
-    <div className="space-y-2.5">
-      {tiles.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+  // نسخهٔ ۷ (B3): چیپ‌های قیمت مرجع داخل گروه قیمت (لمس = همان قیمت)
+  if (part === "chips") {
+    if (tiles.length === 0) return null
+    return (
+        <div className="flex flex-wrap gap-1.5 border-t border-border/70 px-3.5 pb-3 pt-2.5">
           {tiles.map((t) => {
             const active = t.price !== undefined && unitPrice === t.price
             const body = (
@@ -1661,13 +1668,28 @@ function ItemInsight({
             )
           })}
         </div>
-      )}
+    )
+  }
 
+  const showTrend = !!trend && trend.length >= 2
+  return (
+    <div className="space-y-2">
       {strip && (
-        <div className={cn("nums flex items-center justify-between gap-2 rounded-xl px-3.5 py-2.5 text-label font-bold", toneCls[strip.tone])}>
-          <span className="truncate">{strip.main}</span>
-          {strip.side && <span className="shrink-0 text-caption font-semibold opacity-85">{strip.side}</span>}
+        <div className={cn("nums flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-label font-bold", toneCls[strip.tone])}>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{strip.side ? `${strip.side} | ${strip.main}` : strip.main}</span>
+          </span>
+          {showTrend && (
+            <span className="w-24 shrink-0" title="روند قیمت خرید">
+              <Sparkline values={trend!} muted color="currentColor" height={22} />
+            </span>
+          )}
         </div>
+      )}
+      {showTrend && (
+        <p className="px-1 text-caption text-muted-foreground">
+          نمودار کوچک: روند قیمت خرید {formatUnit(product.unit)} در {toPersianDigits(trend!.length)} خرید اخیر
+        </p>
       )}
 
       {short && (
@@ -1741,6 +1763,18 @@ function ItemPickerSheet({
     staleTime: 30_000,
   })
   const ownLast = (invoiceType === "SALE" ? ownPrice?.sale : ownPrice?.purchase) ?? 0
+  // روند قیمت خرید همین کالا (برای مینی‌نمودار کنار سود هر واحد)
+  const { data: productDetail } = useQuery({
+    queryKey: ["product", selected?.id],
+    queryFn: () => apiGet<{ priceHistory: { date: string; type: string; unitPrice: number }[] }>(`/api/products/${selected!.id}`),
+    enabled: open && mode === "pick" && !!selected,
+    staleTime: 60_000,
+  })
+  const purchaseTrend = (productDetail?.priceHistory ?? [])
+    .filter((h) => h.type === "PURCHASE")
+    .sort((a, b) => +new Date(a.date) - +new Date(b.date))
+    .slice(-12)
+    .map((h) => h.unitPrice)
   useEffect(() => {
     if (!priceTouched.current && ownLast > 0) setUnitPrice(ownLast)
     // selected?.id: دو کالا با «قیمت با همین شخص» برابر هم باید دوباره اعمال شود
@@ -1875,7 +1909,7 @@ function ItemPickerSheet({
               <Minus className="size-5" strokeWidth={2.6} />
             </button>
           </div>
-          <span className="text-[0.95rem] font-bold">{formatUnit(activeUnit)}</span>
+          <span className="text-body font-bold">{formatUnit(activeUnit)}</span>
         </div>
       </section>
       <section>
@@ -1888,6 +1922,19 @@ function ItemPickerSheet({
             placeholder="قیمت به تومان"
             className="[&_input]:h-12 [&_input]:text-xl [&_input]:font-extrabold"
           />
+          {mode === "pick" && selected && (
+            <div className="-mx-3.5 mt-2">
+              <ItemInsight
+                part="chips"
+                product={selected}
+                invoiceType={invoiceType}
+                quantity={quantity}
+                unitPrice={unitPrice}
+                ownLast={ownLast}
+                onUse={setPrice}
+              />
+            </div>
+          )}
         </div>
       </section>
     </>
@@ -1913,7 +1960,7 @@ function ItemPickerSheet({
           <Button
             onClick={addItem}
             disabled={mode === "pick" ? !selected : name.trim().length < 2}
-            className="h-[3.25rem] w-full rounded-2xl text-[0.95rem] font-bold"
+            className="h-[3.25rem] w-full rounded-2xl text-body font-bold"
           >
             <Plus className="size-4" />
             افزودن به فاکتور
@@ -1955,6 +2002,8 @@ function ItemPickerSheet({
           </div>
           {qtyPriceBlock}
           <ItemInsight
+            part="status"
+            trend={purchaseTrend}
             product={selected}
             invoiceType={invoiceType}
             quantity={quantity}
@@ -1966,7 +2015,7 @@ function ItemPickerSheet({
       ) : (
       <>
       {/* تب انتخاب/جدید */}
-      <div className="mb-3 flex rounded-[0.9rem] bg-muted p-1">
+      <div className="mb-3 flex rounded-md bg-muted p-1">
         <button
           type="button"
           onClick={() => {
@@ -1974,7 +2023,7 @@ function ItemPickerSheet({
             setSelected(null)
           }}
           className={cn(
-            "h-9 flex-1 rounded-[0.65rem] text-label font-bold transition-all",
+            "h-9 flex-1 rounded-sm text-label font-bold transition-all",
             mode === "pick" ? "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]" : "text-muted-foreground"
           )}
         >
@@ -1984,7 +2033,7 @@ function ItemPickerSheet({
           type="button"
           onClick={() => setMode("new")}
           className={cn(
-            "flex h-9 flex-1 items-center justify-center gap-1 rounded-[0.65rem] text-label font-bold transition-all",
+            "flex h-9 flex-1 items-center justify-center gap-1 rounded-sm text-label font-bold transition-all",
             mode === "new" ? "bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08)]" : "text-muted-foreground"
           )}
         >
@@ -2036,7 +2085,7 @@ function ItemPickerSheet({
                   </span>
                   <span
                     className={cn(
-                      "nums shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                      "nums shrink-0 rounded-full px-2 py-0.5 text-caption font-bold leading-4",
                       lowStock ? "bg-destructive/10 text-destructive" : "bg-muted text-foreground/70"
                     )}
                   >
@@ -2414,7 +2463,7 @@ function QuickCheckSheet({
                   className="nums text-end"
                 />
               </div>
-              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-micro leading-4 text-muted-foreground">
+              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-caption leading-4 text-muted-foreground">
                 چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود — اول باید به نام{" "}
                 {isReceived ? "شما" : "مشتری"} ثبت شود.
               </p>
@@ -2698,7 +2747,7 @@ function StepHeader({ n, title, done, meta }: { n: number; title: string; done: 
       >
         {done ? <Check className="size-3.5" strokeWidth={3} /> : toPersianDigits(n)}
       </span>
-      <h2 className="text-[0.95rem] font-extrabold">{title}</h2>
+      <h2 className="text-body font-extrabold">{title}</h2>
       {meta && <span className="nums ms-auto truncate text-caption text-muted-foreground">{meta}</span>}
     </div>
   )

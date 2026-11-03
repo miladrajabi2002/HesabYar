@@ -13,6 +13,9 @@ import {
   Loader2,
   Pencil,
   Archive,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ChevronLeft,
 } from "lucide-react"
 import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, toLatinDigits, toPersianDigits } from "@/lib/money"
@@ -25,7 +28,9 @@ import { AmountInput } from "@/components/ui/amount-input"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { Sparkline } from "@/components/charts/finance-charts"
+import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeader } from "@/components/layout/page-header"
+import { formatJalaliShort } from "@/lib/jalali"
 
 interface Account {
   id: string
@@ -43,6 +48,13 @@ interface Account {
     description: string
     date: string
   }[]
+}
+
+/** شمارهٔ کارت/شبا پوشیده: «۶۱۰۴ ۳۳۷۵ •••• ۸۸۲۱» */
+function maskNumber(raw: string | null): string | null {
+  const d = toLatinDigits(raw ?? "").replace(/[^0-9]/g, "")
+  if (d.length < 8) return null
+  return toPersianDigits(`${d.slice(0, 4)} ${d.slice(4, 8)} •••• ${d.slice(-4)}`)
 }
 
 const TX_LABEL: Record<string, string> = {
@@ -245,6 +257,7 @@ export default function AccountsPage() {
   const [formSheet, setFormSheet] = useState(false)
   const [editing, setEditing] = useState<Account | null>(null)
   const [transferSheet, setTransferSheet] = useState(false)
+  const [actionFor, setActionFor] = useState<Account | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ["accounts"],
@@ -291,7 +304,8 @@ export default function AccountsPage() {
       await apiPatch(`/api/accounts/${a.id}`, { isArchived: true })
       await queryClient.invalidateQueries({ queryKey: ["accounts"] })
       showUndoToast({
-        message: "حساب بایگانی شد",
+        message: `حساب «${a.name}» بایگانی شد`,
+        description: "گردش‌هایش حفظ می‌شود",
         onUndo: async () => {
           try {
             await apiPatch(`/api/accounts/${a.id}`, { isArchived: false })
@@ -307,75 +321,48 @@ export default function AccountsPage() {
     }
   }
 
+  // گردش اخیر همهٔ حساب‌ها، جدیدترین اول
+  const activity = accounts
+    .flatMap((a) => a.recent.map((t) => ({ ...t, accountName: a.name })))
+    .sort((x, y) => +new Date(y.date) - +new Date(x.date))
+    .slice(0, 8)
+
+  const openNew = () => {
+    setEditing(null)
+    setFormSheet(true)
+  }
+
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="hidden text-2xl font-extrabold tracking-tight lg:block">حساب‌های بانکی</h1>
-        <Button
-          onClick={() => {
-            setEditing(null)
-            setFormSheet(true)
-          }}
-          className="h-10 rounded-xl px-4 text-label font-bold"
-        >
-          <Plus className="size-4" />
-          افزودن حساب
-        </Button>
-      </div>
+      <PageHeader title="حساب‌های بانکی" sub={`${toPersianDigits(accounts.length)} حساب`} />
 
-      {/* جمع موجودی + سهم هر حساب */}
-      {/* نسخهٔ ۷: جمع موجودی ساده و تخت؛ رنگ به کارت هر بانک سپرده شد */}
-      <div className="relative mb-4 overflow-hidden rounded-[1.25rem] border border-border/80 bg-card p-4 sm:p-5">
-        <p className="relative text-label font-semibold text-muted-foreground">
-          جمع موجودی {toPersianDigits(accounts.length)} حساب
-        </p>
-        <p className="nums relative mt-1 text-[1.9rem] font-black leading-tight tracking-tight sm:text-[2.2rem]">
-          {formatToman(total, false)}
-          <span className="ms-1.5 text-label font-semibold text-muted-foreground">تومان</span>
-        </p>
-        {accounts.length > 1 && total > 0 && (
-          <div className="relative mt-4">
-            <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-muted">
-              {accounts
-                .filter((a) => a.balance > 0)
-                .map((a) => (
-                  <span
-                    key={a.id}
-                    title={a.name}
-                    className="h-full first:rounded-s-full last:rounded-e-full"
-                    style={{ width: `${(a.balance / total) * 100}%`, background: getBank(a.bankKey).color }}
-                  />
-                ))}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-caption text-muted-foreground">
-              {accounts
-                .filter((a) => a.balance > 0)
-                .map((a) => (
-                  <span key={a.id} className="nums flex items-center gap-1">
-                    <span className="size-2 rounded-full" style={{ background: getBank(a.bankKey).color }} />
-                    {a.name} {toPersianDigits(Math.round((a.balance / total) * 100))}٪
-                  </span>
-                ))}
-            </div>
-          </div>
+      {/* نسخهٔ ۷ (P5): جمع موجودی در سربرگ و دکمه‌های انتقال/حساب کنارش */}
+      <div className="mb-3.5 flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-label font-semibold text-muted-foreground">جمع موجودی {toPersianDigits(accounts.length)} حساب</p>
+          <p className="nums truncate text-page font-black tracking-tight">
+            {formatToman(total, false)}
+            <span className="ms-1 text-label font-semibold tracking-normal text-muted-foreground">تومان</span>
+          </p>
+          {total < 0 && <p className="text-caption font-bold text-destructive">کسری — موجودی کل منفی است</p>}
+        </div>
+        {accounts.length >= 2 && (
+          <Button variant="outline" onClick={() => setTransferSheet(true)} className="h-9 rounded-xl px-3 text-label font-bold">
+            <ArrowLeftRight className="size-4" />
+            انتقال
+          </Button>
         )}
+        <Button onClick={openNew} className="h-9 rounded-xl px-3 text-label font-bold">
+          <Plus className="size-4" />
+          حساب
+        </Button>
       </div>
 
-      {accounts.length >= 2 && (
-        <Button
-          onClick={() => setTransferSheet(true)}
-          variant="outline"
-          className="mb-4 h-11 w-full rounded-2xl text-label font-bold hover:bg-accent sm:w-auto sm:px-5"
-        >
-          <ArrowLeftRight className="size-4" />
-          انتقال بین حساب‌ها
-        </Button>
-      )}
-
-      {/* لیست حساب‌ها */}
       {isLoading ? (
-        <div className="flex min-h-[30vh] items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
+        <div className="flex gap-2.5 overflow-hidden lg:grid lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-[8.5rem] w-[82%] shrink-0 rounded-3xl lg:w-auto" />
+          ))}
         </div>
       ) : accounts.length === 0 ? (
         <EmptyState
@@ -383,118 +370,123 @@ export default function AccountsPage() {
           title="حساب بانکی ثبت نشده"
           description="حساب‌های بانکی‌تان را اضافه کنید تا نقدی فاکتورها و پاس چک‌ها ثبت شود."
           actionLabel="افزودن حساب"
-          onAction={() => {
-            setEditing(null)
-            setFormSheet(true)
-          }}
+          onAction={openNew}
         />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {accounts.map((a) => {
-            const bank = getBank(a.bankKey)
-            // روند مانده از روی گردش‌های اخیر (به عقب از مانده فعلی)
-            const trend = (() => {
-              if (a.recent.length < 2) return []
-              let bal = a.balance
-              const pts = [bal]
-              for (const t of a.recent) {
-                bal -= t.direction === "IN" ? t.amount : -t.amount
-                pts.push(bal)
-              }
-              return pts.reverse()
-            })()
-            return (
-              <div
-                key={a.id}
-                className="overflow-hidden rounded-[1.4rem] border border-border/80 bg-card"
-              >
-                {/* کارت به رنگ بانک (نسخهٔ ۷) */}
-                <div
-                  className="relative p-4 text-white"
+        <>
+          {/* کارت هر حساب به رنگ بانک — موبایل: ردیف افقی لغزان | دسکتاپ: سه‌ستونه */}
+          <div className="-mx-4 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:px-0">
+            {accounts.map((a) => {
+              const bank = getBank(a.bankKey)
+              const masked = maskNumber(a.cardNumber) ?? maskNumber(a.accountNumber)
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setActionFor(a)}
+                  aria-label={`${a.name} — گزینه‌ها`}
+                  className="flex min-h-[8.5rem] w-[82%] shrink-0 snap-start flex-col justify-between rounded-3xl p-4 text-start text-white transition-[filter] hover:brightness-105 sm:w-[46%] lg:w-auto"
                   style={{
-                    background: `radial-gradient(120% 90% at 100% 0%, rgb(255 255 255 / 0.18), transparent 55%), linear-gradient(135deg, color-mix(in srgb, ${bank.color} 92%, white), color-mix(in srgb, ${bank.color} 72%, black))`,
+                    background: `radial-gradient(120% 90% at 100% 0%, rgb(255 255 255 / 0.16), transparent 55%), linear-gradient(135deg, color-mix(in srgb, ${bank.color} 92%, white), color-mix(in srgb, ${bank.color} 70%, black))`,
                   }}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-white">
-                      <BankLogo bankKey={a.bankKey} size={40} showBg={false} />
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white">
+                      <BankLogo bankKey={a.bankKey} size={34} showBg={false} />
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[0.95rem] font-extrabold">{a.name}</div>
-                      <div className="truncate text-caption text-white/80">{bank.name}</div>
-                    </div>
+                    <span className="min-w-0 flex-1 truncate text-label font-bold">{a.name}</span>
+                    <span className="shrink-0 text-caption text-white/75">{bank.name.replace(/^بانک /, "")}</span>
                   </div>
-                  <div className="mt-4 flex items-end justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="nums text-[1.45rem] font-black leading-tight tracking-tight">
-                        {formatToman(a.balance, false)}
-                        <span className="ms-1 text-caption font-semibold text-white/70">تومان</span>
-                      </div>
-                      {a.accountNumber && (
-                        <div className="nums mt-0.5 truncate text-caption text-white/75" dir="ltr">
-                          {toPersianDigits(a.accountNumber)}
-                        </div>
-                      )}
-                    </div>
-                    {trend.length > 1 && (
-                      <div className="w-24 shrink-0 opacity-90">
-                        <Sparkline values={trend} color="#ffffff" height={28} />
-                      </div>
+                  <div>
+                    <p className="nums truncate text-xl font-black tracking-tight">
+                      {formatToman(a.balance, false)}
+                      <span className="ms-1 text-caption font-semibold tracking-normal text-white/70">تومان</span>
+                    </p>
+                    {masked && (
+                      <p className="nums truncate text-caption text-white/80" dir="ltr" style={{ textAlign: "right" }}>
+                        {masked}
+                      </p>
                     )}
                   </div>
-                </div>
-                {a.recent.length > 0 && (
-                  <div className="px-4 py-2">
-                    {a.recent.slice(0, 3).map((t) => (
-                      <div key={t.id} className="flex items-center justify-between py-1 text-caption">
-                        <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
-                          <span
-                            className={cn(
-                              "size-1.5 shrink-0 rounded-full",
-                              t.direction === "IN" ? "bg-income" : "bg-purchase"
-                            )}
-                          />
-                          <span className="truncate">
-                            {TX_LABEL[t.type] ?? t.type} — {t.description}
-                          </span>
-                        </span>
-                        <span
-                          className={cn(
-                            "nums shrink-0 font-bold",
-                            t.direction === "IN" ? "text-income" : "text-foreground"
-                          )}
-                        >
-                          {t.direction === "IN" ? "+" : "−"}
-                          {formatToman(t.amount, false)}
-                        </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <h2 className="mx-1 mb-2 mt-5 text-label font-extrabold text-foreground/80">گردش اخیر</h2>
+          <div className="overflow-hidden rounded-3xl border border-border bg-card">
+            {activity.length === 0 ? (
+              <p className="px-4 py-6 text-center text-label text-muted-foreground">هنوز گردشی ثبت نشده است</p>
+            ) : (
+              <div className="divide-y divide-border/70">
+                {activity.map((t) => {
+                  const isIn = t.direction === "IN"
+                  return (
+                    <div key={t.id} className="flex min-h-[3.75rem] items-center gap-3 px-4 py-2.5">
+                      <span
+                        className={cn(
+                          "grid size-10 shrink-0 place-items-center rounded-xl",
+                          isIn ? "bg-sale/10 text-sale" : "bg-purchase/10 text-purchase"
+                        )}
+                      >
+                        {isIn ? <ArrowDownLeft className="size-[1.15rem]" /> : <ArrowUpRight className="size-[1.15rem]" />}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold">{toPersianDigits(t.description || TX_LABEL[t.type] || t.type)}</p>
+                        <p className="nums truncate text-caption text-muted-foreground">
+                          {t.accountName} | {TX_LABEL[t.type] ?? t.type} | {formatJalaliShort(new Date(t.date))}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex border-t border-border/60">
-                  <button
-                    onClick={() => {
-                      setEditing(a)
-                      setFormSheet(true)
-                    }}
-                    className="flex flex-1 items-center justify-center gap-1 py-2.5 text-caption font-bold text-muted-foreground transition-colors hover:bg-accent/60"
-                  >
-                    <Pencil className="size-3.5" />
-                    ویرایش
-                  </button>
-                  <button
-                    onClick={() => archive(a)}
-                    className="flex flex-1 items-center justify-center gap-1 border-s border-border/60 py-2.5 text-caption font-bold text-muted-foreground transition-colors hover:bg-destructive/5 hover:text-destructive"
-                  >
-                    <Archive className="size-3.5" />
-                    بایگانی
-                  </button>
-                </div>
+                      <span dir="ltr" className={cn("nums shrink-0 text-sm font-extrabold", isIn ? "text-sale" : "text-foreground")}>
+                        {isIn ? "+" : "−"}
+                        {formatToman(t.amount, false)}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
+            )}
+          </div>
+        </>
       )}
+
+      {/* شیت گزینه‌های حساب — ویرایش / بایگانی */}
+      <BottomSheet
+        open={!!actionFor}
+        onClose={() => setActionFor(null)}
+        title={actionFor?.name}
+        description={actionFor ? `${getBank(actionFor.bankKey).name} | موجودی ${formatToman(actionFor.balance)}` : undefined}
+        desktopMode="dialog"
+      >
+        <div className="overflow-hidden rounded-2xl border border-border">
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(actionFor)
+              setActionFor(null)
+              setFormSheet(true)
+            }}
+            className="flex h-[3.25rem] w-full items-center gap-3 px-4 text-sm font-semibold transition-colors hover:bg-accent/60"
+          >
+            <Pencil className="size-[1.1rem] text-muted-foreground" />
+            ویرایش حساب
+            <ChevronLeft className="ms-auto size-4 text-muted-foreground" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const a = actionFor
+              setActionFor(null)
+              if (a) archive(a)
+            }}
+            className="flex h-[3.25rem] w-full items-center gap-3 border-t border-border px-4 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/5"
+          >
+            <Archive className="size-[1.1rem]" />
+            بایگانی حساب
+            <span className="ms-auto text-caption font-medium text-muted-foreground">قابل بازگردانی</span>
+          </button>
+        </div>
+      </BottomSheet>
 
       {/* فرم حساب */}
       {formSheet && (

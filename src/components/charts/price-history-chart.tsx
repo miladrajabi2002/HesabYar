@@ -274,12 +274,12 @@ export function PriceHistoryChart({ history, height = 190 }: { history: PricePoi
                   <span className="size-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-caption font-bold">{s.name}</div>
-                    <div className="nums text-micro text-muted-foreground">
+                    <div className="nums text-caption text-muted-foreground">
                       {toPersianDigits(s.prices.length)} خرید • میانگین {formatToman(s.avg, false)}
                     </div>
                   </div>
                   {s.id === cheapestId && (
-                    <span className="shrink-0 rounded-full bg-income/15 px-2 py-0.5 text-micro font-extrabold text-income">
+                    <span className="shrink-0 rounded-full bg-income/15 px-2 py-0.5 text-caption font-extrabold text-income">
                       ارزان‌ترین
                     </span>
                   )}
@@ -288,7 +288,7 @@ export function PriceHistoryChart({ history, height = 190 }: { history: PricePoi
               ))
           )}
           {suppliers.hasOther && (
-            <p className="text-center text-micro text-muted-foreground">
+            <p className="text-center text-caption text-muted-foreground">
               فروشنده‌های کم‌خرید در نمودار با نقطهٔ خاکستری نشان داده شده‌اند
             </p>
           )}

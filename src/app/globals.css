@@ -63,6 +63,15 @@
   --text-caption--line-height: 1.125rem;
   --text-label: 0.8125rem;
   --text-label--line-height: 1.25rem;
+  /* شش پلهٔ اصلی طرح F2: caption ۱۲ · label ۱۳ · body ۱۵ · title ۱۷ · page ۲۳ · display ۳۴ */
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5rem;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.5rem;
+  --text-page: 1.4375rem;
+  --text-page--line-height: 1.875rem;
+  --text-display: 2.125rem;
+  --text-display--line-height: 2.5rem;
   --radius-3xl: 1.25rem;
 }
 
@@ -378,7 +387,7 @@
   right: 0 !important;
   margin-inline: auto !important;
   padding: 0.5rem 0.55rem 0.5rem 1.15rem !important; /* RTL: آیکون سمت راست */
-  border-radius: 1.6rem !important;
+  border-radius: 1rem !important; /* نسخهٔ ۷ (X1): کارت کوچک، نه قرص — جا برای توضیح و دکمه */
   border: 1px solid rgb(255 255 255 / 0.06) !important;
   /* کاملاً مات و بدون backdrop-filter: در وب‌اپ iOS، بلورِ پشت اعلان هنگام محو شدن روی هدر
      می‌ماند و بخشی از هدر تار می‌شد */
@@ -419,14 +428,14 @@
 .cn-toast [data-content] { gap: 0 !important; min-width: 0; }
 .cn-toast [data-title] {
   font-weight: 700 !important;
-  font-size: 0.8rem !important;
+  font-size: 0.84375rem !important; /* ۱۳٫۵px */
   line-height: 1.5 !important;
   text-align: start !important;
   color: inherit !important;
 }
 .cn-toast [data-description] {
   font-weight: 500 !important;
-  font-size: 0.7rem !important;
+  font-size: 0.75rem !important; /* ۱۲px — هیچ متنی زیر ۱۲ نیست */
   line-height: 1.5 !important;
   text-align: start !important;
   color: color-mix(in oklab, var(--island-foreground) 66%, transparent) !important;
@@ -435,16 +444,24 @@
 /* دکمهٔ اکشن (مثل «بازگردانی») — قرص روشن داخل جزیره */
 .cn-toast [data-button] {
   margin-inline-start: auto !important;
-  height: 2rem !important;
-  border-radius: 999px !important;
+  height: 2.125rem !important;
+  border-radius: 0.7rem !important;
   font-weight: 800 !important;
-  font-size: 0.72rem !important;
+  font-size: 0.8125rem !important;
   padding: 0 0.85rem !important;
   font-family: inherit !important;
   background: var(--island-foreground) !important;
   color: var(--island) !important;
 }
 .cn-toast [data-close-button] { display: none !important; }
+/* اعلان واگردانی: پهن‌تر و شمارش معکوس به‌جای آیکون */
+.cn-toast:has(.hy-countdown) { width: var(--width) !important; }
+.cn-toast:has(.hy-countdown) [data-icon] { background: transparent !important; }
+.hy-countdown circle.hy-cd-ring {
+  stroke-dasharray: 100;
+  animation: hy-countdown var(--hy-cd, 5s) linear forwards;
+}
+@keyframes hy-countdown { to { stroke-dashoffset: 100; } }
 
 /* آیکون دقیقاً وسط دایره (iOS استندالون: ویژگی‌های پیش‌فرض sonner روی svg حاشیه می‌دادند) */
 .cn-toast [data-icon] > * {
@@ -477,24 +494,7 @@
   100% { transform: scale(1); opacity: 1; }
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   آیکون‌های متحرک برنامه (components/icons) — حرکت هاور با CSS
-   (حرکت «فعال شدن» با framer-motion داخل خود کامپوننت است)
-   ═══════════════════════════════════════════════════════════════ */
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .group:hover .hy-icon[data-motion="pop"] { animation: hy-i-pop 0.5s var(--ease-spring); }
-  .group:hover .hy-icon[data-motion="tilt"] { animation: hy-i-tilt 0.55s var(--ease-out); }
-  .group:hover .hy-icon[data-motion="swing"] { animation: hy-i-swing 0.7s var(--ease-out); transform-origin: 50% 10%; }
-  .group:hover .hy-icon[data-motion="bounce"] { animation: hy-i-bounce 0.55s var(--ease-out); }
-  .group:hover .hy-icon[data-motion="spin"] { animation: hy-i-spin 0.6s var(--ease-out); }
-  .group:hover .hy-icon[data-motion="slide"] { animation: hy-i-slide 0.55s var(--ease-out); }
-}
-@keyframes hy-i-pop { 40% { transform: scale(1.18); } 70% { transform: scale(0.95); } }
-@keyframes hy-i-tilt { 30% { transform: rotate(-12deg); } 65% { transform: rotate(6deg); } }
-@keyframes hy-i-swing { 20% { transform: rotate(14deg); } 45% { transform: rotate(-10deg); } 70% { transform: rotate(5deg); } }
-@keyframes hy-i-bounce { 35% { transform: translateY(-3px); } 65% { transform: translateY(1px); } }
-@keyframes hy-i-spin { to { transform: rotate(90deg); } }
-@keyframes hy-i-slide { 35% { transform: translateX(-3px); } 70% { transform: translateX(1.5px); } }
+/* نسخهٔ ۷: تکان آیکون‌ها روی هاور حذف شد (حرکت کمتر و معنادارتر) */
 
 /* نقطهٔ «زنده» (ذخیره خودکار، آنلاین) */
 @keyframes hy-ping {

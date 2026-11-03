@@ -264,7 +264,7 @@ export function BottomSheet({
                 </span>
                 <div className="flex min-h-9 items-start gap-3">
                   <div className="min-w-0 flex-1">
-                    <h2 id={titleId} className="truncate text-[1.15rem] font-extrabold leading-snug">
+                    <h2 id={titleId} className="truncate text-lg font-extrabold leading-snug">
                       {title}
                     </h2>
                     {description && (

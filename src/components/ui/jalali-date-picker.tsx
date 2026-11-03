@@ -219,7 +219,7 @@ export function JalaliDateField({
         size="auto"
         footer={
           <Button
-            className="h-[3.25rem] w-full rounded-2xl text-[0.95rem] font-bold"
+            className="h-[3.25rem] w-full rounded-2xl text-body font-bold"
             onClick={() => {
               if (!value) onChange(todayKey())
               setOpen(false)

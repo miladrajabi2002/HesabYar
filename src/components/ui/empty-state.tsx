@@ -17,6 +17,8 @@ export function EmptyState({
   secondaryLabel,
   onSecondary,
   tone = "muted",
+  hint,
+  actionTone = "primary",
 }: {
   icon: LucideIcon
   title: string
@@ -27,6 +29,10 @@ export function EmptyState({
   secondaryLabel?: string
   onSecondary?: () => void
   tone?: "muted" | "primary" | "success"
+  /** پیشنهاد راه حل، پررنگ‌تر از توضیح (مثلاً «شاید منظورتان … باشد») */
+  hint?: string
+  /** «tonal» برای اقدامی که پیشنهاد است، نه کار اصلی */
+  actionTone?: "primary" | "tonal"
 }) {
   const iconClass =
     tone === "primary"
@@ -45,14 +51,22 @@ export function EmptyState({
       <span className={`mx-auto flex size-14 items-center justify-center rounded-full ${iconClass}`}>
         <Icon className="size-6" strokeWidth={1.9} />
       </span>
-      <p className="mt-4 text-base font-extrabold">{title}</p>
+      <p className="mt-4 text-body font-extrabold">{title}</p>
+      {hint && <p className="mx-auto mt-1 max-w-[32ch] text-label font-bold text-foreground/80">{hint}</p>}
       {description && (
         <p className="mx-auto mt-1 max-w-[32ch] text-label leading-6 text-muted-foreground">{description}</p>
       )}
       {(actionLabel && onAction) || (secondaryLabel && onSecondary) ? (
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           {actionLabel && onAction && (
-            <Button onClick={onAction} className="h-11 rounded-2xl px-5 text-label font-bold">
+            <Button
+              onClick={onAction}
+              className={
+                actionTone === "tonal"
+                  ? "h-11 rounded-2xl bg-secondary px-5 text-label font-bold text-secondary-foreground hover:bg-secondary/80"
+                  : "h-11 rounded-2xl px-5 text-label font-bold"
+              }
+            >
               {actionLabel}
             </Button>
           )}

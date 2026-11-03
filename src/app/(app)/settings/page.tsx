@@ -15,13 +15,12 @@ import {
   Download,
   Loader2,
   Trash2,
-  ShieldAlert,
   Check,
+  ChevronLeft,
   Fingerprint,
   Bell,
   Clock,
   CalendarClock,
-  TriangleAlert,
 } from "lucide-react"
 import {
   startRegistration,
@@ -40,6 +39,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useConfirm } from "@/components/ui/confirm"
 import { useTelegram } from "@/hooks/use-telegram"
 import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/layout/page-header"
 
 interface Settings {
   botTokenMasked: string | null
@@ -86,14 +86,13 @@ function awaitServiceWorkerReady(ms = 6000): Promise<ServiceWorkerRegistration |
   ])
 }
 
+/** نسخهٔ ۷ (P8): گروه‌ها به سبک تنظیمات گوشی — هر ردیف مقدار فعلی را نشان می‌دهد و جزئیات در شیت باز می‌شود */
 const SETTINGS_SECTIONS = [
-  { id: "telegram", label: "ربات تلگرام", icon: Send },
-  { id: "automation", label: "یادآوری و بکاپ خودکار", icon: Clock },
-  { id: "passkey", label: "ورود با اثر انگشت", icon: Fingerprint },
-  { id: "push", label: "اعلان روی گوشی", icon: Bell },
-  { id: "check-alerts", label: "هشدار سررسید چک", icon: CalendarClock },
-  { id: "backup", label: "پشتیبان‌گیری", icon: DatabaseBackup },
-  { id: "danger", label: "ناحیهٔ خطر", icon: TriangleAlert },
+  { id: "security", label: "امنیت و ورود" },
+  { id: "notifications", label: "اعلان‌ها" },
+  { id: "telegram", label: "ربات تلگرام" },
+  { id: "backup", label: "پشتیبان‌گیری" },
+  { id: "danger", label: "ناحیهٔ خطر" },
 ] as const
 
 export default function SettingsPage() {
@@ -108,7 +107,10 @@ export default function SettingsPage() {
   const [token, setToken] = useState("")
   const [chatId, setChatId] = useState("")
   const [miniAppUrl, setMiniAppUrl] = useState("")
-  const [dueDays, setDueDays] = useState(3)
+  // کدام شیت جزئیات باز است (نسخهٔ ۷: فرم‌ها در شیت، نه وسط صفحه)
+  const [sheet, setSheet] = useState<SheetKey | null>(null)
+  const [autoBusy, setAutoBusy] = useState<string | null>(null)
+  const [telegramBackupPw, setTelegramBackupPw] = useState("")
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [wiping, setWiping] = useState(false)
@@ -399,9 +401,9 @@ export default function SettingsPage() {
         botToken: token || undefined,
         adminChatId: chatId || undefined,
         miniAppUrl: miniAppUrl || undefined,
-        checkDueDaysBefore: dueDays,
       })
-      toast.success("تنظیمات ذخیره شد")
+      toast.success("تنظیمات ربات ذخیره شد")
+      setSheet(null)
       setToken("")
       await refetch()
     } catch (e) {
@@ -423,563 +425,643 @@ export default function SettingsPage() {
     }
   }
 
-  if (data) {
-    // مقداردهی اولیه فرم‌ها
-    if (chatId === "" && data.adminChatId) setChatId(data.adminChatId)
-    if (miniAppUrl === "" && data.miniAppUrl) setMiniAppUrl(data.miniAppUrl)
-    if (!miniAppUrl && !data.miniAppUrl) {
-      /* noop */
-    }
-  }
-
-  if (isLoading || !data) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
-  return (
-    <div className="lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-6">
-      {/* فهرست بخش‌ها — دسکتاپ: ستون ثابت کنار؛ موبایل: ردیف چیپ لغزان (نسخهٔ ۷) */}
-      <nav aria-label="بخش‌های تنظیمات" className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4 lg:sticky lg:top-20 lg:mx-0 lg:mb-0 lg:flex-col lg:gap-0.5 lg:px-0">
-        <h1 className="mb-3 hidden px-3 text-2xl font-extrabold tracking-tight lg:block">تنظیمات</h1>
-        {SETTINGS_SECTIONS.map((sec) => (
-          <a
-            key={sec.id}
-            href={`#${sec.id}`}
-            className={cn(
-              "flex h-9 shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3 text-label font-semibold transition-colors hover:bg-accent lg:h-10 lg:border-0 lg:bg-transparent lg:text-sm",
-              sec.id === "danger" ? "text-destructive" : "text-foreground/80"
-            )}
-          >
-            <sec.icon className="size-4 shrink-0 opacity-70" />
-            {sec.label}
-          </a>
-        ))}
-      </nav>
-    <div className="min-w-0 space-y-4">
-
-      {/* ربات تلگرام */}
-      <section id="telegram" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
-          <Send className="size-4 -scale-x-100 text-primary" />
-          ربات تلگرام
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              توکن ربات
-              {data.hasBotToken && (
-                <span className={cn("ms-2 rounded-md px-1.5 py-px text-micro", "bg-primary/10 text-primary")}>
-                  فعال ({data.botTokenMasked}) — از {data.botTokenSource === "db" ? "دیتابیس" : "env"}
-                </span>
-              )}
-            </label>
-            <Input
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder={data.hasBotToken ? "برای تغییر، توکن جدید را وارد کنید" : "123456:ABC-DEF…"}
-              dir="ltr"
-              className="font-mono text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              شناسه چت ادمین (Chat ID)
-            </label>
-            <Input
-              value={chatId}
-              onChange={(e) => setChatId(e.target.value)}
-              placeholder="مثلاً ۱۲۵۳۹۳۹۸۲۸"
-              dir="ltr"
-              className="nums font-mono text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              آدرس مینی‌اپ (دکمه «باز کردن حساب‌یار» داخل ربات)
-            </label>
-            <Input
-              value={miniAppUrl}
-              onChange={(e) => setMiniAppUrl(e.target.value)}
-              placeholder="https://hesabyar.miladrajabi.com"
-              dir="ltr"
-              className="text-xs"
-            />
-          </div>
-
-          <Button
-            onClick={testTelegram}
-            disabled={testing || !data.hasBotToken || !data.hasAdminChatId}
-            variant="outline"
-            className="h-11 w-full rounded-2xl text-label font-bold hover:bg-accent"
-          >
-            {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
-            ارسال پیام آزمایشی
-          </Button>
-        </div>
-      </section>
-
-      {/* یادآوری صبحگاهی + بکاپ رمزدار تلگرام */}
-      <div id="automation" className="scroll-mt-24">
-        <TelegramAutomation settings={data} onSaved={() => refetch()} />
-      </div>
-
-      {/* ورود بیومتریک — Passkey (SEC-01) */}
-      <section id="passkey" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
-        <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
-          <Fingerprint className="size-4 text-primary" />
-          ورود بیومتریک (Passkey)
-        </div>
-        <p className="mb-3 text-caption leading-5 text-muted-foreground">
-          با اثر انگشت یا Face ID بدون رمز وارد شوید.
-        </p>
-
-        {passkeySupported !== false ? (
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1.5 block text-label font-bold text-foreground/80">
-                نام این دستگاه (اختیاری)
-              </label>
-              <Input
-                value={deviceName}
-                onChange={(e) => setDeviceName(e.target.value)}
-                placeholder="مثلاً: آیفون شخصی"
-                className="text-xs"
-              />
-            </div>
-            <Button
-              onClick={registerPasskey}
-              disabled={passkeyBusy}
-              variant="outline"
-              className="h-11 w-full rounded-2xl text-label font-bold hover:bg-accent"
-            >
-              {passkeyBusy ? <Loader2 className="size-4 animate-spin" /> : <Fingerprint className="size-4" />}
-              افزودن Passkey این دستگاه
-            </Button>
-          </div>
-        ) : (
-          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-caption leading-5 text-muted-foreground">
-            مرورگر این دستگاه از ورود بیومتریک (WebAuthn) پشتیبانی نمی‌کند — با کروم، سافاری یا اپ نصب‌شده امتحان کنید.
-          </p>
-        )}
-
-        {/* کلیدهای ثبت‌شده */}
-        <div className="mt-3 space-y-2">
-          {passkeysQuery.isError ? (
-            <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-xs text-muted-foreground">
-              دریافت لیست کلیدها ناموفق بود — دوباره تلاش کنید
-            </p>
-          ) : passkeysQuery.isLoading || !passkeys ? (
-            [0, 1].map((i) => <Skeleton key={i} className="h-[68px] rounded-2xl" />)
-          ) : passkeys.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-xs text-muted-foreground">
-              هنوز Passkey ثبت نشده
-            </p>
-          ) : (
-            passkeys.map((k) => (
-              <div
-                key={k.id}
-                className="flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/30 p-3"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Fingerprint className="size-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold">{k.deviceName}</p>
-                  <p className="nums mt-0.5 text-caption text-muted-foreground">
-                    {k.lastUsedAt
-                      ? `آخرین استفاده: ${formatJalali(new Date(k.lastUsedAt))}`
-                      : `ثبت‌شده: ${formatJalali(new Date(k.createdAt))}`}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removePasskey(k)}
-                  disabled={deletingKeyId === k.id}
-                  aria-label={`حذف کلید ${k.deviceName}`}
-                  className="flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                >
-                  {deletingKeyId === k.id ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-4" />
-                  )}
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-        {passkeys && passkeys.length > 0 && (
-          <p className="nums mt-2 text-caption text-muted-foreground">
-            {toPersianDigits(passkeys.length)} کلید ثبت شده — با هر کدام می‌توان بدون نام کاربری و رمز وارد شد.
-          </p>
-        )}
-      </section>
-
-      {/* اعلان‌های Push (SEC-03) */}
-      <section id="push" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
-        <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
-          <Bell className="size-4 text-primary" />
-          اعلان‌های Push
-        </div>
-        <p className="mb-3 text-caption leading-5 text-muted-foreground">
-          هشدار سررسید چک و رویدادهای مالی روی همین دستگاه.
-        </p>
-
-        {isTelegram ? (
-          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-caption leading-5 text-muted-foreground">
-            داخل مینی‌اپ تلگرام، اعلان‌ها از خود ربات تلگرام ارسال می‌شود و نیازی به این تنظیم نیست.
-          </p>
-        ) : pushCapable === false ? (
-          <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-caption leading-5 text-muted-foreground">
-            مرورگر این دستگاه از اعلان‌های Push پشتیبانی نمی‌کند.
-          </p>
-        ) : pushCapable === null ? (
-          <Skeleton className="h-[76px] rounded-2xl" />
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-muted/30 p-3.5">
-              <div className="min-w-0">
-                <p className="text-xs font-bold">فعال‌سازی اعلان‌ها</p>
-                <p className="mt-0.5 text-caption text-muted-foreground">
-                  {pushOn ? "فعال — اعلان‌ها به همین دستگاه می‌رسد" : "خاموش"}
-                </p>
-              </div>
-              <Switch
-                checked={pushOn}
-                onCheckedChange={(checked: boolean) => (checked ? enablePush() : disablePush())}
-                disabled={pushBusy}
-                aria-label="فعال‌سازی اعلان‌ها"
-              />
-            </div>
-            <Button
-              onClick={testPush}
-              disabled={!pushOn || testingPush}
-              variant="outline"
-              className="h-11 w-full rounded-2xl text-label font-bold hover:bg-accent"
-            >
-              {testingPush ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />}
-              ارسال اعلان آزمایشی
-            </Button>
-            <p className="text-caption leading-5 text-muted-foreground">
-              در iOS ابتدا اپ را به صفحه اصلی اضافه کنید (Share → Add to Home Screen) تا اعلان‌ها فعال شوند.
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* هشدار سررسید چک */}
-      <section id="check-alerts" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
-          <BellRing className="size-4 text-primary" />
-          هشدار سررسید چک
-        </div>
-        <label className="mb-1.5 block text-label font-bold text-foreground/80">
-          چند روز قبل از سررسید، ربات خبر بدهد؟
-        </label>
-        <div className="flex flex-wrap gap-1.5">
-          {[1, 2, 3, 5, 7, 10].map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDueDays(d)}
-              className={cn(
-                "rounded-xl border px-3.5 py-2 text-xs font-bold transition-colors",
-                dueDays === d
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground"
-              )}
-            >
-              {toPersianDigits(d)} روز قبل
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-caption text-muted-foreground">
-          چک سررسید‌شده هم (پاس‌نشده) هر ساعت یک‌بار پیگیری و خبر داده می‌شود.
-        </p>
-      </section>
-
-      {/* بکاپ */}
-      <section id="backup" className="rounded-3xl border border-border/70 bg-card scroll-mt-24 p-4 sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
-          <DatabaseBackup className="size-4 text-primary" />
-          بکاپ و بازیابی
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-label font-bold text-foreground/80">
-            رمز فایل بکاپ (اختیاری)
-          </label>
-          <Input
-            type="password"
-            value={backupPassword}
-            onChange={(e) => setBackupPassword(e.target.value)}
-            placeholder="رمز اختیاری برای رمزگذاری فایل"
-            dir="ltr"
-            className="text-xs"
-            autoComplete="new-password"
-          />
-          <p className="mt-2 text-caption leading-5 text-muted-foreground">
-            با رمز، فایل با AES-256 رمزگذاری می‌شود و بدون آن قابل بازگشایی نیست؛ هنگام بازیابی فایل رمزدار، همین رمز را وارد کنید.
-          </p>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <Button
-            onClick={downloadBackup}
-            disabled={backingUp}
-            variant="outline"
-            className="h-12 rounded-2xl border-primary/40 text-xs font-bold text-primary hover:bg-primary/10"
-          >
-            {backingUp ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            {backupPassword.trim() ? "دانلود بکاپ رمزدار" : "دانلود بکاپ"}
-          </Button>
-          <Button
-            onClick={() => fileRef.current?.click()}
-            variant="outline"
-            className="h-12 rounded-2xl text-xs font-bold hover:bg-accent"
-          >
-            <Upload className="size-4" />
-            بازیابی از فایل
-          </Button>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".db,.enc"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) restoreBackup(f)
-          }}
-        />
-        <p className="mt-2 text-caption text-muted-foreground">
-          بکاپ خودکار روزانه هم انجام می‌شود (۷ نسخه نگهداری می‌شود).
-        </p>
-      </section>
-
-      {/* ناحیه خطر */}
-      <section id="danger" className="scroll-mt-24 rounded-3xl border border-destructive/25 bg-destructive/5 p-4 sm:p-5">
-        <div className="mb-2 flex items-center gap-2 text-sm font-bold text-destructive">
-          <ShieldAlert className="size-4" />
-          ناحیه خطر
-        </div>
-        <p className="mb-3 text-caption text-muted-foreground">
-          پاک‌سازی کامل داده‌ها برای وقتی است که داده نمونه می‌خواهید دور بریزید و از صفر شروع کنید.
-          همه اشخاص، کالاها، فاکتورها، چک‌ها و حساب‌ها حذف می‌شوند (تنظیمات و توکن ربات می‌ماند).
-        </p>
-        <Button
-          onClick={() => setWipeSheet(true)}
-          variant="outline"
-          className="h-11 w-full rounded-2xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10"
-        >
-          <Trash2 className="size-4" />
-          پاک کردن همه داده‌ها
-        </Button>
-      </section>
-
-      <Button
-        onClick={save}
-        disabled={saving}
-        className="h-13 w-full rounded-2xl py-3.5 text-sm font-bold shadow-fab"
-      >
-        {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-        ذخیره تنظیمات
-      </Button>
-
-    </div>
-
-      {/* شیت تأیید پاک‌سازی */}
-      <BottomSheet
-        open={wipeSheet}
-        onClose={() => setWipeSheet(false)}
-        title="مطمئنید؟"
-        description="این کار برگشت‌پذیر نیست — قبلش بکاپ بگیرید"
-      >
-        <div className="space-y-3">
-          <p className="rounded-2xl bg-destructive/10 px-4 py-3 text-xs leading-6 text-destructive">
-            همه داده‌ها (اشخاص، کالاها، فاکتورها، چک‌ها، تسویه‌ها و حساب‌ها) برای همیشه حذف می‌شوند.
-          </p>
-          <Button
-            onClick={wipe}
-            disabled={wiping}
-            className="h-12 w-full rounded-2xl bg-destructive font-bold hover:bg-destructive/90"
-          >
-            {wiping ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-            بله، همه را پاک کن
-          </Button>
-          <Button
-            onClick={() => setWipeSheet(false)}
-            variant="outline"
-            className="h-12 w-full rounded-2xl font-bold"
-          >
-            انصراف
-          </Button>
-        </div>
-      </BottomSheet>
-    </div>
-  )
-}
-
-// ───────────────────────── اتوماسیون تلگرام ─────────────────────────
-
-const MORNING_HOURS = [6, 7, 8, 9, 10, 11]
-
-/**
- * یادآوری صبحگاهی «چک‌های امروز» (با دکمهٔ پاس/برگشت داخل تلگرام)
- * و بکاپ خودکار رمزدار روزانه به تلگرام.
- */
-function TelegramAutomation({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
-  const [busy, setBusy] = useState<string | null>(null)
-  const [password, setPassword] = useState("")
-  const ready = settings.hasBotToken && settings.hasAdminChatId
-
+  /** ذخیرهٔ فوری یک تنظیم (کلید، سوییچ، انتخاب) */
   const update = async (patch: Record<string, unknown>, okMsg: string) => {
-    setBusy(Object.keys(patch)[0])
+    setAutoBusy(Object.keys(patch)[0])
     try {
       await apiPut("/api/settings", patch)
       toast.success(okMsg)
-      onSaved()
+      await refetch()
+      return true
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ذخیره نشد")
+      return false
     } finally {
-      setBusy(null)
+      setAutoBusy(null)
     }
   }
 
-  const run = async (action: "morning" | "backup") => {
-    setBusy(action)
+  const runTelegram = async (action: "morning" | "backup") => {
+    setAutoBusy(action)
     try {
       const r = await apiPost<{ message?: string }>("/api/telegram/action", { action })
       toast.success(r.message || "ارسال شد")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "ارسال نشد")
     } finally {
-      setBusy(null)
+      setAutoBusy(null)
     }
   }
 
-  return (
-    <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-      <div className="mb-1 flex items-center gap-2 text-sm font-bold">
-        <Send className="size-4 -scale-x-100 text-primary" />
-        خودکارهای تلگرام
-      </div>
-      <p className="mb-4 text-caption leading-5 text-muted-foreground">
-        {ready ? "این‌ها از طریق ربات برای خودتان ارسال می‌شوند." : "اول توکن ربات و شناسهٔ چت را بالا ذخیره کنید."}
-      </p>
+  if (data) {
+    // مقداردهی اولیه فرم‌ها
+    if (chatId === "" && data.adminChatId) setChatId(data.adminChatId)
+    if (miniAppUrl === "" && data.miniAppUrl) setMiniAppUrl(data.miniAppUrl)
+  }
 
-      {/* یادآوری صبحگاهی */}
-      <div className="rounded-2xl border border-border/70 p-3.5">
-        <div className="flex items-start gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-warning/12 text-lg">☀️</span>
-          <div className="min-w-0 flex-1">
-            <div className="text-label font-bold">یادآوری صبحگاهی چک‌های امروز</div>
-            <div className="mt-0.5 text-caption leading-5 text-muted-foreground">
-              هر صبح فهرست چک‌های امروز و سررسیدگذشته، هر کدام با دکمهٔ «پاس شد» و «برگشت خورد» — بدون باز کردن اپ.
-            </div>
-          </div>
-          <Switch
-            checked={settings.morningReminder}
-            disabled={busy !== null}
-            onCheckedChange={(v) => update({ morningReminder: v }, v ? "یادآوری صبحگاهی روشن شد" : "یادآوری خاموش شد")}
+  if (isLoading || !data) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-4">
+        {[3, 2, 1].map((n) => (
+          <Skeleton key={n} className="rounded-2xl" style={{ height: n * 52 }} />
+        ))}
+      </div>
+    )
+  }
+
+  const botReady = data.hasBotToken && data.hasAdminChatId
+  const pushValue = isTelegram ? "از ربات تلگرام" : pushCapable === false ? "پشتیبانی نمی‌شود" : null
+
+  return (
+    <div className="mx-auto max-w-4xl lg:grid lg:grid-cols-[13.75rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+      {/* دسکتاپ: فهرست بخش‌ها در ستون کنار */}
+      <nav aria-label="بخش‌های تنظیمات" className="sticky top-20 hidden rounded-3xl border border-border bg-card p-2 lg:block">
+        {SETTINGS_SECTIONS.map((sec, i) => (
+          <a
+            key={sec.id}
+            href={`#${sec.id}`}
+            className={cn(
+              "flex h-[2.375rem] items-center rounded-[10px] px-3 text-sm transition-colors hover:bg-accent",
+              i === 0 ? "bg-secondary font-extrabold text-secondary-foreground" : "font-medium",
+              sec.id === "danger" && "text-destructive"
+            )}
+          >
+            {sec.label}
+          </a>
+        ))}
+      </nav>
+
+      <div className="min-w-0">
+        <PageHeader title="تنظیمات" sub="امنیت، اعلان‌ها، ربات تلگرام و پشتیبان‌گیری" />
+
+        <SettingsGroup id="security" title="امنیت و ورود" first>
+          <Cell
+            icon={<Fingerprint className="size-4" />}
+            label="ورود با اثر انگشت"
+            value={
+              passkeySupported === false
+                ? "پشتیبانی نمی‌شود"
+                : passkeys
+                  ? passkeys.length
+                    ? `${toPersianDigits(passkeys.length)} دستگاه`
+                    : "فعال نیست"
+                  : "…"
+            }
+            onClick={() => setSheet("passkey")}
           />
-        </div>
-        {settings.morningReminder && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-dashed pt-3">
-            <span className="me-1 text-caption font-medium text-muted-foreground">ساعت:</span>
-            {MORNING_HOURS.map((h) => (
-              <button
-                key={h}
-                type="button"
-                disabled={busy !== null}
-                onClick={() => update({ morningHour: h }, `یادآوری ساعت ${toPersianDigits(h)} صبح`)}
+        </SettingsGroup>
+
+        <SettingsGroup id="notifications" title="اعلان‌ها">
+          <Cell
+            icon={<Bell className="size-4" />}
+            label="اعلان روی گوشی"
+            value={pushValue}
+            trailing={
+              pushValue ? undefined : (
+                <Switch
+                  checked={pushOn}
+                  onCheckedChange={(checked: boolean) => (checked ? enablePush() : disablePush())}
+                  disabled={pushBusy || pushCapable === null}
+                  aria-label="اعلان روی گوشی"
+                />
+              )
+            }
+            onClick={pushValue ? undefined : () => setSheet("push")}
+          />
+          <Cell
+            icon={<CalendarClock className="size-4" />}
+            tone="var(--hue-checks)"
+            label="هشدار سررسید چک"
+            value={`${toPersianDigits(data.checkDueDaysBefore)} روز قبل`}
+            onClick={() => setSheet("due")}
+          />
+          <Cell
+            icon={<Clock className="size-4" />}
+            tone="var(--purchase)"
+            label="یادآوری صبحگاهی چک‌ها"
+            value={data.morningReminder ? `ساعت ${toPersianDigits(data.morningHour)}:۰۰` : "خاموش"}
+            onClick={() => setSheet("morning")}
+          />
+        </SettingsGroup>
+
+        <SettingsGroup id="telegram" title="ربات تلگرام">
+          <Cell
+            icon={<Send className="size-4 -scale-x-100" />}
+            tone="#2a8bd0"
+            label="اتصال ربات"
+            trailing={
+              <span
                 className={cn(
-                  "nums h-8 min-w-10 rounded-xl px-2 text-xs font-bold transition-all active:scale-95",
-                  settings.morningHour === h ? "bg-primary text-primary-foreground shadow-fab" : "bg-muted text-muted-foreground hover:text-foreground"
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-bold",
+                  botReady ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
                 )}
               >
-                {toPersianDigits(h)}
-              </button>
-            ))}
-            <Button
-              onClick={() => run("morning")}
-              disabled={!ready || busy !== null}
-              variant="ghost"
-              className="ms-auto h-8 rounded-xl px-3 text-caption font-bold text-primary hover:bg-primary/10"
-            >
-              {busy === "morning" ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5 -scale-x-100" />}
-              همین حالا بفرست
-            </Button>
-          </div>
-        )}
+                {botReady ? <Check className="size-3" /> : null}
+                {botReady ? "وصل است" : data.hasBotToken ? "شناسهٔ چت لازم است" : "وصل نیست"}
+              </span>
+            }
+            onClick={() => setSheet("telegram")}
+          />
+        </SettingsGroup>
+
+        <SettingsGroup id="backup" title="پشتیبان‌گیری">
+          <Cell
+            icon={<DatabaseBackup className="size-4" />}
+            label="بکاپ خودکار رمزدار در تلگرام"
+            value={data.telegramBackup ? "هر شب ۳:۳۰" : "خاموش"}
+            onClick={() => setSheet("tgBackup")}
+          />
+          <Cell icon={<Download className="size-4" />} label="دانلود بکاپ" onClick={() => setSheet("download")} />
+          <Cell icon={<Upload className="size-4" />} label="بازیابی از فایل" onClick={() => setSheet("restore")} />
+        </SettingsGroup>
+
+        <SettingsGroup id="danger" title="ناحیهٔ خطر" danger>
+          <Cell
+            icon={<Trash2 className="size-4" />}
+            tone="var(--destructive)"
+            label="پاک کردن همهٔ داده‌ها"
+            danger
+            onClick={() => setWipeSheet(true)}
+          />
+        </SettingsGroup>
+        <p className="mt-3 px-1 text-caption text-muted-foreground">بکاپ خودکار روزانه روی سرور هم گرفته می‌شود (۷ نسخهٔ آخر نگه داشته می‌شود).</p>
       </div>
 
-      {/* بکاپ رمزدار */}
-      <div className="mt-3 rounded-2xl border border-border/70 p-3.5">
-        <div className="flex items-start gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg">🔐</span>
-          <div className="min-w-0 flex-1">
-            <div className="text-label font-bold">بکاپ خودکار رمزدار به تلگرام</div>
-            <div className="mt-0.5 text-caption leading-5 text-muted-foreground">
-              هر شب ساعت ۳:۳۰ یک نسخهٔ رمزگذاری‌شده (AES-256) از کل داده‌ها برایتان فرستاده می‌شود. بدون رمز قابل باز شدن نیست.
+      {/* ───────── شیت: ورود با اثر انگشت ───────── */}
+      <BottomSheet
+        open={sheet === "passkey"}
+        onClose={() => setSheet(null)}
+        title="ورود با اثر انگشت"
+        description="با اثر انگشت یا Face ID بدون رمز وارد شوید"
+        footer={
+          passkeySupported !== false ? (
+            <Button onClick={registerPasskey} disabled={passkeyBusy} className="h-12 w-full rounded-2xl font-bold">
+              {passkeyBusy ? <Loader2 className="size-4 animate-spin" /> : <Fingerprint className="size-4" />}
+              افزودن این دستگاه
+            </Button>
+          ) : undefined
+        }
+      >
+        {passkeySupported !== false ? (
+          <FieldGroup label="نام این دستگاه (اختیاری)">
+            <Input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} placeholder="مثلاً: آیفون شخصی" />
+          </FieldGroup>
+        ) : (
+          <p className="rounded-2xl bg-muted px-4 py-3 text-caption leading-5 text-muted-foreground">
+            مرورگر این دستگاه از ورود بیومتریک (WebAuthn) پشتیبانی نمی‌کند — با کروم، سافاری یا اپ نصب‌شده امتحان کنید.
+          </p>
+        )}
+        <h3 className="mx-1 mb-2 mt-4 text-label font-extrabold text-foreground/80">دستگاه‌های ثبت‌شده</h3>
+        <div className="overflow-hidden rounded-2xl border border-border">
+          {passkeysQuery.isError ? (
+            <p className="px-4 py-5 text-center text-label text-muted-foreground">دریافت فهرست ناموفق بود — دوباره تلاش کنید</p>
+          ) : passkeysQuery.isLoading || !passkeys ? (
+            <Skeleton className="m-3 h-10 rounded-xl" />
+          ) : passkeys.length === 0 ? (
+            <p className="px-4 py-5 text-center text-label text-muted-foreground">هنوز دستگاهی ثبت نشده</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {passkeys.map((k) => (
+                <div key={k.id} className="flex min-h-[3.25rem] items-center gap-3 px-4 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold">{k.deviceName}</p>
+                    <p className="nums text-caption text-muted-foreground">
+                      {k.lastUsedAt
+                        ? `آخرین استفاده: ${formatJalali(new Date(k.lastUsedAt))}`
+                        : `ثبت‌شده: ${formatJalali(new Date(k.createdAt))}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removePasskey(k)}
+                    disabled={deletingKeyId === k.id}
+                    aria-label={`حذف ${k.deviceName}`}
+                    className="grid size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                  >
+                    {deletingKeyId === k.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                  </button>
+                </div>
+              ))}
             </div>
-          </div>
-          <Switch
-            checked={settings.telegramBackup}
-            disabled={busy !== null || (!settings.hasBackupPassword && password.length < 6)}
-            onCheckedChange={(v) =>
-              update(
-                { telegramBackup: v, ...(password.length >= 6 ? { backupPassword: password } : {}) },
-                v ? "بکاپ خودکار تلگرام روشن شد" : "بکاپ تلگرام خاموش شد"
-              ).then(() => setPassword(""))
+          )}
+        </div>
+      </BottomSheet>
+
+      {/* ───────── شیت: اعلان روی گوشی ───────── */}
+      <BottomSheet
+        open={sheet === "push"}
+        onClose={() => setSheet(null)}
+        title="اعلان روی گوشی"
+        description={pushOn ? "فعال — اعلان‌ها به همین دستگاه می‌رسد" : "خاموش"}
+        footer={
+          <Button onClick={testPush} disabled={!pushOn || testingPush} variant="outline" className="h-12 w-full rounded-2xl font-bold">
+            {testingPush ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />}
+            ارسال اعلان آزمایشی
+          </Button>
+        }
+      >
+        <div className="overflow-hidden rounded-2xl border border-border">
+          <Cell
+            label="دریافت اعلان روی این دستگاه"
+            trailing={
+              <Switch
+                checked={pushOn}
+                onCheckedChange={(checked: boolean) => (checked ? enablePush() : disablePush())}
+                disabled={pushBusy}
+                aria-label="دریافت اعلان روی این دستگاه"
+              />
             }
           />
         </div>
-        <div className="mt-3 space-y-2 border-t border-dashed pt-3">
-          <label className="block text-label font-bold text-foreground/80">
-            رمز بکاپ {settings.hasBackupPassword ? "(تنظیم شده — برای تغییر رمز جدید بزنید)" : "(حداقل ۶ کاراکتر)"}
-          </label>
+        <p className="mt-3 px-1 text-caption leading-5 text-muted-foreground">
+          در iOS ابتدا اپ را به صفحهٔ اصلی اضافه کنید (Share → Add to Home Screen) تا اعلان‌ها فعال شوند.
+        </p>
+      </BottomSheet>
+
+      {/* ───────── شیت: هشدار سررسید چک ───────── */}
+      <BottomSheet
+        open={sheet === "due"}
+        onClose={() => setSheet(null)}
+        title="هشدار سررسید چک"
+        description="چند روز قبل از سررسید، ربات خبر بدهد؟"
+        desktopMode="dialog"
+      >
+        <div className="grid grid-cols-3 gap-2">
+          {[1, 2, 3, 5, 7, 10].map((d) => (
+            <button
+              key={d}
+              type="button"
+              disabled={autoBusy !== null}
+              onClick={async () => {
+                if (await update({ checkDueDaysBefore: d }, `هشدار ${toPersianDigits(d)} روز قبل از سررسید`)) setSheet(null)
+              }}
+              className={cn(
+                "h-12 rounded-2xl border text-sm font-bold transition-colors",
+                data.checkDueDaysBefore === d
+                  ? "border-primary bg-secondary text-secondary-foreground"
+                  : "border-border bg-card hover:bg-accent"
+              )}
+            >
+              {toPersianDigits(d)} روز قبل
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 px-1 text-caption leading-5 text-muted-foreground">
+          چک سررسیدشده هم (تا وقتی پاس یا برگشت نخورده) هر ساعت یک‌بار پیگیری و خبر داده می‌شود.
+        </p>
+      </BottomSheet>
+
+      {/* ───────── شیت: یادآوری صبحگاهی ───────── */}
+      <BottomSheet
+        open={sheet === "morning"}
+        onClose={() => setSheet(null)}
+        title="یادآوری صبحگاهی"
+        description="هر صبح فهرست چک‌های امروز و سررسیدگذشته با دکمهٔ «پاس شد» و «برگشت خورد» در تلگرام"
+        footer={
+          <Button
+            onClick={() => runTelegram("morning")}
+            disabled={!botReady || autoBusy !== null}
+            variant="outline"
+            className="h-12 w-full rounded-2xl font-bold"
+          >
+            {autoBusy === "morning" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
+            همین حالا بفرست
+          </Button>
+        }
+      >
+        <div className="overflow-hidden rounded-2xl border border-border">
+          <Cell
+            label="یادآوری روشن باشد"
+            trailing={
+              <Switch
+                checked={data.morningReminder}
+                disabled={autoBusy !== null}
+                onCheckedChange={(v) => update({ morningReminder: v }, v ? "یادآوری صبحگاهی روشن شد" : "یادآوری خاموش شد")}
+                aria-label="یادآوری روشن باشد"
+              />
+            }
+          />
+        </div>
+        {data.morningReminder && (
+          <>
+            <h3 className="mx-1 mb-2 mt-4 text-label font-extrabold text-foreground/80">ساعت ارسال</h3>
+            <div className="grid grid-cols-6 gap-1.5">
+              {MORNING_HOURS.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  disabled={autoBusy !== null}
+                  onClick={() => update({ morningHour: h }, `یادآوری ساعت ${toPersianDigits(h)} صبح`)}
+                  className={cn(
+                    "nums h-11 rounded-xl border text-sm font-bold transition-colors",
+                    data.morningHour === h ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:bg-accent"
+                  )}
+                >
+                  {toPersianDigits(h)}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {!botReady && <p className="mt-3 px-1 text-caption font-bold text-warning-ink">اول ربات تلگرام را وصل کنید.</p>}
+      </BottomSheet>
+
+      {/* ───────── شیت: ربات تلگرام ───────── */}
+      <BottomSheet
+        open={sheet === "telegram"}
+        onClose={() => setSheet(null)}
+        title="اتصال ربات تلگرام"
+        description="برای ثبت سریع از تلگرام، یادآوری‌ها و بکاپ خودکار"
+        footer={
+          <div className="grid gap-2">
+            <Button onClick={save} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              ذخیره
+            </Button>
+            <Button
+              onClick={testTelegram}
+              disabled={testing || !botReady}
+              variant="ghost"
+              className="h-10 w-full rounded-2xl text-label font-bold text-primary"
+            >
+              {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
+              ارسال پیام آزمایشی
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <FieldGroup
+            label="توکن ربات"
+            hint={data.hasBotToken ? `فعال (${data.botTokenMasked}) — از ${data.botTokenSource === "db" ? "دیتابیس" : "env"}` : undefined}
+          >
+            <Input
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={data.hasBotToken ? "برای تغییر، توکن جدید را وارد کنید" : "123456:ABC-DEF…"}
+              dir="ltr"
+              className="font-mono text-sm"
+            />
+          </FieldGroup>
+          <FieldGroup label="شناسهٔ چت ادمین (Chat ID)">
+            <Input value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="مثلاً ۱۲۵۳۹۳۹۸۲۸" dir="ltr" className="nums font-mono" />
+          </FieldGroup>
+          <FieldGroup label="آدرس مینی‌اپ" hint="دکمهٔ «باز کردن حساب‌یار» داخل ربات">
+            <Input value={miniAppUrl} onChange={(e) => setMiniAppUrl(e.target.value)} placeholder="https://hesabyar.miladrajabi.com" dir="ltr" />
+          </FieldGroup>
+        </div>
+      </BottomSheet>
+
+      {/* ───────── شیت: بکاپ خودکار تلگرام ───────── */}
+      <BottomSheet
+        open={sheet === "tgBackup"}
+        onClose={() => setSheet(null)}
+        title="بکاپ خودکار در تلگرام"
+        description="هر شب ساعت ۳:۳۰ یک نسخهٔ رمزگذاری‌شده (AES-256) از کل داده‌ها"
+        footer={
+          <Button
+            onClick={() => runTelegram("backup")}
+            disabled={!botReady || !data.hasBackupPassword || autoBusy !== null}
+            variant="outline"
+            className="h-12 w-full rounded-2xl font-bold"
+          >
+            {autoBusy === "backup" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
+            ارسال بکاپ همین حالا
+          </Button>
+        }
+      >
+        <div className="overflow-hidden rounded-2xl border border-border">
+          <Cell
+            label="بکاپ خودکار روشن باشد"
+            trailing={
+              <Switch
+                checked={data.telegramBackup}
+                disabled={autoBusy !== null || (!data.hasBackupPassword && telegramBackupPw.length < 6)}
+                onCheckedChange={(v) =>
+                  update(
+                    { telegramBackup: v, ...(telegramBackupPw.length >= 6 ? { backupPassword: telegramBackupPw } : {}) },
+                    v ? "بکاپ خودکار تلگرام روشن شد" : "بکاپ تلگرام خاموش شد"
+                  ).then(() => setTelegramBackupPw(""))
+                }
+                aria-label="بکاپ خودکار روشن باشد"
+              />
+            }
+          />
+        </div>
+        <FieldGroup
+          className="mt-4"
+          label="رمز بکاپ"
+          hint={data.hasBackupPassword ? "تنظیم شده — برای تغییر، رمز جدید بزنید" : "حداقل ۶ کاراکتر"}
+        >
           <div className="flex gap-2">
             <Input
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={settings.hasBackupPassword ? "••••••••" : "یک رمز قوی که فراموش نکنید"}
+              value={telegramBackupPw}
+              onChange={(e) => setTelegramBackupPw(e.target.value)}
+              placeholder={data.hasBackupPassword ? "••••••••" : "یک رمز قوی که فراموش نکنید"}
               dir="ltr"
-              className="flex-1 text-sm"
+              className="flex-1"
               autoComplete="new-password"
             />
-            {password.length >= 6 && (
+            {telegramBackupPw.length >= 6 && (
               <Button
-                onClick={() => update({ backupPassword: password }, "رمز بکاپ ذخیره شد").then(() => setPassword(""))}
-                disabled={busy !== null}
-                className="h-12 rounded-2xl px-4 text-xs font-bold"
+                onClick={() => update({ backupPassword: telegramBackupPw }, "رمز بکاپ ذخیره شد").then(() => setTelegramBackupPw(""))}
+                disabled={autoBusy !== null}
+                className="h-12 rounded-2xl px-4 font-bold"
               >
-                ذخیره رمز
+                ذخیره
               </Button>
             )}
           </div>
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-caption leading-4 text-warning-ink">رمز را جایی امن نگه دارید؛ بدون آن بکاپ قابل بازیابی نیست.</p>
-            <Button
-              onClick={() => run("backup")}
-              disabled={!ready || !settings.hasBackupPassword || busy !== null}
-              variant="ghost"
-              className="h-8 shrink-0 rounded-xl px-3 text-caption font-bold text-primary hover:bg-primary/10"
-            >
-              {busy === "backup" ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5 -scale-x-100" />}
-              ارسال الان
+        </FieldGroup>
+        <p className="mt-2 px-1 text-caption font-bold text-warning-ink">رمز را جایی امن نگه دارید؛ بدون آن بکاپ قابل بازیابی نیست.</p>
+      </BottomSheet>
+
+      {/* ───────── شیت: دانلود / بازیابی بکاپ ───────── */}
+      <BottomSheet
+        open={sheet === "download" || sheet === "restore"}
+        onClose={() => setSheet(null)}
+        title={sheet === "restore" ? "بازیابی از فایل" : "دانلود بکاپ"}
+        description={
+          sheet === "restore"
+            ? "داده‌های فعلی با محتوای فایل جایگزین می‌شود"
+            : "یک نسخه از همهٔ داده‌ها روی همین دستگاه ذخیره می‌شود"
+        }
+        footer={
+          sheet === "restore" ? (
+            <Button onClick={() => fileRef.current?.click()} className="h-12 w-full rounded-2xl font-bold">
+              <Upload className="size-4" />
+              انتخاب فایل بکاپ
+            </Button>
+          ) : (
+            <Button onClick={downloadBackup} disabled={backingUp} className="h-12 w-full rounded-2xl font-bold">
+              {backingUp ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              {backupPassword.trim() ? "دانلود بکاپ رمزدار" : "دانلود بکاپ"}
+            </Button>
+          )
+        }
+      >
+        <FieldGroup
+          label={sheet === "restore" ? "رمز فایل (اگر رمزدار است)" : "رمز فایل (اختیاری)"}
+          hint={sheet === "restore" ? undefined : "با رمز، فایل با AES-256 رمزگذاری می‌شود و بدون آن باز نمی‌شود"}
+        >
+          <Input
+            type="password"
+            value={backupPassword}
+            onChange={(e) => setBackupPassword(e.target.value)}
+            placeholder={sheet === "restore" ? "فقط برای فایل .enc" : "رمز اختیاری"}
+            dir="ltr"
+            autoComplete="new-password"
+          />
+        </FieldGroup>
+      </BottomSheet>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".db,.enc"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) restoreBackup(f)
+        }}
+      />
+
+      {/* شیت تأیید پاک‌سازی — پیامد را صریح می‌گوید */}
+      <BottomSheet
+        open={wipeSheet}
+        onClose={() => setWipeSheet(false)}
+        title="پاک کردن همهٔ داده‌ها"
+        description="این کار برگشت‌پذیر نیست — قبلش بکاپ بگیرید"
+        desktopMode="dialog"
+        footer={
+          <div className="grid gap-2">
+            <Button onClick={wipe} disabled={wiping} variant="destructive" className="h-12 w-full rounded-2xl font-bold">
+              {wiping ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              بله، همه را پاک کن
+            </Button>
+            <Button onClick={() => setWipeSheet(false)} variant="ghost" className="h-11 w-full rounded-2xl font-bold">
+              انصراف
             </Button>
           </div>
-        </div>
-      </div>
+        }
+      >
+        <ul className="space-y-1.5 rounded-2xl bg-destructive/[0.07] px-4 py-3 text-label text-destructive">
+          <li>همهٔ اشخاص، کالاها، فاکتورها، چک‌ها، تسویه‌ها و حساب‌ها برای همیشه حذف می‌شوند.</li>
+          <li className="text-muted-foreground">تنظیمات، کلیدهای ورود و توکن ربات باقی می‌مانند.</li>
+        </ul>
+      </BottomSheet>
+    </div>
+  )
+}
+
+// ───────────────────────── اجزای فهرست تنظیمات ─────────────────────────
+
+type SheetKey = "passkey" | "push" | "due" | "morning" | "telegram" | "tgBackup" | "download" | "restore"
+
+const MORNING_HOURS = [6, 7, 8, 9, 10, 11]
+
+function SettingsGroup({
+  id,
+  title,
+  children,
+  first = false,
+  danger = false,
+}: {
+  id: string
+  title: string
+  children: React.ReactNode
+  first?: boolean
+  danger?: boolean
+}) {
+  return (
+    <section id={id} aria-label={title} className="scroll-mt-24">
+      <h2 className={cn("mx-1 mb-2 text-label font-extrabold", first ? "mt-0" : "mt-5", danger ? "text-destructive" : "text-foreground/80")}>
+        {title}
+      </h2>
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">{children}</div>
     </section>
+  )
+}
+
+/** ردیف تنظیمات به سبک گوشی — آیکون، عنوان، مقدار فعلی، و فلش (یا سوییچ) */
+function Cell({
+  icon,
+  tone = "var(--primary)",
+  label,
+  value,
+  trailing,
+  onClick,
+  danger = false,
+}: {
+  icon?: React.ReactNode
+  tone?: string
+  label: string
+  value?: string | null
+  trailing?: React.ReactNode
+  onClick?: () => void
+  danger?: boolean
+}) {
+  const body = (
+    <>
+      {icon && (
+        <span
+          className="grid size-[1.875rem] shrink-0 place-items-center rounded-[9px]"
+          style={{ color: tone, background: `color-mix(in srgb, ${tone} 11%, white)` }}
+        >
+          {icon}
+        </span>
+      )}
+      <span className={cn("min-w-0 flex-1 truncate text-sm font-semibold", danger && "font-bold text-destructive")}>{label}</span>
+      {value && <span className="nums shrink-0 text-label text-muted-foreground">{value}</span>}
+      {trailing}
+      {onClick && !trailing && <ChevronLeft className="size-4 shrink-0 text-muted-foreground/70" />}
+    </>
+  )
+  const cls = "flex min-h-[3.125rem] w-full items-center gap-2.5 px-3.5 text-start"
+  // ردیف با سوییچ: کلیک روی متن شیت جزئیات را باز می‌کند، سوییچ مستقل است
+  if (onClick && trailing) {
+    return (
+      <div className={cls}>
+        <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2.5 text-start">
+          {icon && (
+            <span
+              className="grid size-[1.875rem] shrink-0 place-items-center rounded-[9px]"
+              style={{ color: tone, background: `color-mix(in srgb, ${tone} 11%, white)` }}
+            >
+              {icon}
+            </span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{label}</span>
+        </button>
+        {trailing}
+      </div>
+    )
+  }
+  return onClick ? (
+    <button type="button" onClick={onClick} className={cn(cls, "transition-colors hover:bg-accent/50", danger && "hover:bg-destructive/5")}>
+      {body}
+    </button>
+  ) : (
+    <div className={cls}>{body}</div>
+  )
+}
+
+function FieldGroup({
+  label,
+  hint,
+  children,
+  className,
+}: {
+  label: string
+  hint?: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-label font-bold text-foreground/80">{label}</label>
+      {children}
+      {hint && <p className="mt-1.5 text-caption leading-5 text-muted-foreground">{hint}</p>}
+    </div>
   )
 }

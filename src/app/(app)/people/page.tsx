@@ -10,6 +10,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { usePageSub } from "@/components/layout/page-header"
 import { toast } from "sonner"
 import {
   Users,
@@ -124,11 +125,16 @@ function PeoplePageInner() {
   const totalPayable = -people.reduce((s, p) => s + Math.min(0, p.balance), 0)
   const debtorCount = people.filter((p) => p.balance > 0).length
   const creditorCount = people.filter((p) => p.balance < 0).length
+  const peopleSub = data ? `${toPersianDigits(data.people.length)} شخص | ${toPersianDigits(debtorCount)} بدهکار به شما` : null
+  usePageSub(peopleSub)
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="hidden text-2xl font-extrabold tracking-tight lg:block">اشخاص</h1>
+        <div className="hidden lg:block">
+          <h1 className="text-page font-extrabold tracking-tight">اشخاص</h1>
+          {peopleSub && <p className="nums text-label text-muted-foreground">{peopleSub}</p>}
+        </div>
         <div className="flex items-center gap-2">
           <Button
             onClick={() => downloadCsv("people")}
@@ -148,7 +154,7 @@ function PeoplePageInner() {
       </div>
 
       {/* خلاصه طلب/بدهی — یک کارت دوتکه؛ لمس = فیلتر (نسخهٔ ۷) */}
-      <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+      <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-3xl border border-border/80 bg-card">
         {(
           [
             { key: "debtors", label: `طلب شما از ${toPersianDigits(debtorCount)} نفر`, value: totalReceivable, cls: "text-warning-ink" },
@@ -167,7 +173,7 @@ function PeoplePageInner() {
             )}
           >
             <div className="text-label font-semibold text-muted-foreground">{c.label}</div>
-            <p className={cn("nums mt-0.5 text-[1.2rem] font-extrabold tracking-tight", c.cls)}>
+            <p className={cn("nums mt-0.5 text-xl font-extrabold tracking-tight", c.cls)}>
               {formatTomanCompact(c.value)}
             </p>
           </button>
@@ -252,7 +258,7 @@ function PeoplePageInner() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+        <div className="overflow-hidden rounded-3xl border border-border/80 bg-card">
           {people.map((p, i) => (
             <motion.div
               key={p.id}
@@ -263,7 +269,7 @@ function PeoplePageInner() {
               className={cn(i > 0 && "border-t border-border/60")}
             >
               <SwipeRow
-                hint={i === 0}
+                hint
                 trailing={[
                   {
                     key: "settle",
@@ -296,7 +302,7 @@ function PeoplePageInner() {
                   <div className="flex items-center gap-3">
                     <BalanceAvatar role={p.role} balance={p.balance} openDays={p.openDays} size={44} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[0.95rem] font-bold">{p.name}</div>
+                      <div className="truncate text-body font-bold">{p.name}</div>
                       <div className="mt-0.5 truncate text-caption text-muted-foreground">
                         {[ROLE_LABELS[p.role], p.company].filter(Boolean).join(" | ")}
                       </div>
@@ -310,18 +316,18 @@ function PeoplePageInner() {
                           >
                             {formatTomanCompact(sort === "sales" ? p.salesTotal : p.purchaseTotal)}
                           </div>
-                          <div className="mt-0.5 text-micro font-bold text-muted-foreground">
+                          <div className="mt-0.5 text-caption font-bold text-muted-foreground">
                             <span className="nums">#{toPersianDigits(i + 1)}</span> {sort === "sales" ? "جمع فروش" : "جمع خرید"}
                           </div>
                         </>
                       ) : p.balance !== 0 ? (
                         <>
-                          <div className="nums text-[0.95rem] font-extrabold">{formatTomanCompact(Math.abs(p.balance))}</div>
+                          <div className="nums text-body font-extrabold">{formatTomanCompact(Math.abs(p.balance))}</div>
                           <div className="mt-1 flex items-center justify-end gap-1">
                             {p.openDays != null && (
                               <span
                                 className={cn(
-                                  "nums text-micro font-bold",
+                                  "nums text-caption font-bold",
                                   p.openDays > 30 ? "text-destructive" : "text-muted-foreground"
                                 )}
                               >

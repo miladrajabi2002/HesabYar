@@ -278,9 +278,9 @@ export function TrendChart({
 function Stat({ label, value, tone, strong }: { label: string; value: string; tone?: string; strong?: boolean }) {
   return (
     <div className="rounded-2xl bg-muted/60 px-2.5 py-2">
-      <div className="truncate text-micro text-muted-foreground">{label}</div>
+      <div className="truncate text-caption text-muted-foreground">{label}</div>
       <div
-        className={cn("nums mt-0.5 truncate text-label font-extrabold", strong && "text-[0.88rem]")}
+        className={cn("nums mt-0.5 truncate text-label font-extrabold", strong && "text-sm")}
         style={tone ? { color: `color-mix(in srgb, ${tone} 88%, black)` } : undefined}
       >
         {value}
@@ -340,7 +340,7 @@ export function CollectionDonut({ data, className }: { data: Collection; classNa
         <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
           <div>
             <div className="nums text-xl font-black leading-none">{toPersianDigits(collectedPct)}٪</div>
-            <div className="mt-1 text-micro font-medium text-muted-foreground">وصول شده</div>
+            <div className="mt-1 text-caption font-medium text-muted-foreground">وصول شده</div>
           </div>
         </div>
       </div>

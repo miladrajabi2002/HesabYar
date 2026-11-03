@@ -2,24 +2,24 @@
 
 /**
  * گزارش‌ها — سود روزانه/هفتگی/ماهانه شمسی + نمودار + پرفروش‌ها + بهترین مشتری‌ها
+ * نسخهٔ ۷ (P7): چهار شاخص در یک کارت شبکه‌ای با جملهٔ مقایسه، سهم هر کالا با نوار افقی
  */
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { motion } from "framer-motion"
-import { BarChart3, Loader2, TrendingUp, Package, Users, HandCoins, ShoppingBag, CheckSquare2 } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
-import { formatTomanCompact, toPersianDigits } from "@/lib/money"
+import { formatTomanCompact, formatTomanParts, toPersianDigits } from "@/lib/money"
 import { formatUnit } from "@/lib/units"
 import {
   JALALI_MONTHS,
-  jalaliDayKey,
   jalaliOf,
   nowTehran,
   parseMonthKey,
 } from "@/lib/jalali"
 import { cn } from "@/lib/utils"
-import { Segmented } from "@/components/ui/segmented"
-import { TrendChart, CollectionDonut, Sparkline, type Collection } from "@/components/charts/finance-charts"
+import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeader } from "@/components/layout/page-header"
+import { TrendChart, CollectionDonut, type Collection } from "@/components/charts/finance-charts"
 
 interface PeriodSum {
   sales: number
@@ -92,44 +92,67 @@ export default function ReportsPage() {
 
   const profitMargin =
     data && data.summary.sales > 0 ? Math.round((data.summary.profit / data.summary.sales) * 100) : 0
-  // مینی‌ترند کارت‌ها: فقط روزهای سپری‌شده (روزهای آیندهٔ ماه خطِ صفر نسازند)
-  const todayK = jalaliDayKey(nowTehran())
-  const elapsedSeries = (data?.series ?? []).filter((d) => d.day <= todayK)
-  const prevLabel = period === "day" ? "دیروز" : period === "week" ? "هفتهٔ قبل" : "ماه قبل"
+  const prevProfitMargin =
+    data && data.prev.sales > 0 ? Math.round((data.prev.profit / data.prev.sales) * 100) : null
+  const shownMonth = period === "custom" ? monthKey : thisMonth
+  const { jm: shownJm } = parseMonthKey(shownMonth)
+  const prevLabel =
+    period === "day" ? "دیروز" : period === "week" ? "هفتهٔ قبل" : JALALI_MONTHS[(shownJm + 10) % 12]
+  const isMonth = period === "month" || period === "custom"
+  const [monthsOpen, setMonthsOpen] = useState(false)
 
   return (
-    <div className="space-y-4">
-      <h1 className="hidden text-2xl font-extrabold tracking-tight lg:block">گزارش‌ها</h1>
+    <div>
+      <PageHeader title="گزارش‌ها" sub={`${label} | مقایسه با ${prevLabel}`} />
 
-      {/* انتخاب دوره */}
-      <Segmented
-        value={period}
-        onChange={setPeriod}
-        options={[
-          { key: "day", label: "امروز" },
-          { key: "week", label: "این هفته" },
-          { key: "month", label: "این ماه" },
-          { key: "custom", label: "ماه دلخواه" },
-        ]}
-        className="sm:max-w-lg"
-      />
-
-      {/* انتخاب ماه شمسی */}
-      {period === "custom" && (
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+      {/* انتخاب دوره — چیپ‌ها؛ چیپ ماه با فلش، فهرست ماه‌ها را باز می‌کند */}
+      <div className="mb-2 flex gap-1.5 overflow-x-auto no-scrollbar">
+        {(
+          [
+            ["day", "امروز"],
+            ["week", "این هفته"],
+          ] as const
+        ).map(([key, l]) => (
+          <Chip
+            key={key}
+            on={period === key}
+            onClick={() => {
+              setPeriod(key)
+              setMonthsOpen(false)
+            }}
+          >
+            {l}
+          </Chip>
+        ))}
+        <Chip
+          on={isMonth}
+          onClick={() => {
+            if (!isMonth) setPeriod(monthKey === thisMonth ? "month" : "custom")
+            else setMonthsOpen((v) => !v)
+          }}
+          aria-expanded={monthsOpen}
+        >
+          {`${JALALI_MONTHS[shownJm - 1]} ${toPersianDigits(parseMonthKey(shownMonth).jy)}`}
+          <ChevronDown className={cn("size-3.5 transition-transform", monthsOpen && "rotate-180")} />
+        </Chip>
+      </div>
+      {monthsOpen && (
+        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {months.map((m) => {
             const { jy, jm } = parseMonthKey(m)
-            const active = monthKey === m
+            const active = isMonth && shownMonth === m
             return (
               <button
                 key={m}
                 type="button"
-                onClick={() => setMonthKey(m)}
+                onClick={() => {
+                  setMonthKey(m)
+                  setPeriod(m === thisMonth ? "month" : "custom")
+                  setMonthsOpen(false)
+                }}
                 className={cn(
-                  "shrink-0 rounded-2xl border px-4 py-2 text-xs font-bold transition-all",
-                  active
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-muted-foreground"
+                  "h-8 shrink-0 rounded-[10px] border px-3 text-label font-semibold transition-colors",
+                  active ? "border-primary bg-secondary text-secondary-foreground" : "border-border bg-card text-foreground/75 hover:bg-accent"
                 )}
               >
                 {JALALI_MONTHS[jm - 1]} {toPersianDigits(jy)}
@@ -140,260 +163,242 @@ export default function ReportsPage() {
       )}
 
       {isLoading || !data ? (
-        <div className="flex min-h-[40vh] items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
+        <div className="mt-3 grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-52 rounded-3xl" />
+          <Skeleton className="h-52 rounded-3xl" />
         </div>
       ) : (
-        <>
-          {/* KPIها — با مقایسه نسبت به دورهٔ قبل */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <ReportKpi
-              i={0}
-              label={`فروش ${label}`}
-              value={data.summary.sales}
-              prev={data.prev.sales}
-              prevLabel={prevLabel}
-              tone="var(--sale)"
-              icon={<TrendingUp className="size-3.5" />}
-              foot={`${toPersianDigits(data.summary.saleCount)} فاکتور`}
-              spark={elapsedSeries.map((d) => d.sales)}
-            />
-            <ReportKpi
-              i={1}
-              label={`سود ${label}`}
-              value={data.summary.profit}
-              prev={data.prev.profit}
-              prevLabel={prevLabel}
-              tone="var(--primary)"
-              icon={<BarChart3 className="size-3.5" />}
-              foot={`حاشیه سود ${toPersianDigits(profitMargin)}٪`}
-              spark={elapsedSeries.map((d) => d.profit)}
-            />
-            <ReportKpi
-              i={2}
-              label={`خرید ${label}`}
-              value={data.summary.purchases}
-              prev={data.prev.purchases}
-              prevLabel={prevLabel}
-              tone="var(--purchase)"
-              icon={<ShoppingBag className="size-3.5" />}
-              foot={`${toPersianDigits(data.summary.purchaseCount)} فاکتور`}
-              spark={elapsedSeries.map((d) => d.purchases)}
-              invert
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="rounded-3xl border border-border/70 bg-card p-4 shadow-card"
-            >
-              <div className="flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
-                <span className="grid size-6 place-items-center rounded-lg bg-[color:color-mix(in_srgb,var(--hue-checks)_13%,transparent)] text-[color:var(--hue-checks)]">
-                  <CheckSquare2 className="size-3.5" />
-                </span>
-                چک‌های سررسید دوره
-              </div>
-              <div className="mt-2 space-y-1">
-                <div className="flex items-center justify-between text-caption">
-                  <span className="text-muted-foreground">وصولی</span>
-                  <span className="nums font-extrabold text-[color:var(--sale)]">{formatTomanCompact(data.summary.receivedChecks)}</span>
-                </div>
-                <div className="flex items-center justify-between text-caption">
-                  <span className="text-muted-foreground">پرداختی</span>
-                  <span className="nums font-extrabold text-[color:var(--purchase)]">{formatTomanCompact(data.summary.issuedChecks)}</span>
-                </div>
-              </div>
-            </motion.div>
-          </div>
+        <div className="mt-3 grid items-start gap-4 lg:grid-cols-2">
+          {/* چهار شاخص در یک کارت شبکه‌ای — مبلغ مشکی، جملهٔ مقایسه رنگی */}
+          <section aria-label="شاخص‌ها" className="overflow-hidden rounded-3xl border border-border bg-card">
+            <div className="grid grid-cols-2">
+              <KpiCell
+                label="فروش"
+                value={<Money v={data.summary.sales} />}
+                note={deltaText(data.summary.sales, data.prev.sales, prevLabel)}
+                fallback={`${toPersianDigits(data.summary.saleCount)} فاکتور`}
+              />
+              <KpiCell
+                label="سود خالص"
+                value={<Money v={data.summary.profit} />}
+                note={deltaText(data.summary.profit, data.prev.profit, prevLabel)}
+                fallback="بعد از کسر تخفیف"
+                className="border-s"
+              />
+              <KpiCell
+                label="خرید"
+                value={<Money v={data.summary.purchases} />}
+                note={deltaText(data.summary.purchases, data.prev.purchases, prevLabel, true)}
+                fallback={`${toPersianDigits(data.summary.purchaseCount)} فاکتور`}
+                className="border-t"
+              />
+              <KpiCell
+                label="حاشیهٔ سود"
+                value={`${toPersianDigits(profitMargin)}٪`}
+                note={
+                  prevProfitMargin !== null && prevProfitMargin !== profitMargin
+                    ? {
+                        text: `${profitMargin > prevProfitMargin ? "↑" : "↓"} ${toPersianDigits(Math.abs(profitMargin - prevProfitMargin))} واحد نسبت به ${prevLabel}`,
+                        tone: profitMargin > prevProfitMargin ? "good" : "bad",
+                      }
+                    : null
+                }
+                fallback="از هر ۱۰۰ تومان فروش"
+                className="border-s border-t"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-2.5 text-caption">
+              <span className="font-semibold text-muted-foreground">چک‌های سررسید دوره</span>
+              <span className="nums">
+                وصولی <b className="font-extrabold text-sale">{formatTomanCompact(data.summary.receivedChecks)}</b>
+              </span>
+              <span className="nums">
+                پرداختی <b className="font-extrabold text-purchase">{formatTomanCompact(data.summary.issuedChecks)}</b>
+              </span>
+            </div>
+          </section>
 
-          <div className="grid items-start gap-4 lg:grid-cols-5">
-            {/* نمودار روند */}
-            <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 lg:col-span-3">
-              <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
-                <BarChart3 className="size-4 text-primary" />
-                روند روزانهٔ {label}
-              </div>
-              {data.series.length > 1 ? (
-                <TrendChart series={data.series} height={240} mode="period" />
-              ) : (
-                <p className="py-8 text-center text-xs text-muted-foreground">
-                  برای «{label}» نمودار روزانه معنا ندارد؛ «این هفته» یا «این ماه» را ببینید
-                </p>
-              )}
-            </section>
-
-            {/* وصول فروش */}
-            <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5 lg:col-span-2">
-              <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
-                <HandCoins className="size-4 text-primary" />
-                وصول فروش {label}
-              </div>
-              <p className="mb-3 text-caption text-muted-foreground">
-                از {formatTomanCompact(data.collection.total)} فروش، چقدر پولش دست ما رسیده
+          {/* نمودار روند — محور مبلغ، روزها، نقطهٔ امروز */}
+          <section className="rounded-3xl border border-border bg-card p-4">
+            <h2 className="mb-2 text-body font-extrabold">روند روزانه</h2>
+            {data.series.length > 1 ? (
+              <TrendChart series={data.series} height={230} mode="period" />
+            ) : (
+              <p className="py-8 text-center text-label text-muted-foreground">
+                برای «{label}» نمودار روزانه معنا ندارد؛ «این هفته» یا ماه را ببینید
               </p>
-              <CollectionDonut data={data.collection} />
-            </section>
-          </div>
+            )}
+          </section>
 
-          <div className="grid items-start gap-4 lg:grid-cols-2">
-            {/* پرفروش‌ها */}
-            <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-              <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
-                <Package className="size-4 text-primary" />
-                پرفروش‌ترین کالاها {label}
-              </div>
-              <div className="space-y-1">
-                {data.topSold.map((p, i) => (
-                  <div
-                    key={p.name}
-                    className="relative isolate flex items-center gap-2.5 overflow-hidden rounded-xl px-2 py-2.5"
-                  >
-                    <span
-                      className={cn(
-                        "nums relative z-10 flex size-7 shrink-0 items-center justify-center rounded-lg text-caption font-extrabold",
-                        i === 0 ? "bg-[#f5a524] text-white" : i === 1 ? "bg-[#a8b3bd] text-white" : i === 2 ? "bg-[#c98a55] text-white" : "bg-muted"
-                      )}
-                    >
-                      {toPersianDigits(i + 1)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold">
-                        {p.name}
-                        {p.brand ? <span className="font-medium text-muted-foreground"> — {p.brand}</span> : null}
-                      </div>
-                      <div className="nums text-caption text-muted-foreground">
-                        {toPersianDigits(p.qty)} {formatUnit(p.unit)} • سود {formatTomanCompact(p.profit)}
-                      </div>
-                    </div>
-                    <span className="nums shrink-0 text-sm font-extrabold">
-                      {formatTomanCompact(p.revenue)}
-                    </span>
-                    <RankBar value={p.revenue} max={data.topSold[0]?.revenue ?? 1} tone="var(--sale)" />
-                  </div>
-                ))}
-                {data.topSold.length === 0 && (
-                  <p className="py-6 text-center text-xs text-muted-foreground">فروشی در این دوره نبوده</p>
-                )}
-              </div>
-            </section>
+          {/* پرفروش‌ها — نوار افقی + سهم از فروش */}
+          <ShareList
+            title="پرفروش‌ترین کالاها"
+            sub={`سهم از فروش ${label}`}
+            total={data.summary.sales}
+            empty="فروشی در این دوره نبوده"
+            rows={data.topSold.map((p) => ({
+              key: p.name,
+              name: p.brand ? `${p.name} — ${p.brand}` : p.name,
+              meta: `${toPersianDigits(p.qty)} ${formatUnit(p.unit)} | سود ${formatTomanCompact(p.profit)}`,
+              value: p.revenue,
+            }))}
+          />
 
-            {/* بهترین مشتری‌ها */}
-            <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-              <div className="mb-3 flex items-center gap-2 text-[0.95rem] font-extrabold">
-                <Users className="size-4 text-primary" />
-                بهترین مشتری‌ها {label}
-              </div>
-              <div className="space-y-1.5">
-                {data.topCustomers.map((c, i) => (
-                  <div
-                    key={c.name + i}
-                    className="relative isolate flex items-center gap-2.5 overflow-hidden rounded-xl px-2 py-2.5"
-                  >
-                    <span
-                      className={cn(
-                        "nums relative z-10 flex size-7 shrink-0 items-center justify-center rounded-lg text-caption font-extrabold",
-                        i === 0 ? "bg-[#f5a524] text-white" : i === 1 ? "bg-[#a8b3bd] text-white" : i === 2 ? "bg-[#c98a55] text-white" : "bg-muted"
-                      )}
-                    >
-                      {toPersianDigits(i + 1)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold">{c.name}</div>
-                      <div className="nums text-caption text-muted-foreground">
-                        {toPersianDigits(c.count)} فاکتور
-                      </div>
-                    </div>
-                    <span className="nums shrink-0 text-sm font-extrabold">
-                      {formatTomanCompact(c.total)}
-                    </span>
-                    <RankBar value={c.total} max={data.topCustomers[0]?.total ?? 1} tone="var(--role-customer)" />
-                  </div>
-                ))}
-                {data.topCustomers.length === 0 && (
-                  <p className="py-6 text-center text-xs text-muted-foreground">مشتری‌ای نبوده</p>
-                )}
-              </div>
-            </section>
-          </div>
-        </>
+          {/* وصول فروش */}
+          <section className="rounded-3xl border border-border bg-card p-4">
+            <h2 className="text-body font-extrabold">وصول فروش</h2>
+            <p className="mb-3 text-caption text-muted-foreground">
+              از {formatTomanCompact(data.collection.total)} فروش {label}، چقدر پولش دست شما رسیده
+            </p>
+            <CollectionDonut data={data.collection} />
+          </section>
+
+          <ShareList
+            title="بهترین مشتری‌ها"
+            sub={`سهم از فروش ${label}`}
+            total={data.summary.sales}
+            empty="مشتری‌ای نبوده"
+            tone="var(--role-customer)"
+            rows={data.topCustomers.map((c, i) => ({
+              key: c.name + i,
+              name: c.name,
+              meta: `${toPersianDigits(c.count)} فاکتور`,
+              value: c.total,
+            }))}
+          />
+        </div>
       )}
     </div>
   )
 }
 
-/** نوار نسبی پشت ردیف رتبه‌بندی */
-function RankBar({ value, max, tone }: { value: number; max: number; tone: string }) {
+/** جملهٔ مقایسه با دورهٔ قبل — «↑ ۸٪ نسبت به مهر» */
+function deltaText(
+  value: number,
+  prev: number,
+  prevLabel: string,
+  neutral = false
+): { text: string; tone: "good" | "bad" | "muted" } | null {
+  if (prev === 0) return null
+  const pct = Math.round(((value - prev) / Math.abs(prev)) * 100)
+  if (pct === 0) return { text: `بدون تغییر نسبت به ${prevLabel}`, tone: "muted" }
+  return {
+    text: `${pct > 0 ? "↑" : "↓"} ${toPersianDigits(Math.abs(pct))}٪ نسبت به ${prevLabel}`,
+    tone: neutral ? "muted" : pct > 0 ? "good" : "bad",
+  }
+}
+
+function KpiCell({
+  label,
+  value,
+  note,
+  fallback,
+  className,
+}: {
+  label: string
+  value: React.ReactNode
+  note: { text: string; tone: "good" | "bad" | "muted" } | null
+  fallback: string
+  className?: string
+}) {
   return (
-    <motion.span
-      aria-hidden
-      className="pointer-events-none absolute inset-y-0 start-0 -z-10"
-      style={{ background: `color-mix(in srgb, ${tone} 7%, transparent)` }}
-      initial={{ width: 0 }}
-      animate={{ width: `${max > 0 ? Math.max(4, (value / max) * 100) : 0}%` }}
-      transition={{ type: "spring", stiffness: 110, damping: 22, delay: 0.1 }}
-    />
+    <div className={cn("min-w-0 border-border px-4 py-3", className)}>
+      <p className="text-label font-semibold text-muted-foreground">{label}</p>
+      <p className="nums text-xl font-extrabold tracking-tight">{value}</p>
+      <p
+        className={cn(
+          "nums truncate text-caption font-bold",
+          !note && "font-medium text-muted-foreground",
+          note?.tone === "good" && "text-income",
+          note?.tone === "bad" && "text-destructive",
+          note?.tone === "muted" && "text-muted-foreground"
+        )}
+      >
+        {note ? note.text : fallback}
+      </p>
+    </div>
   )
 }
 
-/** کاشی شاخص گزارش + مقایسه با دورهٔ قبل */
-function ReportKpi({
-  i,
-  label,
-  value,
-  prev,
-  prevLabel,
-  tone,
-  icon,
-  foot,
-  spark,
-  invert = false,
-}: {
-  i: number
-  label: string
-  value: number
-  prev: number
-  prevLabel: string
-  tone: string
-  icon: React.ReactNode
-  foot: string
-  /** مینی‌ترند روزانهٔ دوره */
-  spark?: number[]
-  /** برای خرید، افزایش «بد» نیست ولی رنگ خنثی‌تر می‌گیرد */
-  invert?: boolean
-}) {
-  const pct = prev !== 0 ? Math.round(((value - prev) / Math.abs(prev)) * 100) : null
-  const up = pct !== null && pct > 0
-  const good = invert ? null : up
+/** مبلغ: عدد پررنگ + واحد کوچک و کم‌رنگ («۶۲٫۲ میلیون تومان») — هیچ‌وقت بریده نمی‌شود */
+function Money({ v }: { v: number }) {
+  const { value, unit } = formatTomanParts(v)
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: i * 0.05, type: "spring", stiffness: 380, damping: 30 }}
-      style={{ ["--tile" as string]: tone }}
-      className="relative overflow-hidden rounded-3xl border border-border/70 bg-card p-4 shadow-card"
+    <>
+      {value}
+      {unit && <span className="ms-1 text-caption font-semibold tracking-normal text-muted-foreground">{unit}</span>}
+    </>
+  )
+}
+
+function Chip({
+  on,
+  children,
+  ...props
+}: { on: boolean; children: React.ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      {...props}
+      className={cn(
+        "flex h-8 shrink-0 items-center gap-1 rounded-[10px] border px-3 text-label font-semibold transition-colors",
+        on ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground/80 hover:bg-accent"
+      )}
     >
-      <div className="flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
-        <span className="icon-soft grid size-6 place-items-center rounded-lg">{icon}</span>
-        {label}
+      {children}
+    </button>
+  )
+}
+
+/** فهرست رتبه‌بندی با نوار افقی و درصد سهم از کل فروش */
+function ShareList({
+  title,
+  sub,
+  rows,
+  total,
+  empty,
+  tone = "var(--primary)",
+}: {
+  title: string
+  sub: string
+  rows: { key: string; name: string; meta: string; value: number }[]
+  total: number
+  empty: string
+  tone?: string
+}) {
+  return (
+    <section className="overflow-hidden rounded-3xl border border-border bg-card">
+      <div className="flex items-baseline gap-2 px-4 pb-1 pt-3.5">
+        <h2 className="text-body font-extrabold">{title}</h2>
+        <span className="text-caption text-muted-foreground">{sub}</span>
       </div>
-      <p className="nums mt-1.5 text-[1.3rem] font-extrabold tracking-tight">
-        {formatTomanCompact(value)}
-      </p>
-      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-caption text-muted-foreground">
-        <span className="nums">{foot}</span>
-        {pct !== null && pct !== 0 && (
-          <span
-            className={cn(
-              "nums rounded-full px-1.5 py-px font-bold",
-              good === null ? "bg-muted text-foreground" : good ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive"
-            )}
-            title={`نسبت به ${prevLabel}`}
-          >
-            {up ? "▲" : "▼"} {toPersianDigits(Math.abs(pct))}٪ <span className="font-normal opacity-70">از {prevLabel}</span>
-          </span>
-        )}
-      </div>
-      {spark && <Sparkline values={spark} color={tone} muted className="mt-2.5" />}
-    </motion.div>
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-center text-label text-muted-foreground">{empty}</p>
+      ) : (
+        <div className="grid gap-3 px-4 pb-4 pt-2">
+          {rows.map((r) => {
+            const pct = total > 0 ? Math.round((r.value / total) * 100) : 0
+            return (
+              <div key={r.key}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate text-sm font-bold">{r.name}</span>
+                  <span className="nums shrink-0 text-sm">
+                    <b className="font-extrabold">{formatTomanCompact(r.value)}</b>
+                    <span className="text-muted-foreground"> | {toPersianDigits(pct)}٪</span>
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <span className="block h-full rounded-full" style={{ width: `${Math.max(2, pct)}%`, background: tone }} />
+                  </div>
+                </div>
+                <p className="nums mt-0.5 truncate text-caption text-muted-foreground">{r.meta}</p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </section>
   )
 }

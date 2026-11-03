@@ -12,7 +12,12 @@
  *  | قفل جهت: حرکت عمودی به اسکرول صفحه سپرده می‌شود و ردیف تکان نمی‌خورد
  *  | با باز شدن یک ردیف یا لمس هر جای دیگر، ردیف باز بسته می‌شود؛ لمس روی ردیف باز فقط آن را می‌بندد
  *  • در دسکتاپ (اشاره‌گر دقیق) کشیدن غیرفعال است و ردیف مثل قبل کلیک می‌خورد
- *  • یک‌بار «اشاره» (nudge) به اولین ردیف تا کاربر بفهمد قابل کشیدن است
+ *  • اشارهٔ کشیدن (swipe hint): وقتی لیست باز می‌شود، ۰٫۷ ثانیه بعد اولین ردیفی که کامل روی صفحه است
+ *    حدود ۵۶px کنار می‌رود تا کمی از دکمهٔ اکشن دیده شود و برمی‌گردد. هر بازدید یک بار، در کل حداکثر ۳ بار؛
+ *    با اولین کشیدن واقعی کاربر برای همیشه خاموش می‌شود. شمارش در localStorage با کلید hesabyar:swipe-hint.
+ *    با «کاهش حرکت» گوشی یا روی دستگاه بدون صفحهٔ لمسی پخش نمی‌شود. برای فعال‌سازی در هر لیست، به ردیف‌ها hint بدهید
+ *    (همهٔ ردیف‌ها می‌توانند hint داشته باشند؛ خودش اولین ردیف کامل‌دیده را انتخاب می‌کند).
+ *    برای دیدن دوباره هنگام تست، کلید hesabyar:swipe-hint را از localStorage پاک کنید.
  */
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react"
 import {
@@ -48,7 +53,63 @@ const SPRING = { type: "spring", stiffness: 430, damping: 40, mass: 1, restDelta
 const ARM_SPRING = { type: "spring", stiffness: 620, damping: 34 } as const
 
 const openRows = typeof window !== "undefined" ? new EventTarget() : null
-const HINT_KEY = "hy-swipe-hint"
+
+// ───────── اشارهٔ کشیدن (swipe hint) ─────────
+const HINT_KEY = "hesabyar:swipe-hint"
+const HINT_MAX = 3
+const HINT_DELAY = 700
+const HINT_DISTANCE = 56
+/** فضای پایین صفحه که نوار شناور موبایل می‌پوشاند */
+const HINT_BOTTOM_INSET = 96
+
+type HintState = { count: number; done: boolean }
+let hintPlayedThisVisit = false
+let hintTimer: ReturnType<typeof setTimeout> | null = null
+const hintCandidates = new Map<string, { el: () => HTMLElement | null; play: () => void }>()
+
+function readHint(): HintState | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(HINT_KEY) || "{}") as Partial<HintState>
+    return { count: Number(v.count) || 0, done: !!v.done }
+  } catch {
+    return null // بدون دسترسی به حافظه، اشاره پخش نمی‌شود
+  }
+}
+
+function writeHint(v: HintState) {
+  try {
+    localStorage.setItem(HINT_KEY, JSON.stringify(v))
+  } catch {
+    /* ignore */
+  }
+}
+
+/** کاربر خودش یک ردیف را کشید → اشاره برای همیشه خاموش */
+function markSwiped() {
+  const h = readHint()
+  if (h && !h.done) writeHint({ ...h, done: true })
+}
+
+/** بعد از ۰٫۷ ثانیه، بالاترین ردیفِ کامل‌دیده را انتخاب و اشاره را پخش کن */
+function scheduleHint() {
+  if (hintTimer || hintPlayedThisVisit) return
+  hintTimer = setTimeout(() => {
+    hintTimer = null
+    if (hintPlayedThisVisit) return
+    const h = readHint()
+    if (!h || h.done || h.count >= HINT_MAX) return
+    let best: { top: number; play: () => void } | null = null
+    for (const c of hintCandidates.values()) {
+      const r = c.el()?.getBoundingClientRect()
+      if (!r || r.height === 0 || r.top < 0 || r.bottom > window.innerHeight - HINT_BOTTOM_INSET) continue
+      if (!best || r.top < best.top) best = { top: r.top, play: c.play }
+    }
+    if (!best) return
+    hintPlayedThisVisit = true
+    writeHint({ count: h.count + 1, done: false })
+    best.play()
+  }, HINT_DELAY)
+}
 
 /** کش‌آمدن پلاستیکی: هرچه بیشتر بکشی، کمتر جلو می‌رود و هرگز از dim رد نمی‌شود */
 function rubber(over: number, dim: number) {
@@ -180,33 +241,25 @@ export function SwipeRow({
     return () => document.removeEventListener("pointerdown", onDown, true)
   }, [open, x])
 
-  // اشارهٔ یک‌باره
+  // اشارهٔ کشیدن — این ردیف نامزد می‌شود؛ هماهنگ‌کننده اولین ردیف کامل‌دیده را انتخاب می‌کند
   useEffect(() => {
     if (!hint || !enabled || reduce) return
-    let seen = false
-    try {
-      seen = localStorage.getItem(HINT_KEY) === "1"
-    } catch {
-      /* ignore */
-    }
-    if (seen) return
-    let cancelled = false
-    const t = setTimeout(async () => {
-      const dir = trailW ? -1 : 1
-      await animate(x, dir * 64, { duration: 0.42, ease: [0.22, 1, 0.36, 1] })
-      if (cancelled || gestureRef.current) return
-      await animate(x, 0, { type: "spring", stiffness: 300, damping: 18, velocity: -dir * 200 })
-      try {
-        localStorage.setItem(HINT_KEY, "1")
-      } catch {
-        /* ignore */
-      }
-    }, 900)
+    if (!window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints === 0) return
+    hintCandidates.set(id, {
+      el: () => wrapRef.current,
+      play: async () => {
+        const dir = trailW ? -1 : 1
+        await animate(x, dir * HINT_DISTANCE, { duration: 0.38, ease: [0.22, 1, 0.36, 1] })
+        await new Promise((r) => setTimeout(r, 260))
+        if (gestureRef.current || openRef.current) return
+        await animate(x, 0, { type: "spring", stiffness: 320, damping: 28 })
+      },
+    })
+    scheduleHint()
     return () => {
-      cancelled = true
-      clearTimeout(t)
+      hintCandidates.delete(id)
     }
-  }, [hint, enabled, reduce, trailW, x])
+  }, [hint, enabled, reduce, trailW, x, id])
 
   /** فاصلهٔ خام انگشت → جابه‌جایی نمایشی ردیف */
   const resolve = (raw: number) => {
@@ -288,6 +341,7 @@ export function SwipeRow({
         return
       }
       g.lock = "x"
+      markSwiped()
       suppressClickRef.current = true
       e.currentTarget.setPointerCapture(e.pointerId)
       wrapRef.current?.setAttribute("data-dragging", "")

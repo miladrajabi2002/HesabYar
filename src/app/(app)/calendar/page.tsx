@@ -9,16 +9,12 @@ import { useMemo, useState, type ReactNode, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
-import { toast } from "sonner"
 import {
   CalendarDays,
-  CheckSquare2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   HandCoins,
-  ReceiptText,
-  ShoppingCart,
 } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
@@ -36,6 +32,7 @@ import {
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
+import { PageHeader } from "@/components/layout/page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/ui/error-state"
@@ -117,21 +114,7 @@ const LEGEND = [
   { dot: DOT.settle, label: "تسویه" },
 ] as const
 
-/** قاب ردیف چک داخل شیت بر اساس وضعیت */
-function checkRowBorder(status: string): string {
-  switch (status) {
-    case "PENDING":
-      return "border-destructive/25"
-    case "CASHED":
-      return "border-income/25"
-    case "BOUNCED":
-      return "border-destructive/40"
-    default:
-      return "border-border opacity-60"
-  }
-}
-
-/** انواع نشانگر یک روز — حداکثر ۳ مورد در سلول */
+/** انواع نشانگر یک روز — حداکثر ۳ نقطه در سلول (بدون عدد؛ جزئیات در برنامهٔ روز) */
 function dayKinds(events: DayEvents): Array<{ dot: string; count: number }> {
   const sales = events.invoices.filter((i) => i.type === "SALE").length
   const purchases = events.invoices.filter((i) => i.type === "PURCHASE").length
@@ -145,73 +128,28 @@ function dayKinds(events: DayEvents): Array<{ dot: string; count: number }> {
 
 // ───────────────────────── اجزای کوچک ─────────────────────────
 
-function SummaryChip({
-  icon,
-  label,
-  value,
-  sub,
-  tone,
-  i = 0,
-}: {
-  icon: ReactNode
-  label: string
-  value: string
-  sub: string
-  tone: string
-  i?: number
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: i * 0.05, type: "spring", stiffness: 380, damping: 30 }}
-      style={{ ["--tile" as string]: tone }}
-      className="relative overflow-hidden rounded-3xl border border-border/70 bg-card p-3.5 shadow-card"
-    >
-      <div className="flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
-        <span className="icon-soft grid size-6 place-items-center rounded-lg">{icon}</span>
-        {label}
-      </div>
-      <p className="nums mt-2 text-base font-extrabold sm:text-lg" style={{ color: "color-mix(in srgb, var(--tile) 85%, black)" }}>
-        {value}
-      </p>
-      <p className="nums mt-0.5 text-caption text-muted-foreground">{sub}</p>
-    </motion.div>
-  )
-}
-
-function SheetSectionTitle({ dot, label, count }: { dot: string; label: string; count: number }) {
-  return (
-    <h3 className="mb-2 flex items-center gap-1.5 text-caption font-bold text-muted-foreground">
-      <span className={cn("size-1.5 rounded-full", dot)} aria-hidden="true" />
-      {label}
-      <span className="nums font-medium">({toPersianDigits(count)})</span>
-    </h3>
-  )
-}
-
 function CalendarSkeleton() {
   return (
-    <div className="space-y-4" aria-busy="true" aria-label="در حال بارگذاری تقویم">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-2xl border border-border/70 bg-card p-3.5 shadow-card">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="mt-2 h-6 w-28" />
-          </div>
-        ))}
-      </div>
-      <div className="rounded-3xl border border-border/70 bg-card p-3 shadow-card sm:p-4">
-        <div className="grid grid-cols-7 gap-1 pb-2">
-          {Array.from({ length: 7 }).map((_, i) => (
-            <Skeleton key={`h${i}`} className="mx-auto h-2.5 w-9" />
-          ))}
-        </div>
+    <div className="grid items-start gap-4 lg:grid-cols-[1.2fr_1fr]" aria-busy="true" aria-label="در حال بارگذاری تقویم">
+      <div className="rounded-3xl border border-border bg-card p-3.5">
+        <Skeleton className="mb-4 h-6 w-32" />
         <div className="grid grid-cols-7 gap-1">
           {Array.from({ length: 35 }).map((_, i) => (
-            <Skeleton key={i} className="min-h-[3.4rem] rounded-2xl lg:min-h-24" />
+            <Skeleton key={i} className="h-11 rounded-xl lg:h-14" />
           ))}
         </div>
+      </div>
+      <div className="overflow-hidden rounded-3xl border border-border bg-card">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-3">
+            <Skeleton className="size-10 rounded-xl" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-3 w-1/2" />
+              <Skeleton className="h-2.5 w-1/3" />
+            </div>
+            <Skeleton className="h-3 w-16" />
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -434,76 +372,44 @@ export default function CalendarPage() {
     ]
   }, [data])
 
-  const selectedEvents = selectedDay && data ? data.days[selectedDay] : undefined
-  const selectedCount = selectedEvents
-    ? selectedEvents.checks.length + selectedEvents.invoices.length + selectedEvents.settlements.length
-    : 0
-
   const goPrev = () => {
     setDir(-1)
+    setSelectedDay(null)
     setMonth(previousMonthKey(month))
   }
   const goNext = () => {
     setDir(1)
+    setSelectedDay(null)
     setMonth(nextMonthKey(month))
   }
   const jumpTo = (key: string) => {
     if (key === month) return
     setDir(key > month ? 1 : -1)
+    setSelectedDay(null)
     setMonth(key)
   }
   const goToday = () => {
     const cur = currentMonthKey()
-    if (month === cur) {
-      toast.info("همین حالا در ماه جاری هستید")
-      return
-    }
+    setSelectedDay(null)
+    if (month === cur) return
     setDir(cur > month ? 1 : -1)
     setMonth(cur)
   }
 
+  const { jm } = parseMonthKey(month)
+  const monthName = JALALI_MONTHS[jm - 1]
+  // روز برنامه: انتخاب کاربر، وگرنه امروز (اگر در همین ماه باشد)
+  const agendaDay = selectedDay ?? (data && data.todayKey.startsWith(data.month) ? data.todayKey : null)
+  const agenda = agendaDay && data ? data.days[agendaDay] : undefined
+  const agendaSales = agenda ? agenda.invoices.filter((x) => x.type === "SALE").reduce((a, x) => a + x.total, 0) : 0
+  const agendaCount = agenda ? agenda.checks.length + agenda.invoices.length + agenda.settlements.length : 0
+
   return (
-    <div className="mx-auto max-w-2xl lg:max-w-5xl">
-      {/* هدر ماه */}
-      <div className="mb-4 flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-11 rounded-2xl"
-          onClick={goPrev}
-          aria-label="ماه قبل"
-        >
-          <ChevronRight className="size-4" />
-        </Button>
-        <h1 className="min-w-0 flex-1 text-center text-lg font-extrabold sm:text-xl" aria-live="polite">
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            aria-label="انتخاب ماه یا سال"
-            className="mx-auto flex max-w-full items-center justify-center gap-1.5 rounded-2xl px-3 py-1.5 transition-colors hover:bg-accent active:scale-[0.98]"
-          >
-            <span className="truncate">{monthKeyLabel(month)}</span>
-            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-          </button>
-        </h1>
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-11 rounded-2xl"
-          onClick={goNext}
-          aria-label="ماه بعد"
-        >
-          <ChevronLeft className="size-4" />
-        </Button>
-        <Button
-          variant="outline"
-          className="h-11 shrink-0 rounded-2xl px-3 text-xs font-bold"
-          onClick={goToday}
-        >
-          <CalendarDays className="size-4" />
-          امروز
-        </Button>
-      </div>
+    <div className="mx-auto max-w-2xl lg:max-w-6xl">
+      <PageHeader
+        title="تقویم مالی"
+        sub={summary ? `${monthKeyLabel(month)} | ${toPersianDigits(summary.totalEvents)} رویداد` : monthKeyLabel(month)}
+      />
 
       {isError ? (
         <ErrorState
@@ -516,186 +422,123 @@ export default function CalendarPage() {
       ) : (
         <div
           aria-busy={isPlaceholderData}
-          className={cn("space-y-4 transition-opacity", isPlaceholderData && "pointer-events-none opacity-60")}
-        >
-          {/* خلاصه ماه */}
-          {summary && (
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <SummaryChip
-                icon={<CheckSquare2 className="size-3.5" />}
-                label="چک‌های این ماه"
-                value={formatTomanCompact(summary.pendingChecksSum)}
-                sub={`${toPersianDigits(summary.allChecks)} فقره در ماه • ${toPersianDigits(summary.pendingChecks)} در جریان`}
-                tone="var(--hue-checks)"
-                i={0}
-              />
-              <SummaryChip
-                icon={<ReceiptText className="size-3.5" />}
-                label="فروش این ماه"
-                value={formatTomanCompact(summary.salesSum)}
-                sub={`${toPersianDigits(summary.salesCount)} فاکتور فروش`}
-                tone="var(--sale)"
-                i={1}
-              />
-              <SummaryChip
-                icon={<ShoppingCart className="size-3.5" />}
-                label="خرید این ماه"
-                value={formatTomanCompact(summary.purchaseSum)}
-                sub={`${toPersianDigits(summary.purchaseCount)} فاکتور خرید`}
-                tone="var(--purchase)"
-                i={2}
-              />
-              <SummaryChip
-                icon={<HandCoins className="size-3.5" />}
-                label="تسویه‌های این ماه"
-                value={formatTomanCompact(summary.settleSum)}
-                sub={`${toPersianDigits(summary.settleCount)} تسویه`}
-                tone="var(--role-customer)"
-                i={3}
-              />
-            </div>
+          className={cn(
+            "grid items-start gap-4 transition-opacity lg:grid-cols-[1.2fr_1fr] lg:gap-5",
+            isPlaceholderData && "pointer-events-none opacity-60"
           )}
+        >
+          {/* ───────── شبکهٔ تقویم — شنبه‌محور ───────── */}
+          <section aria-label="تقویم ماه" className="rounded-3xl border border-border bg-card p-3.5 lg:p-4">
+            <div className="mb-2.5 flex items-center gap-1.5">
+              <h2 className="min-w-0 flex-1" aria-live="polite">
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  aria-label="انتخاب ماه یا سال"
+                  className="-ms-1.5 flex max-w-full items-center gap-1 rounded-xl px-1.5 py-1 text-title font-extrabold transition-colors hover:bg-accent"
+                >
+                  <span className="truncate">{monthKeyLabel(month)}</span>
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                </button>
+              </h2>
+              <Button variant="outline" className="h-9 rounded-xl px-3 text-label font-bold" onClick={goToday}>
+                امروز
+              </Button>
+              <Button variant="outline" size="icon" className="size-9 rounded-xl" onClick={goPrev} aria-label="ماه قبل">
+                <ChevronRight className="size-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="size-9 rounded-xl" onClick={goNext} aria-label="ماه بعد">
+                <ChevronLeft className="size-4" />
+              </Button>
+            </div>
 
-          {/* شبکه تقویم — شنبه‌محور */}
-          <section aria-label="تقویم ماه" className="rounded-3xl border border-border/80 bg-card p-3 sm:p-4">
-            <div className="grid grid-cols-7 gap-1 pb-2">
+            <div className="grid grid-cols-7 gap-0.5 pb-1">
               {WEEKDAYS.map((w, i) => (
                 <div
                   key={w}
                   className={cn(
-                    "text-center text-micro font-bold whitespace-nowrap sm:text-caption",
-                    i === 6 ? "text-destructive/70" : "text-muted-foreground"
+                    "text-center text-caption font-bold",
+                    i === 6 ? "text-destructive/75" : "text-muted-foreground"
                   )}
                 >
-                  {w}
+                  <span className="lg:hidden">{w[0]}</span>
+                  <span className="hidden lg:inline">{w}</span>
                 </div>
               ))}
             </div>
             <AnimatePresence mode="popLayout" initial={false} custom={dir}>
-            <motion.div
-              key={data.month}
-              custom={dir}
-              initial={{ opacity: 0, x: -dir * 48 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: dir * 48 }}
-              transition={{ type: "spring", stiffness: 360, damping: 34 }}
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.18}
-              dragDirectionLock
-              onDragStart={() => {
-                draggedRef.current = true
-              }}
-              onClickCapture={(e) => {
-                // کلیک پایانِ کشیدن روی یک روز نباید شیت آن روز را باز کند
-                if (draggedRef.current) {
-                  e.stopPropagation()
-                  e.preventDefault()
-                }
-                draggedRef.current = false
-              }}
-              onPointerDown={() => {
-                draggedRef.current = false
-              }}
-              onDragEnd={(_, info) => {
-                // کشیدن به راست → ماه بعد (تقویم راست‌به‌چپ) • به چپ → ماه قبل
-                if (info.offset.x > 70) goNext()
-                else if (info.offset.x < -70) goPrev()
-              }}
-              style={{ touchAction: "pan-y" }}
-              className="grid grid-cols-7 gap-1"
-            >
-              {cells.map((dayNumber, i) => {
-                if (dayNumber === null) {
-                  return <div key={`pad-${i}`} aria-hidden="true" className="min-h-[3.4rem] lg:min-h-24" />
-                }
-                const dayKey = `${data.month}-${String(dayNumber).padStart(2, "0")}`
-                const events = data.days[dayKey]
-                const totalCount = events
-                  ? events.checks.length + events.invoices.length + events.settlements.length
-                  : 0
-                const isToday = data.todayKey === dayKey
-                const isFriday = (data.firstWeekday + dayNumber - 1) % 7 === 6
-                const kinds = events ? dayKinds(events) : []
-                const daySales = events
-                  ? events.invoices.filter((x) => x.type === "SALE").reduce((a, x) => a + x.total, 0)
-                  : 0
-
-                const numberBadge = cn(
-                  "grid size-7 shrink-0 place-items-center rounded-full text-xs font-extrabold",
-                  isToday ? "bg-primary text-primary-foreground" : isFriday ? "text-destructive/70" : "text-foreground/80"
-                )
-                const indicators = (
-                  <span className="flex min-h-[1.1rem] flex-wrap items-center justify-center gap-0.5">
-                    {kinds.map((k) => (
-                      <span
-                        key={k.dot}
-                        className="flex items-center gap-px rounded-full bg-foreground/[0.07] px-1 py-px"
-                      >
-                        <span className={cn("size-1.5 rounded-full", k.dot)} aria-hidden="true" />
-                        {k.count > 1 && (
-                          <span className="nums text-micro font-bold leading-none text-muted-foreground">
-                            {toPersianDigits(k.count)}
-                          </span>
-                        )}
-                      </span>
-                    ))}
-                  </span>
-                )
-
-                // روز بدون رویداد — غیرتعاملی
-                if (!events || totalCount === 0) {
+              <motion.div
+                key={data.month}
+                custom={dir}
+                initial={{ opacity: 0, x: -dir * 36 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: dir * 36 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.18}
+                dragDirectionLock
+                onDragStart={() => {
+                  draggedRef.current = true
+                }}
+                onClickCapture={(e) => {
+                  // کلیک پایانِ کشیدن روی یک روز نباید آن روز را انتخاب کند
+                  if (draggedRef.current) {
+                    e.stopPropagation()
+                    e.preventDefault()
+                  }
+                  draggedRef.current = false
+                }}
+                onPointerDown={() => {
+                  draggedRef.current = false
+                }}
+                onDragEnd={(_, info) => {
+                  // کشیدن به راست → ماه بعد (تقویم راست‌به‌چپ) • به چپ → ماه قبل
+                  if (info.offset.x > 70) goNext()
+                  else if (info.offset.x < -70) goPrev()
+                }}
+                style={{ touchAction: "pan-y" }}
+                className="grid grid-cols-7 gap-0.5"
+              >
+                {cells.map((dayNumber, i) => {
+                  if (dayNumber === null) return <div key={`pad-${i}`} aria-hidden="true" />
+                  const dayKey = `${data.month}-${String(dayNumber).padStart(2, "0")}`
+                  const events = data.days[dayKey]
+                  const count = events ? events.checks.length + events.invoices.length + events.settlements.length : 0
+                  const isToday = data.todayKey === dayKey
+                  const isSelected = agendaDay === dayKey
+                  const isFriday = (data.firstWeekday + dayNumber - 1) % 7 === 6
+                  const kinds = events ? dayKinds(events) : []
                   return (
-                    <motion.div
+                    <button
                       key={dayKey}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.5) }}
-                      className="flex min-h-[3.4rem] flex-col items-center justify-between gap-1 rounded-2xl border border-transparent p-1.5 lg:min-h-24"
+                      type="button"
+                      onClick={() => setSelectedDay(dayKey)}
+                      aria-pressed={isSelected}
+                      aria-label={`${toPersianDigits(dayNumber)} ${monthKeyLabel(data.month)}${count ? ` — ${toPersianDigits(count)} رویداد` : ""}${isToday ? " (امروز)" : ""}`}
+                      className={cn(
+                        "flex h-11 flex-col items-center justify-center gap-[3px] rounded-xl text-sm transition-colors lg:h-14",
+                        isSelected
+                          ? "bg-primary font-extrabold text-primary-foreground"
+                          : cn("hover:bg-accent", isToday && "font-extrabold ring-[1.5px] ring-inset ring-primary"),
+                        !isSelected && (isFriday ? "text-destructive/75" : "font-medium")
+                      )}
                     >
-                      <span className={numberBadge}>{toPersianDigits(dayNumber)}</span>
-                      {indicators}
-                    </motion.div>
-                  )
-                }
-
-                // روز دارای رویداد — قابل لمس
-                return (
-                  <motion.button
-                    key={dayKey}
-                    type="button"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.5) }}
-                    onClick={() => setSelectedDay(dayKey)}
-                    aria-label={`${toPersianDigits(dayNumber)} ${monthKeyLabel(data.month)} — ${toPersianDigits(totalCount)} رویداد`}
-                    whileTap={{ scale: 0.92 }}
-                    // نسخهٔ ۷: بدون نقشهٔ حرارتی — نقطه‌های رنگی نوع رویداد کافی است؛ امروز با حلقه
-                    className={cn(
-                      "flex min-h-[3.4rem] flex-col items-center justify-between gap-1 rounded-2xl border border-transparent bg-muted/45 p-1.5 transition-colors hover:bg-accent lg:min-h-24",
-                      isToday && "bg-card ring-2 ring-primary"
-                    )}
-                  >
-                    <span className={numberBadge}>{toPersianDigits(dayNumber)}</span>
-                    {daySales > 0 && (
-                      <span className="nums hidden text-caption font-bold text-[color:color-mix(in_srgb,var(--sale)_80%,black)] lg:block">
-                        {formatTomanCompact(daySales).replace(" تومان", "")}
+                      <span className="nums leading-none">{toPersianDigits(dayNumber)}</span>
+                      <span className="flex h-[5px] gap-[3px]" aria-hidden="true">
+                        {kinds.map((k) => (
+                          <span key={k.dot} className={cn("size-[5px] rounded-full", isSelected ? "bg-white" : k.dot)} />
+                        ))}
                       </span>
-                    )}
-                    {indicators}
-                  </motion.button>
-                )
-              })}
-            </motion.div>
+                    </button>
+                  )
+                })}
+              </motion.div>
             </AnimatePresence>
 
-            {/* راهنمای رنگ‌ها */}
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 border-t border-dashed pt-3">
+            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-x-3.5 gap-y-1">
               {LEGEND.map((l) => (
-                <span
-                  key={l.label}
-                  className="flex items-center gap-1 text-caption font-medium text-muted-foreground"
-                >
+                <span key={l.label} className="flex items-center gap-1 text-caption text-muted-foreground">
                   <span className={cn("size-2 rounded-full", l.dot)} aria-hidden="true" />
                   {l.label}
                 </span>
@@ -703,126 +546,142 @@ export default function CalendarPage() {
             </div>
           </section>
 
-          {summary?.totalEvents === 0 && (
-            <p className="text-center text-xs text-muted-foreground">در این ماه رویداد مالی ثبت نشده است</p>
-          )}
+          {/* ───────── برنامهٔ روز انتخاب‌شده + خلاصهٔ ماه ───────── */}
+          <div>
+            <div className="mx-1 mb-2 flex items-baseline justify-between gap-2 lg:mt-0">
+              <h2 className="text-label font-extrabold text-foreground/80">
+                {agendaDay ? formatJalaliWithWeekday(dayKeyToDate(agendaDay)) : "روزی را انتخاب کنید"}
+              </h2>
+              {agendaSales > 0 && (
+                <span className="nums text-caption font-semibold text-muted-foreground">فروش {formatTomanCompact(agendaSales)}</span>
+              )}
+            </div>
+            <div className="overflow-hidden rounded-3xl border border-border bg-card">
+              {agendaCount === 0 ? (
+                <p className="px-4 py-6 text-center text-label text-muted-foreground">
+                  {agendaDay ? "در این روز رویداد مالی ثبت نشده" : "روی یک روز تقویم بزنید تا رویدادهایش اینجا بیاید"}
+                </p>
+              ) : (
+                <div className="divide-y divide-border/70">
+                  {agenda!.checks.map((c) => (
+                    <AgendaRow
+                      key={c.id}
+                      onClick={() => router.push("/checks")}
+                      lead={<BankLogo bankKey={c.bankKey} size={40} />}
+                      title={c.person.name}
+                      sub={`چک ${c.direction === "RECEIVED" ? "دریافتی" : "صادره"} | ${getBank(c.bankKey).name}`}
+                      amount={formatToman(c.amount, false)}
+                      chip={
+                        <span className={cn("inline-block rounded-full px-2 py-0.5 text-caption font-bold", CHECK_STATUS_BADGE[c.status] ?? "bg-muted text-muted-foreground")}>
+                          {CHECK_STATUS_LABEL[c.status] ?? c.status}
+                        </span>
+                      }
+                    />
+                  ))}
+                  {agenda!.invoices.map((inv) => (
+                    <AgendaRow
+                      key={inv.id}
+                      onClick={() => router.push(`/invoices/${inv.id}`)}
+                      lead={<InvoiceTypeMark type={inv.type} size={40} />}
+                      title={inv.person.name}
+                      sub={`فاکتور ${inv.type === "PURCHASE" ? "خرید" : "فروش"} #${toPersianDigits(inv.number)}`}
+                      amount={formatToman(inv.total, false)}
+                    />
+                  ))}
+                  {agenda!.settlements.map((st) => (
+                    <AgendaRow
+                      key={st.id}
+                      lead={
+                        <span
+                          className={cn(
+                            "grid size-10 shrink-0 place-items-center rounded-xl",
+                            st.direction === "RECEIVE" ? "bg-sale/10 text-sale" : "bg-purchase/10 text-purchase"
+                          )}
+                        >
+                          <HandCoins className="size-5" />
+                        </span>
+                      }
+                      title={st.person.name}
+                      sub={`${st.direction === "RECEIVE" ? "دریافت" : "پرداخت"} ${st.method === "CASH" ? "نقدی" : "چکی"}`}
+                      amount={`${st.direction === "RECEIVE" ? "+" : "−"}${formatToman(st.amount, false)}`}
+                      amountClass={st.direction === "RECEIVE" ? "text-sale" : "text-purchase"}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {summary && (
+              <>
+                <h2 className="mx-1 mb-2 mt-5 text-label font-extrabold text-foreground/80">خلاصهٔ {monthName}</h2>
+                <div className="grid grid-cols-2 overflow-hidden rounded-3xl border border-border bg-card">
+                  {(
+                    [
+                      ["فروش", formatTomanCompact(summary.salesSum), `${toPersianDigits(summary.salesCount)} فاکتور`],
+                      ["خرید", formatTomanCompact(summary.purchaseSum), `${toPersianDigits(summary.purchaseCount)} فاکتور`],
+                      [
+                        "چک‌های سررسید",
+                        `${toPersianDigits(summary.allChecks)} چک`,
+                        summary.pendingChecks ? `${toPersianDigits(summary.pendingChecks)} در جریان | ${formatTomanCompact(summary.pendingChecksSum)}` : "همه تعیین تکلیف شده",
+                      ],
+                      ["تسویه‌ها", formatTomanCompact(summary.settleSum), `${toPersianDigits(summary.settleCount)} مورد`],
+                    ] as const
+                  ).map(([label, value, sub], i) => (
+                    <div key={label} className={cn("min-w-0 px-4 py-3", i % 2 === 1 && "border-s border-border", i > 1 && "border-t border-border")}>
+                      <p className="text-caption font-semibold text-muted-foreground">{label}</p>
+                      <p className="nums truncate text-body font-extrabold">{value}</p>
+                      <p className="nums truncate text-caption text-muted-foreground">{sub}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
-      {/* شیت جزئیات روز */}
-      <BottomSheet
-        open={!!selectedEvents && selectedCount > 0}
-        onClose={() => setSelectedDay(null)}
-        title={selectedDay ? formatJalaliWithWeekday(dayKeyToDate(selectedDay)) : ""}
-        description={selectedEvents ? `${toPersianDigits(selectedCount)} رویداد مالی` : ""}
-      >
-        {selectedEvents && (
-          <div className="space-y-4">
-            {/* چک‌ها */}
-            {selectedEvents.checks.length > 0 && (
-              <section aria-label="چک‌های سررسید">
-                <SheetSectionTitle dot="bg-warning" label="چک‌های سررسید" count={selectedEvents.checks.length} />
-                <div className="space-y-2">
-                  {selectedEvents.checks.map((c) => (
-                    <div
-                      key={c.id}
-                      className={cn("flex items-center gap-3 rounded-2xl border bg-card p-3", checkRowBorder(c.status))}
-                    >
-                      <BankLogo bankKey={c.bankKey} size={40} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate text-sm font-bold">{c.person.name}</span>
-                          <CheckDirectionBadge direction={c.direction} size="sm" />
-                        </div>
-                        <p className="nums mt-0.5 truncate text-caption text-muted-foreground">
-                          {getBank(c.bankKey).name} • سریال {toPersianDigits(c.serial)}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-end">
-                        <p className={cn("nums text-sm font-extrabold", c.status !== "PENDING" && "text-muted-foreground")}>
-                          {formatToman(c.amount, false)}
-                        </p>
-                        <span
-                          className={cn(
-                            "mt-0.5 inline-block rounded-lg px-1.5 py-px text-micro font-bold",
-                            CHECK_STATUS_BADGE[c.status] ?? "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {CHECK_STATUS_LABEL[c.status] ?? c.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* فاکتورها */}
-            {selectedEvents.invoices.length > 0 && (
-              <section aria-label="فاکتورها">
-                <SheetSectionTitle dot="bg-primary" label="فاکتورها" count={selectedEvents.invoices.length} />
-                <div className="space-y-2">
-                  {selectedEvents.invoices.map((inv) => (
-                    <button
-                      key={inv.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedDay(null)
-                        router.push(`/invoices/${inv.id}`)
-                      }}
-                      className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-start transition-all hover:bg-accent/60 active:scale-[0.99]"
-                    >
-                      <InvoiceTypeMark type={inv.type} size={40} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold">
-                          فاکتور {inv.type === "PURCHASE" ? "خرید" : "فروش"}
-                          <span className="nums"> #{toPersianDigits(inv.number)}</span>
-                        </p>
-                        <p className="mt-0.5 truncate text-caption text-muted-foreground">{inv.person.name}</p>
-                      </div>
-                      <p className="nums shrink-0 text-sm font-extrabold">{formatToman(inv.total, false)}</p>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* تسویه‌ها */}
-            {selectedEvents.settlements.length > 0 && (
-              <section aria-label="تسویه‌ها">
-                <SheetSectionTitle dot="bg-income" label="تسویه‌ها" count={selectedEvents.settlements.length} />
-                <div className="space-y-2">
-                  {selectedEvents.settlements.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center gap-3 rounded-2xl border border-income/25 bg-income/[0.04] p-3"
-                    >
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-income/10 text-income">
-                        <HandCoins className="size-5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold">{s.person.name}</p>
-                        <p className="mt-0.5 truncate text-caption text-muted-foreground">
-                          {s.direction === "RECEIVE" ? "دریافت" : "پرداخت"} {s.method === "CASH" ? "نقدی" : "چکی"}
-                        </p>
-                      </div>
-                      <p
-                        className={cn(
-                          "nums shrink-0 text-sm font-extrabold",
-                          s.direction === "RECEIVE" ? "text-income" : "text-destructive"
-                        )}
-                      >
-                        {formatToman(s.amount, false)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
-      </BottomSheet>
       <MonthPickerSheet open={pickerOpen} onClose={() => setPickerOpen(false)} month={month} onPick={jumpTo} />
     </div>
+  )
+}
+
+/** ردیف برنامهٔ روز — یک قالب برای چک، فاکتور و تسویه */
+function AgendaRow({
+  lead,
+  title,
+  sub,
+  amount,
+  amountClass,
+  chip,
+  onClick,
+}: {
+  lead: ReactNode
+  title: string
+  sub: string
+  amount: string
+  amountClass?: string
+  chip?: ReactNode
+  onClick?: () => void
+}) {
+  const body = (
+    <>
+      {lead}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold">{title}</p>
+        <p className="nums mt-0.5 truncate text-caption text-muted-foreground">{sub}</p>
+      </div>
+      <div className="shrink-0 text-end">
+        <p className={cn("nums text-sm font-extrabold", amountClass)}>{amount}</p>
+        {chip}
+      </div>
+    </>
+  )
+  const cls = "flex min-h-[3.75rem] w-full items-center gap-3 px-4 py-2.5 text-start"
+  return onClick ? (
+    <button type="button" onClick={onClick} className={cn(cls, "transition-colors hover:bg-accent/50")}>
+      {body}
+    </button>
+  ) : (
+    <div className={cls}>{body}</div>
   )
 }

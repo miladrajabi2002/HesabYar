@@ -112,22 +112,16 @@ export default function LoginPage() {
       <LoginBackdrop />
 
       <motion.div
-        initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+        initial={reduceMotion ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-sm"
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full max-w-sm sm:max-w-[25rem] sm:rounded-[1.75rem] sm:border sm:border-border sm:bg-card/90 sm:px-8 sm:py-9 sm:shadow-float sm:backdrop-blur"
       >
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <motion.div
-            initial={reduceMotion ? false : { scale: 0.6, rotate: -12, opacity: 0 }}
-            animate={{ scale: 1, rotate: 0, opacity: 1 }}
-            transition={{ delay: 0.1, type: "spring", stiffness: 260, damping: 16 }}
-          >
-            <BrandLogo size={76} animated />
-          </motion.div>
+        <div className="mb-7 flex flex-col items-center gap-3">
+          <BrandLogo size={68} />
           <div className="text-center">
-            <h1 className="text-[1.7rem] font-black tracking-tight">حساب‌یار</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">حسابداری فروشگاه شما، همیشه همراه</p>
+            <h1 className="text-page font-black tracking-tight">حساب‌یار</h1>
+            <p className="text-label text-muted-foreground">حسابداری فروشگاه شما، همیشه همراه</p>
           </div>
         </div>
 
@@ -136,45 +130,43 @@ export default function LoginPage() {
           {passkeyAvailable && (
             <motion.div
               key="bio"
-              initial={{ opacity: 0, scale: 0.94 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.94 }}
-              transition={{ type: "spring", stiffness: 320, damping: 28 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
               className="flex flex-col items-center"
             >
               <FingerprintButton state={scan} onPress={loginWithPasskey} />
-              <div className="mt-4 h-10 text-center">
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.p
-                    key={scanMsg ?? scan}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    className={cn(
-                      "text-sm font-bold",
-                      scan === "error" ? "text-destructive" : scan === "success" ? "text-income" : "text-foreground"
-                    )}
-                  >
-                    {scanMsg ??
-                      (scan === "scanning"
-                        ? "انگشت یا چهره را تأیید کنید…"
-                        : scan === "success"
-                          ? "خوش آمدید"
-                          : "ورود با اثر انگشت / چهره")}
-                  </motion.p>
-                </AnimatePresence>
+              <div className="mt-5 min-h-12 text-center" aria-live="polite">
+                <p
+                  className={cn(
+                    "text-title font-extrabold",
+                    scan === "error" ? "text-destructive" : scan === "success" ? "text-income" : "text-foreground"
+                  )}
+                >
+                  {scan === "scanning"
+                    ? "انگشت یا چهره را تأیید کنید…"
+                    : scan === "success"
+                      ? "خوش آمدید"
+                      : scan === "error"
+                        ? (scanMsg ?? "ورود ناموفق بود")
+                        : "سلام، خوش برگشتید"}
+                </p>
+                <p className="mt-0.5 text-label text-muted-foreground">
+                  {scan === "error" ? "دوباره لمس کنید یا با رمز وارد شوید" : "برای ورود، اثر انگشت یا Face ID را تأیید کنید"}
+                </p>
               </div>
 
-              {/* نسخهٔ ۷: اقدام اصلی با برچسب صریح؛ ورود با رمز به‌عنوان راه دوم دیده می‌شود */}
+              {/* اقدام اصلی با برچسب صریح؛ ورود با رمز به‌عنوان راه دوم دیده می‌شود */}
               <Button
                 type="button"
                 size="lg"
                 onClick={loginWithPasskey}
                 disabled={scan === "scanning"}
-                className="mt-3 h-14 w-full rounded-2xl text-[0.95rem] font-bold shadow-fab"
+                className="mt-5 h-14 w-full rounded-2xl text-body font-bold shadow-fab"
               >
                 {scan === "scanning" ? <Loader2 className="size-5 animate-spin" /> : <Fingerprint className="size-5" />}
-                ورود با اثر انگشت یا چهره
+                ورود با اثر انگشت
               </Button>
               {!showForm && (
                 <Button
@@ -182,9 +174,9 @@ export default function LoginPage() {
                   variant="outline"
                   size="lg"
                   onClick={() => setShowForm(true)}
-                  className="mt-2 h-12 w-full rounded-2xl text-label font-bold hover:bg-accent"
+                  className="mt-2 h-12 w-full rounded-2xl bg-card text-label font-bold hover:bg-accent"
                 >
-                  ورود با نام کاربری و رمز
+                  ورود با رمز عبور
                 </Button>
               )}
             </motion.div>
@@ -203,7 +195,7 @@ export default function LoginPage() {
               transition={{ type: "spring", stiffness: 320, damping: 32 }}
               className={cn("overflow-hidden", passkeyAvailable && "mt-6")}
             >
-              <div className="space-y-4 rounded-[1.4rem] border border-border bg-card/95 p-5 backdrop-blur">
+              <div className="space-y-4 rounded-3xl border border-border bg-card p-5 sm:border-0 sm:bg-transparent sm:p-0">
                 <div className="space-y-1.5">
                   <Label htmlFor="username">نام کاربری</Label>
                   <div className="relative">
@@ -278,7 +270,7 @@ export default function LoginPage() {
           )}
         </AnimatePresence>
 
-        <p className="nums mt-8 text-center text-xs text-muted-foreground">{formatJalaliWithWeekday(nowTehran())}</p>
+        <p className="nums mt-7 text-center text-caption text-muted-foreground">{formatJalaliWithWeekday(nowTehran())}</p>
       </motion.div>
     </div>
   )
@@ -313,8 +305,14 @@ function FingerprintButton({ state, onPress }: { state: ScanState; onPress: () =
       style={{ ["--fp" as string]: color }}
       className="relative grid size-32 place-items-center rounded-full outline-none focus-visible:ring-4 focus-visible:ring-ring/30"
     >
-      {/* هاله‌های تپنده */}
+      {/* حلقهٔ ثابت دور دکمه؛ هالهٔ تپنده فقط هنگام اسکن (حرکت کمتر و معنادارتر) */}
+      <span
+        aria-hidden
+        className="absolute -inset-3 rounded-full border"
+        style={{ borderColor: "color-mix(in srgb, var(--fp) 14%, transparent)" }}
+      />
       {!reduce &&
+        state === "scanning" &&
         [0, 1].map((i) => (
           <motion.span
             key={i}
@@ -322,9 +320,9 @@ function FingerprintButton({ state, onPress }: { state: ScanState; onPress: () =
             style={{ borderColor: "color-mix(in srgb, var(--fp) 35%, transparent)" }}
             animate={{ scale: [1, 1.35], opacity: [0.7, 0] }}
             transition={{
-              duration: state === "scanning" ? 1.1 : 2.4,
+              duration: 1.1,
               repeat: Infinity,
-              delay: i * (state === "scanning" ? 0.55 : 1.2),
+              delay: i * 0.55,
               ease: "easeOut",
             }}
           />
@@ -411,21 +409,16 @@ function FingerprintButton({ state, onPress }: { state: ScanState; onPress: () =
 // ───────────────────────── پس‌زمینه ─────────────────────────
 
 function LoginBackdrop() {
-  const reduce = useReducedMotion()
+  // پس‌زمینهٔ آرام و ثابت: نور زمردی از بالا + دو کمان ظریف هم‌مرکز با لوگو؛ بدون لکه‌های متحرک و بافت نقطه‌ای
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0">
-      <div className="absolute inset-0 bg-[radial-gradient(60%_45%_at_50%_0%,color-mix(in_srgb,var(--primary)_14%,transparent),transparent)]" />
-      <motion.div
-        className="absolute -start-24 -top-24 size-96 rounded-full bg-primary/[0.09] blur-3xl"
-        animate={reduce ? undefined : { x: [0, 40, 0], y: [0, 30, 0] }}
-        transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className="absolute -bottom-32 -end-20 size-[26rem] rounded-full bg-[color:var(--hue-calendar)]/[0.07] blur-3xl"
-        animate={reduce ? undefined : { x: [0, -50, 0], y: [0, -25, 0] }}
-        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <div className="absolute inset-0 bg-[radial-gradient(color-mix(in_srgb,var(--foreground)_6%,transparent)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(70%_60%_at_50%_40%,black,transparent)]" />
+      <div className="absolute inset-x-0 top-0 h-[60vh] bg-[radial-gradient(70%_100%_at_50%_0%,color-mix(in_srgb,var(--primary)_16%,transparent),transparent_70%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-[40vh] bg-[linear-gradient(to_top,color-mix(in_srgb,var(--primary)_5%,transparent),transparent)]" />
+      <svg className="absolute left-1/2 top-[-18vh] h-[95vh] w-[95vh] -translate-x-1/2 text-primary" viewBox="0 0 100 100" fill="none">
+        <circle cx="50" cy="50" r="30" stroke="currentColor" strokeOpacity="0.07" strokeWidth="0.25" />
+        <circle cx="50" cy="50" r="40" stroke="currentColor" strokeOpacity="0.05" strokeWidth="0.25" />
+        <circle cx="50" cy="50" r="49.5" stroke="currentColor" strokeOpacity="0.035" strokeWidth="0.25" />
+      </svg>
     </div>
   )
 }

@@ -105,7 +105,7 @@ export function RoleBadge({ role, className }: { role?: string | null; className
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-micro font-bold",
+        "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-caption font-bold",
         className
       )}
       style={{
@@ -215,7 +215,7 @@ export function BalanceTag({ balance, className }: { balance: number; className?
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-caption font-bold leading-4",
         tone === "warning" && "bg-warning/12 text-warning-ink",
         tone === "purchase" && "bg-purchase/10 text-purchase",
         tone === "neutral" && "bg-muted text-muted-foreground",

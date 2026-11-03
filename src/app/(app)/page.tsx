@@ -4,21 +4,21 @@
  * داشبورد فروشگاه — وضعیت امروز/هفته/ماه، طلب و بستانکار، چک‌ها، نمودار
  * UI-03: اسکلتون • IMP-04: مدیریت خطا • ST-01: مقایسه دوره‌ای
  * نسخهٔ ۳: اعداد ثابت خوانا (بدون شمارندهٔ انیمیشنی)
- * نسخهٔ ۷: قهرمان یکدست + میانبرها، کاشی‌های تخت با جملهٔ مقایسه، فهرست‌ها با خط جداکننده و چیپ وضعیت
+ * نسخهٔ ۷: بدون ورود پلکانی کارت‌ها (حرکت کمتر)؛ قهرمان یکدست + میانبرها، کاشی‌های تخت با جملهٔ مقایسه، فهرست‌ها با خط جداکننده و چیپ وضعیت
  */
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { motion } from "framer-motion"
 import { HandCoins, CheckSquare2, ChevronLeft, ArrowDownLeft, ArrowUpRight } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatToman, formatTomanCompact, formatTomanParts, toPersianDigits } from "@/lib/money"
-import { formatJalaliShort, JALALI_MONTHS, jalaliDayKey, jalaliOf, nowTehran } from "@/lib/jalali"
+import { formatJalaliShort, formatJalaliWithWeekday, JALALI_MONTHS, jalaliDayKey, jalaliOf, nowTehran } from "@/lib/jalali"
 import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { DashboardSkeleton } from "@/components/ui/page-skeletons"
 import { ErrorState } from "@/components/ui/error-state"
 import { BalanceAvatar, formatOpenDays } from "@/components/ui/role-avatar"
 import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/layout/page-header"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { TrendChart, CollectionDonut, Sparkline, type Collection } from "@/components/charts/finance-charts"
@@ -80,16 +80,6 @@ interface PeriodSum {
   purchaseCount: number
 }
 
-/** MO-03: ترتیب ورود تدریجی */
-const stagger = {
-  hidden: { opacity: 0, y: 16 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.07, duration: 0.35, ease: [0.16, 1, 0.3, 1] as const },
-  }),
-}
-
 /** مبلغ فشرده: عدد پررنگ + واحد کوچک کم‌رنگ (هیچ‌وقت دو خطی نمی‌شود) */
 function Amt({ v, className, unitClassName }: { v: number; className?: string; unitClassName?: string }) {
   const { value, unit } = formatTomanParts(v)
@@ -121,10 +111,10 @@ function KpiTile({
   return (
     <Link
       href={href}
-      className="group flex flex-col rounded-[1.15rem] border border-border/80 bg-card p-3.5 transition-[border-color,box-shadow] hover:border-primary/30 hover:shadow-card-hover active:scale-[0.98] sm:p-4"
+      className="group flex flex-col rounded-3xl border border-border/80 bg-card p-3.5 transition-[border-color,box-shadow] hover:border-primary/30 hover:shadow-card-hover active:scale-[0.98] sm:p-4"
     >
       <p className="truncate text-label font-semibold text-muted-foreground">{label}</p>
-      <Amt v={value} className="mt-0.5 text-[1.3rem] font-extrabold tracking-tight" />
+      <Amt v={value} className="mt-0.5 text-xl font-extrabold tracking-tight" />
       {note && (
         <p
           className={cn(
@@ -166,9 +156,9 @@ function SectionCard({
   className?: string
 }) {
   return (
-    <section className={cn("overflow-hidden rounded-[1.25rem] border border-border/80 bg-card", className)}>
+    <section className={cn("overflow-hidden rounded-3xl border border-border/80 bg-card", className)}>
       <div className="flex items-baseline gap-2 px-4 pb-1 pt-3.5">
-        <h2 className="shrink-0 whitespace-nowrap text-[0.95rem] font-extrabold">{title}</h2>
+        <h2 className="shrink-0 whitespace-nowrap text-body font-extrabold">{title}</h2>
         {sub && <span className="nums min-w-0 truncate text-caption font-semibold text-muted-foreground">{sub}</span>}
         {href && (
           <Link
@@ -202,7 +192,7 @@ function DueChip({ daysLeft }: { daysLeft: number }) {
   return (
     <span
       className={cn(
-        "nums inline-block rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+        "nums inline-block rounded-full px-2 py-0.5 text-caption font-bold leading-4",
         daysLeft < 0
           ? "bg-destructive/10 text-destructive"
           : daysLeft === 0
@@ -264,10 +254,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="داشبورد" sub={`${formatJalaliWithWeekday(now)} | خوش آمدید`} className="!mb-0" />
       <div className="grid items-start gap-4 lg:grid-cols-[1.15fr_1fr]">
         {/* ───────── کارت قهرمان + میانبرها ───────── */}
-        <motion.div custom={0} variants={stagger} initial="hidden" animate="visible">
-          <div className="hero-solid relative overflow-hidden rounded-[1.4rem] p-5 text-white sm:p-6">
+        <div>
+          <div className="hero-solid relative overflow-hidden rounded-3xl p-5 text-white sm:p-6">
             <div className="flex items-center gap-2 text-label font-semibold text-white/85">
               فروش امروز
               {vsYesterday !== null && data.today.saleCount > 0 && (
@@ -278,9 +269,9 @@ export default function DashboardPage() {
             </div>
             {data.today.saleCount > 0 ? (
               <>
-                <p className="nums mt-1.5 text-[2.1rem] font-black leading-tight tracking-tight sm:text-[2.5rem]">
+                <p className="nums mt-1.5 text-display font-black tracking-tight">
                   {formatToman(data.today.sales, false)}
-                  <span className="ms-1.5 text-[0.95rem] font-semibold tracking-normal text-white/65">تومان</span>
+                  <span className="ms-1.5 text-body font-semibold tracking-normal text-white/65">تومان</span>
                 </p>
                 <p className="nums mt-0.5 text-label text-white/80">
                   {toPersianDigits(data.today.saleCount)} فاکتور | سود {formatToman(data.today.profit, false)}
@@ -288,7 +279,7 @@ export default function DashboardPage() {
               </>
             ) : (
               <>
-                <p className="mt-1.5 text-[1.4rem] font-black leading-tight sm:text-2xl">هنوز فروشی ثبت نشده</p>
+                <p className="mt-1.5 text-page font-black">هنوز فروشی ثبت نشده</p>
                 <p className="mt-1 text-label text-white/80">اولین فروش امروز را با دکمهٔ + ثبت کنید</p>
               </>
             )}
@@ -302,7 +293,7 @@ export default function DashboardPage() {
               ).map(([label, v], i) => (
                 <div key={label} className={cn(i > 0 && "border-s border-white/15 ps-3")}>
                   <p className="text-caption text-white/70">{label}</p>
-                  <Amt v={v} className="text-[0.95rem] font-extrabold" unitClassName="opacity-70" />
+                  <Amt v={v} className="text-body font-extrabold" unitClassName="opacity-70" />
                 </div>
               ))}
             </div>
@@ -317,7 +308,7 @@ export default function DashboardPage() {
               >
                 <span
                   className={cn(
-                    "grid size-9 place-items-center rounded-xl transition-transform group-hover:-translate-y-0.5",
+                    "grid size-9 place-items-center rounded-xl",
                     tone === "sale" && "bg-sale/10 text-sale",
                     tone === "purchase" && "bg-purchase/10 text-purchase",
                     tone === "warn" && "bg-warning/15 text-warning-ink"
@@ -329,24 +320,24 @@ export default function DashboardPage() {
               </Link>
             ))}
           </div>
-        </motion.div>
+        </div>
 
         {/* ───────── کاشی‌های KPI ───────── */}
-        <motion.div custom={1} variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
           <KpiTile
             href="/reports"
             label={`سود ${monthName}`}
             value={data.month.profit}
-            note={profitNote?.text}
-            noteTone={profitNote?.tone}
+            note={profitNote?.text ?? `از اول ${monthName}`}
+            noteTone={profitNote?.tone ?? "muted"}
             spark={monthDays.map((d) => d.profit)}
           />
           <KpiTile
             href="/reports"
             label={`فروش ${monthName}`}
             value={data.month.sales}
-            note={salesNote?.text}
-            noteTone={salesNote?.tone}
+            note={salesNote?.text ?? `${toPersianDigits(data.month.saleCount)} فاکتور از اول ${monthName}`}
+            noteTone={salesNote?.tone ?? "muted"}
             spark={monthDays.map((d) => d.sales)}
           />
           <KpiTile
@@ -366,30 +357,30 @@ export default function DashboardPage() {
             value={data.totalPayable}
             note={`${toPersianDigits(data.creditors.length)} فروشنده`}
           />
-        </motion.div>
+        </div>
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-5">
         {/* ───────── ستون اصلی ───────── */}
         <div className="space-y-4 lg:col-span-3">
-          <motion.div custom={2} variants={stagger} initial="hidden" animate="visible">
+          <div>
             <SectionCard title="روند فروش و سود">
               <div className="px-4 pb-4 pt-1">
                 <TrendChart series={data.series} height={210} />
               </div>
             </SectionCard>
-          </motion.div>
+          </div>
 
-          <motion.div custom={2.5} variants={stagger} initial="hidden" animate="visible">
+          <div>
             <SectionCard title={`وصول فروش ${monthName}`}>
               <div className="px-4 pb-4 pt-1">
                 <CollectionDonut data={data.monthCollection} />
               </div>
             </SectionCard>
-          </motion.div>
+          </div>
 
           {/* طلب‌ها و بدهی‌ها */}
-          <motion.div custom={3} variants={stagger} initial="hidden" animate="visible" className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <SectionCard
               title="طلب از مشتریان"
               sub={`${formatTomanCompact(data.totalReceivable)} | ${toPersianDigits(data.debtors.length)} نفر`}
@@ -415,10 +406,10 @@ export default function DashboardPage() {
               </div>
               {data.creditors.length === 0 && <EmptyLine>به کسی بدهکار نیستید</EmptyLine>}
             </SectionCard>
-          </motion.div>
+          </div>
 
           {/* آخرین فاکتورها */}
-          <motion.div custom={4} variants={stagger} initial="hidden" animate="visible">
+          <div>
             <SectionCard title="آخرین فاکتورها" href="/invoices">
               <div className="divide-y divide-border/60 pb-1">
                 {data.recentInvoices.map((inv) => (
@@ -435,7 +426,7 @@ export default function DashboardPage() {
                       <div className="nums text-sm font-extrabold">{formatTomanCompact(inv.total)}</div>
                       <span
                         className={cn(
-                          "mt-0.5 inline-block rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                          "mt-0.5 inline-block rounded-full px-2 py-0.5 text-caption font-bold leading-4",
                           inv.status === "SETTLED" ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
                         )}
                       >
@@ -449,12 +440,12 @@ export default function DashboardPage() {
                 <EmptyLine>هنوز فاکتوری ثبت نشده — از دکمهٔ + شروع کنید</EmptyLine>
               )}
             </SectionCard>
-          </motion.div>
+          </div>
         </div>
 
         {/* ───────── ستون کنار ───────── */}
         <div className="space-y-4 lg:col-span-2">
-          <motion.div custom={3} variants={stagger} initial="hidden" animate="visible">
+          <div>
             <SectionCard
               title="چک‌های پیش رو"
               sub={`دریافتی ${formatTomanCompact(data.checks.pendingReceivedTotal)} | صادره ${formatTomanCompact(data.checks.pendingIssuedTotal)}`}
@@ -482,9 +473,9 @@ export default function DashboardPage() {
               </div>
               {data.checks.upcoming.length === 0 && <EmptyLine>چکی در جریان نیست</EmptyLine>}
             </SectionCard>
-          </motion.div>
+          </div>
 
-          <motion.div custom={4} variants={stagger} initial="hidden" animate="visible">
+          <div>
             <SectionCard title="حساب‌های بانکی" sub={formatTomanCompact(data.totalBankBalance)} href="/accounts">
               <div className="divide-y divide-border/60 pb-1">
                 {data.accounts.map((a) => (
@@ -500,7 +491,7 @@ export default function DashboardPage() {
               </div>
               {data.accounts.length === 0 && <EmptyLine>هنوز حساب بانکی نساخته‌اید</EmptyLine>}
             </SectionCard>
-          </motion.div>
+          </div>
         </div>
       </div>
     </div>

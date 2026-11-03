@@ -118,7 +118,7 @@ export function AmountInput({
           className={cn(
             "nums text-end font-semibold tracking-wide",
             bare
-              ? "h-11 w-full bg-transparent text-[0.95rem] outline-none placeholder:font-medium placeholder:text-muted-foreground/70"
+              ? "h-11 w-full bg-transparent text-body outline-none placeholder:font-medium placeholder:text-muted-foreground/70"
               : "field"
           )}
         />

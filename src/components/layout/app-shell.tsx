@@ -12,17 +12,18 @@ import { useEffect, ReactNode, useState, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { apiGet } from "@/lib/api-client"
 import { useTelegram } from "@/hooks/use-telegram"
 import { useUIStore } from "@/lib/ui-store"
-import { formatJalaliShort, formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
+import { formatJalali, formatJalaliShort, formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
 import { formatToman, toPersianDigits } from "@/lib/money"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { GlobalSearch } from "@/components/search/global-search"
 import { BrandLogo } from "@/components/ui/brand-logo"
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, PackageX, Store, TriangleAlert } from "lucide-react"
 import {
   IconApps,
   IconBell,
@@ -64,6 +65,10 @@ function titleFor(pathname: string): string {
 
 type AlertsData = {
   dueCount: number
+  totalCount: number
+  overdueSales: { count: number; amount: number; days: number }
+  lowStock: { id: string; name: string; unit: string; stock: number; minStock: number }[]
+  lowStockCount: number
   dueChecks: {
     id: string
     amount: number
@@ -99,7 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const { isTelegram, haptic } = useTelegram()
-  const { moreSheetOpen, setMoreSheetOpen } = useUIStore()
+  const { moreSheetOpen, setMoreSheetOpen, pageSub } = useUIStore()
   const [searchOpen, setSearchOpen] = useState(false)
   const [alertsOpen, setAlertsOpen] = useState(false)
   const scrolledAway = useHideOnScroll()
@@ -115,6 +120,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   })
   const dueCount = alerts?.dueCount ?? 0
+  // عدد زنگ: همهٔ «کار امروز» (چک سررسیدی + نسیهٔ معوق + کالای تمام‌شده)
+  const todoCount = alerts?.totalCount ?? dueCount
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href))
   const isFormRoute = FORM_ROUTES.some((r) => pathname.startsWith(r))
@@ -149,31 +156,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background">
       {/* ───────── سایدبار دسکتاپ ───────── */}
       {showSidebar ? (
-        <aside className="fixed inset-y-0 start-0 z-40 hidden w-[16rem] flex-col border-e border-sidebar-border bg-sidebar lg:flex">
-          <div className="flex items-center gap-2.5 px-5 pb-1 pt-5">
+        <aside className="fixed inset-y-0 start-0 z-40 hidden w-[15.25rem] flex-col border-e border-sidebar-border bg-[#fbfcfb] px-3 pb-3 pt-4 lg:flex">
+          <div className="flex items-center gap-2.5 px-1.5 pt-0.5">
             <BrandLogo size={34} />
             <div className="text-base font-black tracking-tight">حساب‌یار</div>
           </div>
 
-          {/* فاکتور جدید: فروش (اصلی) + خرید */}
-          <div className="flex gap-1.5 px-3 pb-3 pt-4">
-            <Link
-              href="/invoices/new"
-              className="group flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-fab transition-[filter,transform] hover:brightness-110 active:scale-[0.98]"
-            >
-              <IconPlus active={isFormRoute} className="size-[1.05rem]" strokeWidth={2.4} />
-              فاکتور فروش
-            </Link>
-            <Link
-              href="/invoices/new?type=PURCHASE"
-              title="فاکتور خرید جدید"
-              className="flex h-10 items-center justify-center rounded-xl bg-purchase/10 px-3 text-label font-bold text-purchase transition-colors hover:bg-purchase/15"
-            >
-              خرید
-            </Link>
-          </div>
+          {/* دکمهٔ دوتکه: فاکتور فروش (اصلی) + فلش برای انواع دیگر */}
+          <NewInvoiceSplit active={isFormRoute} />
 
-          <nav className="flex flex-1 flex-col justify-start gap-0.5 px-3 pb-4 pt-1">
+          <nav className="flex flex-1 flex-col justify-start gap-0.5">
             {NAV_LIST.map((item) => (
               <SidebarItem
                 key={item.href}
@@ -184,21 +176,28 @@ export function AppShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2 border-t border-sidebar-border px-4 py-3">
-            <div className="nums min-w-0 flex-1 truncate text-caption text-muted-foreground">{today}</div>
+          <div className="flex items-center gap-2.5 border-t border-sidebar-border px-1.5 pt-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-secondary-foreground">
+              <Store className="size-[1.05rem]" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-label font-bold">فروشگاه شما</div>
+              <div className="nums truncate text-caption text-muted-foreground">{formatJalali(now)}</div>
+            </div>
             <button
               onClick={logout}
-              className="group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-caption font-semibold text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              aria-label="خروج از حساب"
+              title="خروج"
+              className="grid size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             >
-              <IconLogout className="size-4" />
-              خروج
+              <IconLogout className="size-[1.1rem]" />
             </button>
           </div>
         </aside>
       ) : null}
 
       {/* ───────── محتوا ───────── */}
-      <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-[16rem]")}>
+      <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-[15.25rem]")}>
         {/* هدر موبایل — جمع‌وجور: عنوان بزرگ + جستجو + زنگ */}
         <header
           className={cn(
@@ -208,45 +207,35 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
-              <AnimatePresence mode="popLayout" initial={false}>
-                <motion.h1
-                  key={titleFor(pathname)}
-                  initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.2 }}
-                  className="truncate text-[1.4rem] font-extrabold leading-tight tracking-tight"
-                >
-                  {titleFor(pathname)}
-                </motion.h1>
-              </AnimatePresence>
-              <div className="nums truncate text-caption font-medium text-muted-foreground">{today}</div>
+              <h1 className="truncate text-page font-extrabold tracking-tight">{titleFor(pathname)}</h1>
+              <div className="nums truncate text-caption font-medium text-muted-foreground">{pageSub ?? today}</div>
             </div>
             <HeaderButton label="جستجوی سراسری" onClick={() => setSearchOpen(true)}>
               <IconSearch className="size-[1.2rem]" />
             </HeaderButton>
-            <HeaderButton label="کار امروز" onClick={() => setAlertsOpen(true)} count={dueCount}>
-              <IconBell className="size-[1.2rem]" active={dueCount > 0} />
+            <HeaderButton label="کار امروز" onClick={() => setAlertsOpen(true)} count={todoCount}>
+              <IconBell className="size-[1.2rem]" active={todoCount > 0} />
             </HeaderButton>
           </div>
         </header>
 
         {/* نوار بالای دسکتاپ — جستجوی سراسری و زنگ */}
-        <div className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b border-border/70 bg-background/85 px-8 backdrop-blur-xl lg:flex">
+        <div className="sticky top-0 z-30 hidden h-[3.75rem] items-center gap-3 border-b border-border bg-background/85 px-8 backdrop-blur-xl lg:flex">
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="group flex h-9 w-full max-w-md items-center gap-2 rounded-xl border border-border bg-card px-3 text-label text-muted-foreground transition-colors hover:border-primary/40"
+            className="group flex h-10 w-full max-w-[27.5rem] items-center gap-2 rounded-xl border border-border bg-card px-3 text-label text-muted-foreground transition-colors hover:border-primary/40"
           >
             <IconSearch className="size-4" />
             جستجوی فاکتور، شخص، کالا یا چک…
-            <kbd className="ms-auto rounded-md border border-border bg-muted/60 px-1.5 font-sans text-micro font-bold" dir="ltr">
+            <kbd className="ms-auto rounded-md border border-border bg-muted/60 px-1.5 font-sans text-caption font-bold" dir="ltr">
               Ctrl K
             </kbd>
           </button>
           <span className="flex-1" />
-          <HeaderButton label="کار امروز" onClick={() => setAlertsOpen(true)} count={dueCount}>
-            <IconBell className="size-[1.15rem]" active={dueCount > 0} />
+          <span className="nums text-label font-medium text-muted-foreground">{today}</span>
+          <HeaderButton label="کار امروز" onClick={() => setAlertsOpen(true)} count={todoCount}>
+            <IconBell className="size-[1.15rem]" active={todoCount > 0} />
           </HeaderButton>
         </div>
 
@@ -267,7 +256,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         initial={false}
         animate={{ y: navHidden ? 150 : 0, opacity: navHidden ? 0 : 1 }}
         transition={{ type: "spring", stiffness: 420, damping: 38 }}
-        className="hy-nav fixed inset-x-4 z-40 mx-auto grid h-16 max-w-md grid-cols-5 items-center rounded-[1.4rem] px-1 [bottom:max(1rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+0.25rem))] lg:hidden"
+        className="hy-nav fixed inset-x-4 z-40 mx-auto grid h-16 max-w-md grid-cols-5 items-center rounded-3xl px-1 [bottom:max(1rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+0.25rem))] lg:hidden"
       >
         <BottomNavItem href="/" label="خانه" active={isActive("/")} />
         <BottomNavItem href="/invoices" label="فاکتورها" active={isActive("/invoices")} />
@@ -281,9 +270,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               router.push("/invoices/new")
             }}
             aria-label="فاکتور جدید"
-            whileTap={reduceMotion ? undefined : { scale: 0.9, rotate: 90 }}
+            whileTap={reduceMotion ? undefined : { scale: 0.92 }}
             transition={{ type: "spring", stiffness: 520, damping: 26 }}
-            className="hy-fab absolute -top-5 grid size-14 place-items-center rounded-[1.15rem] text-primary-foreground"
+            className="hy-fab absolute -top-5 grid size-14 place-items-center rounded-2xl text-primary-foreground"
           >
             <IconPlus className="relative size-6" strokeWidth={2.6} />
           </motion.button>
@@ -303,50 +292,105 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
 
-      {/* ───────── شیت «کار امروز» ───────── */}
+      {/* ───────── شیت «کار امروز» — چک‌های سررسیدی، نسیهٔ معوق، کالای تمام‌شده ───────── */}
       <BottomSheet
         open={alertsOpen}
         onClose={() => setAlertsOpen(false)}
         title="کار امروز"
-        description={dueCount ? `${toPersianDigits(dueCount)} چک سررسید امروز یا گذشته` : "همه‌چیز مرتب است"}
+        description={todoCount ? `${toPersianDigits(todoCount)} مورد نیاز به پیگیری دارد` : "همه‌چیز مرتب است"}
       >
-        {dueCount === 0 ? (
+        {todoCount === 0 && !alerts?.lowStockCount ? (
           <div className="py-8 text-center">
             <span className="mx-auto grid size-14 place-items-center rounded-full bg-income/10 text-income">
               <IconBell className="size-6" />
             </span>
-            <p className="mt-3 text-sm font-bold">چک سررسیدی برای امروز ندارید</p>
-            <p className="mt-1 text-caption text-muted-foreground">صبح هر روز یادآوری در تلگرام هم می‌آید.</p>
+            <p className="mt-3 text-sm font-bold">امروز کار عقب‌افتاده‌ای ندارید</p>
+            <p className="mt-1 text-caption text-muted-foreground">چک سررسیدی، نسیهٔ معوق یا کالای تمام‌شده نیست.</p>
           </div>
         ) : (
-          <div className="divide-y divide-border/70">
-            {alerts?.dueChecks.map((c) => (
+          <div className="space-y-4">
+            {dueCount > 0 && (
+              <section>
+                <h3 className="mb-1 text-label font-extrabold text-foreground/80">چک‌های سررسید امروز یا گذشته</h3>
+                <div className="divide-y divide-border/70">
+                  {alerts?.dueChecks.map((c) => (
+                    <Link
+                      key={c.id}
+                      href="/checks"
+                      onClick={() => setAlertsOpen(false)}
+                      className="flex items-center gap-3 py-3 transition-colors hover:bg-accent/40"
+                    >
+                      <BankLogo bankKey={c.bankKey} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-bold">{c.personName}</div>
+                        <div className="nums text-caption text-muted-foreground">
+                          {c.direction === "RECEIVED" ? "دریافتی" : "صادره"} | {formatJalaliShort(new Date(c.dueDate))}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-end">
+                        <div className="nums text-sm font-extrabold">{formatToman(c.amount, false)}</div>
+                        <span
+                          className={cn(
+                            "mt-0.5 inline-block rounded-full px-2 py-0.5 text-caption font-bold",
+                            c.daysLeft < 0 ? "bg-destructive/10 text-destructive" : "bg-warning/12 text-warning-ink"
+                          )}
+                        >
+                          {c.daysLeft < 0 ? `${toPersianDigits(-c.daysLeft)} روز گذشته` : "امروز"}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+            {(alerts?.overdueSales.count ?? 0) > 0 && (
               <Link
-                key={c.id}
-                href="/checks"
+                href="/invoices?overdue=1"
                 onClick={() => setAlertsOpen(false)}
-                className="flex items-center gap-3 py-3 transition-colors hover:bg-accent/40"
+                className="flex items-center gap-3 rounded-2xl bg-destructive/[0.06] px-3 py-3 transition-colors hover:bg-destructive/10"
               >
-                <BankLogo bankKey={c.bankKey} size={40} />
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-destructive/10 text-destructive">
+                  <TriangleAlert className="size-5" />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold">{c.personName}</div>
-                  <div className="nums text-caption text-muted-foreground">
-                    {c.direction === "RECEIVED" ? "دریافتی" : "صادره"} | {formatJalaliShort(new Date(c.dueDate))}
+                  <div className="text-sm font-bold">
+                    {toPersianDigits(alerts!.overdueSales.count)} فاکتور نسیهٔ معوق
+                  </div>
+                  <div className="text-caption text-muted-foreground">
+                    بیش از {toPersianDigits(alerts!.overdueSales.days)} روز بدون تسویه
                   </div>
                 </div>
-                <div className="shrink-0 text-end">
-                  <div className="nums text-sm font-extrabold">{formatToman(c.amount, false)}</div>
-                  <span
-                    className={cn(
-                      "mt-0.5 inline-block rounded-full px-2 py-0.5 text-micro font-bold",
-                      c.daysLeft < 0 ? "bg-destructive/10 text-destructive" : "bg-warning/12 text-warning-ink"
-                    )}
-                  >
-                    {c.daysLeft < 0 ? `${toPersianDigits(-c.daysLeft)} روز گذشته` : "امروز"}
-                  </span>
-                </div>
+                <span className="nums shrink-0 text-sm font-extrabold">{formatToman(alerts!.overdueSales.amount, false)}</span>
               </Link>
-            ))}
+            )}
+            {(alerts?.lowStockCount ?? 0) > 0 && (
+              <section>
+                <h3 className="mb-1 text-label font-extrabold text-foreground/80">موجودی انبار</h3>
+                <div className="divide-y divide-border/70">
+                  {alerts!.lowStock.map((p) => (
+                    <Link
+                      key={p.id}
+                      href="/products"
+                      onClick={() => setAlertsOpen(false)}
+                      className="flex items-center gap-3 py-2.5 transition-colors hover:bg-accent/40"
+                    >
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
+                        <PackageX className="size-[1.1rem]" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{p.name}</span>
+                      <span
+                        className={cn(
+                          "nums shrink-0 rounded-full px-2 py-0.5 text-caption font-bold",
+                          p.stock <= 0 ? "bg-destructive/10 text-destructive" : "bg-warning/12 text-warning-ink"
+                        )}
+                      >
+                        {p.stock <= 0 ? "تمام شده" : `کم · ${toPersianDigits(p.stock)} ${p.unit}`}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </BottomSheet>
@@ -354,17 +398,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ───────── شیت «بیشتر» ───────── */}
       <BottomSheet open={moreSheetOpen} onClose={() => setMoreSheetOpen(false)} title="همهٔ بخش‌ها" desktopMode="dialog">
         <div className="grid grid-cols-3 gap-x-2 gap-y-4 pt-1">
-          {MORE_ITEMS.map((item, i) => {
+          {MORE_ITEMS.map((item) => {
             const { icon: Icon, hue } = SECTION_META[item.href]
             const active = isActive(item.href)
             return (
               <motion.button
                 key={item.href}
                 type="button"
-                initial={reduceMotion ? false : { opacity: 0, scale: 0.8, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ delay: 0.04 + i * 0.035, type: "spring", stiffness: 460, damping: 28 }}
-                whileTap={{ scale: 0.92 }}
+                whileTap={reduceMotion ? undefined : { scale: 0.95 }}
                 onClick={() => {
                   setMoreSheetOpen(false)
                   go(item.href)
@@ -374,7 +415,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <span
                   className={cn(
-                    "relative grid size-[3.6rem] place-items-center rounded-[1.25rem] transition-colors",
+                    "relative grid size-[3.6rem] place-items-center rounded-3xl transition-colors",
                     active ? "bg-primary text-primary-foreground" : "icon-soft"
                   )}
                 >
@@ -404,6 +445,73 @@ export function AppShell({ children }: { children: ReactNode }) {
           خروج از حساب
         </button>
       </BottomSheet>
+    </div>
+  )
+}
+
+/** دکمهٔ دوتکهٔ سایدبار: «+ فاکتور فروش» و فلش چسبیده که انواع فاکتور را باز می‌کند (طرح S1) */
+function NewInvoiceSplit({ active }: { active: boolean }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false)
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [open])
+  const items = [
+    { href: "/invoices/new", label: "فاکتور فروش", hint: "پول می‌آید", Icon: ArrowDownLeft, cls: "bg-sale/10 text-sale" },
+    { href: "/invoices/new?type=PURCHASE", label: "فاکتور خرید", hint: "پول می‌رود", Icon: ArrowUpRight, cls: "bg-purchase/10 text-purchase" },
+  ]
+  return (
+    <div ref={ref} className="relative mb-3 mt-4">
+      <div className="flex h-10 overflow-hidden rounded-xl bg-primary text-primary-foreground shadow-fab">
+        <Link
+          href="/invoices/new"
+          className="flex flex-1 items-center justify-center gap-1.5 text-sm font-bold transition-colors hover:bg-white/10"
+        >
+          <IconPlus active={active} className="size-[1.05rem]" strokeWidth={2.4} />
+          فاکتور فروش
+        </Link>
+        <button
+          type="button"
+          aria-label="انواع فاکتور"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="grid w-10 place-items-center border-s border-white/25 transition-colors hover:bg-white/10"
+        >
+          <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
+        </button>
+      </div>
+      {open && (
+        <div role="menu" className="absolute inset-x-0 top-full z-50 mt-1.5 rounded-xl border border-border bg-popover p-1 shadow-float">
+          {items.map(({ href, label, hint, Icon, cls }) => (
+            <Link
+              key={href}
+              role="menuitem"
+              href={href}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-accent"
+            >
+              <span className={cn("grid size-8 place-items-center rounded-lg", cls)}>
+                <Icon className="size-4" />
+              </span>
+              <span className="flex-1">
+                <span className="block text-label font-bold">{label}</span>
+                <span className="block text-caption text-muted-foreground">{hint}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -458,7 +566,7 @@ function SidebarItem({ item, active, count }: { item: NavItem; active: boolean; 
       </span>
       <span className="relative flex-1">{item.label}</span>
       {count > 0 && (
-        <span className="nums relative rounded-full bg-warning/15 px-2 text-micro font-extrabold leading-5 text-warning-ink">
+        <span className="nums relative rounded-full bg-warning/15 px-2 text-caption font-extrabold leading-5 text-warning-ink">
           {toPersianDigits(count)}
         </span>
       )}

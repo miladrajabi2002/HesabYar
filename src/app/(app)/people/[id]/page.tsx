@@ -614,7 +614,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
             {data.openDays != null && (
               <span
                 className={cn(
-                  "nums rounded-full px-2 py-0.5 text-micro font-bold",
+                  "nums rounded-full px-2 py-0.5 text-caption font-bold",
                   data.openDays > 30 ? "bg-destructive text-white" : "bg-card/70 text-muted-foreground"
                 )}
               >
@@ -638,7 +638,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                 color={balance > 0 ? "var(--warning)" : balance < 0 ? "var(--role-supplier)" : "var(--income)"}
                 height={30}
               />
-              <div className="mt-0.5 text-micro text-muted-foreground">گردش مبادلات ۶ ماه اخیر</div>
+              <div className="mt-0.5 text-caption text-muted-foreground">گردش مبادلات ۶ ماه اخیر</div>
             </div>
           )}
         </div>
@@ -651,7 +651,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
             { label: "چک در جریان", value: `${toPersianDigits(pendingChecks.length)} فقره`, tone: "var(--hue-checks)" },
           ].map((st) => (
             <div key={st.label} className="rounded-xl bg-muted/50 px-1 py-2">
-              <div className="truncate text-micro text-muted-foreground">{st.label}</div>
+              <div className="truncate text-caption text-muted-foreground">{st.label}</div>
               <div
                 className="nums mt-0.5 truncate text-label font-extrabold"
                 style={{ color: `color-mix(in srgb, ${st.tone} 85%, black)` }}
@@ -715,7 +715,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       <div className="min-w-0 space-y-4">
       {/* فاکتورها */}
       <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
+        <div className="mb-1 flex items-center gap-2 text-body font-extrabold">
           فاکتورها <span className="nums text-caption font-semibold text-muted-foreground">{toPersianDigits(data.invoices.length)}</span>
         </div>
         <div className="divide-y divide-border/60">
@@ -737,7 +737,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               <div className="shrink-0 text-end">
                 <div className="nums text-sm font-extrabold">{formatToman(inv.total, false)}</div>
                 {inv.credit > 0 && (
-                  <div className="nums text-micro font-bold text-warning-ink">
+                  <div className="nums text-caption font-bold text-warning-ink">
                     مانده {formatTomanCompact(inv.credit)}
                   </div>
                 )}
@@ -754,7 +754,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
       {data.checks.length > 0 && (
       <>
       <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-1 flex items-center gap-2 text-[0.95rem] font-extrabold">
+        <div className="mb-1 flex items-center gap-2 text-body font-extrabold">
           چک‌ها <span className="nums text-caption font-semibold text-muted-foreground">{toPersianDigits(data.checks.length)}</span>
         </div>
         <div className="divide-y divide-border/60">
@@ -774,7 +774,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
               <CheckDirectionBadge direction={c.direction} size="sm" />
               <span
                 className={cn(
-                  "shrink-0 rounded-md px-1.5 py-px text-micro font-bold",
+                  "shrink-0 rounded-md px-1.5 py-px text-caption font-bold",
                   c.status === "CASHED"
                     ? "bg-income/10 text-income"
                     : c.status === "PENDING"
@@ -884,7 +884,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   ) : (
                     <div className="flex size-full flex-col items-center justify-center gap-1 p-2 text-center">
                       <FileText className="size-6 text-muted-foreground" />
-                      <span className="w-full truncate text-micro text-muted-foreground">{att.filename}</span>
+                      <span className="w-full truncate text-caption text-muted-foreground">{att.filename}</span>
                     </div>
                   )}
                   <button

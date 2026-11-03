@@ -94,8 +94,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             disabled={busy}
             className={
               isDanger
-                ? "h-[3.25rem] w-full rounded-2xl bg-destructive text-[0.95rem] font-bold hover:bg-destructive/90"
-                : "h-[3.25rem] w-full rounded-2xl text-[0.95rem] font-bold"
+                ? "h-[3.25rem] w-full rounded-2xl bg-destructive text-body font-bold hover:bg-destructive/90"
+                : "h-[3.25rem] w-full rounded-2xl text-body font-bold"
             }
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}

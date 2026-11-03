@@ -65,20 +65,12 @@ function Dot({ cx, cy, r = 1.1 }: { cx: number; cy: number; r?: number }) {
   return <circle cx={cx} cy={cy} r={r} fill="currentColor" stroke="none" />
 }
 
-const MOTION: Record<MotionKind, TargetAndTransition> = {
-  pop: { scale: [1, 0.82, 1.14, 1], transition: { duration: 0.55 } },
-  tilt: { rotate: [0, -12, 6, 0], transition: { duration: 0.6 } },
-  swing: { rotate: [0, 16, -11, 5, 0], transition: { duration: 0.75 } },
-  bounce: { y: [0, -3.5, 0.8, 0], transition: { duration: 0.55 } },
-  spin: { rotate: [0, 90], transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } },
-  slide: { x: [0, -3, 1.5, 0], transition: { duration: 0.55 } },
-}
+// نسخهٔ ۷ (حرکت کمتر): آیکون‌ها با فعال شدن دیگر تکان نمی‌خورند؛ فقط ضخامت خط و رنگ تغییر می‌کند
 const REST: TargetAndTransition = { scale: 1, rotate: 0, x: 0, y: 0 }
 
 function makeIcon(name: string, motionKind: MotionKind, body: () => ReactNode) {
   function Icon({ active = false, className, strokeWidth, duotone = false }: AppIconProps) {
-    const reduce = useReducedMotion()
-    const animate = !reduce
+    const animate = !useReducedMotion()
     return (
       <Ctx.Provider value={{ active, animate, duotone }}>
         <motion.svg
@@ -92,7 +84,7 @@ function makeIcon(name: string, motionKind: MotionKind, body: () => ReactNode) {
           data-motion={motionKind}
           className={cn("hy-icon size-5 shrink-0", className)}
           initial={false}
-          animate={active && animate ? MOTION[motionKind] : REST}
+          animate={REST}
           style={{ originX: "50%", originY: motionKind === "swing" ? "15%" : "50%" }}
         >
           {body()}

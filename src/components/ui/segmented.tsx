@@ -38,7 +38,7 @@ export function Segmented<T extends string>({
     <div
       role="tablist"
       className={cn(
-        "relative flex rounded-[0.9rem] bg-[color-mix(in_srgb,var(--muted)_100%,var(--border)_35%)] p-1",
+        "relative flex rounded-md bg-[color-mix(in_srgb,var(--muted)_100%,var(--border)_35%)] p-1",
         size === "sm" ? "gap-0.5" : "gap-1",
         className
       )}
@@ -54,7 +54,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.key)}
             style={{ ["--seg" as string]: o.tone ?? "var(--primary)" }}
             className={cn(
-              "relative z-10 flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[0.65rem] font-bold transition-colors duration-200",
+              "relative z-10 flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm font-bold transition-colors duration-200",
               size === "sm" ? "h-8 px-2 text-caption" : "h-9 px-3 text-label",
               on ? "text-[color:var(--seg)]" : "text-muted-foreground hover:text-foreground"
             )}
@@ -62,7 +62,7 @@ export function Segmented<T extends string>({
             {on && (
               <motion.span
                 layoutId={`seg-${layoutId}`}
-                className="absolute inset-0 -z-10 rounded-[0.65rem] bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08),0_2px_8px_-3px_rgb(16_24_40/0.12)]"
+                className="absolute inset-0 -z-10 rounded-sm bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08),0_2px_8px_-3px_rgb(16_24_40/0.12)]"
                 transition={{ type: "spring", stiffness: 520, damping: 38 }}
               />
             )}
@@ -71,7 +71,7 @@ export function Segmented<T extends string>({
             {o.count !== undefined && o.count > 0 && (
               <span
                 className={cn(
-                  "nums grid h-4 min-w-4 place-items-center rounded-full px-1 text-micro leading-none",
+                  "nums grid h-4 min-w-4 place-items-center rounded-full px-1 text-caption leading-none",
                   on ? "bg-[color:var(--seg)] text-white" : "bg-foreground/8 text-muted-foreground"
                 )}
               >

@@ -42,6 +42,7 @@ import { Input } from "@/components/ui/input"
 import { useConfirm } from "@/components/ui/confirm"
 import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/layout/page-header"
 import { Segmented } from "@/components/ui/segmented"
 import { SwipeRow } from "@/components/ui/swipe-row"
 
@@ -202,6 +203,9 @@ export default function ChecksPage() {
 
   const checks = data?.checks ?? []
   const summary = data?.summary
+  const checksSub = summary
+    ? `در جریان: دریافتی ${formatTomanCompact(summary.pendingReceived)} | صادره ${formatTomanCompact(summary.pendingIssued)}`
+    : null
 
   const cashCheck = async (check: Check, accountId: string) => {
     setSaving(true)
@@ -405,7 +409,7 @@ export default function ChecksPage() {
 
   return (
     <div>
-      <h1 className="mb-4 hidden text-2xl font-extrabold tracking-tight lg:block">چک‌ها</h1>
+      <PageHeader title="چک‌ها" sub={checksSub} />
 
       {/* خلاصه — دو کارت در جریان با نوار نسبت */}
       {summary && (
@@ -427,7 +431,7 @@ export default function ChecksPage() {
                 onClick={() => setDirection(direction === c.key ? "ALL" : c.key)}
                 style={{ ["--tile" as string]: c.tone }}
                 className={cn(
-                  "rounded-[1.15rem] border bg-card p-3.5 text-start transition-all active:scale-[0.98]",
+                  "rounded-3xl border bg-card p-3.5 text-start transition-all active:scale-[0.98]",
                   direction === c.key
                     ? "border-[color:var(--tile)] ring-2 ring-[color:color-mix(in_srgb,var(--tile)_18%,transparent)]"
                     : "border-border/70"
@@ -505,7 +509,7 @@ export default function ChecksPage() {
                   </span>
                 </div>
               )}
-              <div className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+              <div className="overflow-hidden rounded-3xl border border-border/80 bg-card">
                 {g.items.map((c, i) => {
             const daysLeft = diffJalaliDays(today, new Date(c.dueDate))
                   const overdue = c.status === "PENDING" && daysLeft < 0
@@ -521,7 +525,7 @@ export default function ChecksPage() {
                       className={cn(i > 0 && "border-t border-border/60")}
                     >
                     <SwipeRow
-                      hint={i === 0 && swipeable}
+                      hint={swipeable}
                       disabled={!swipeable}
                       trailing={[
                         {
@@ -593,7 +597,7 @@ export default function ChecksPage() {
                           </div>
                           <div
                             className={cn(
-                              "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                              "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-bold leading-4",
                               c.status === "CASHED"
                                 ? "bg-income/10 text-income"
                                 : c.status === "BOUNCED"
@@ -633,7 +637,7 @@ export default function ChecksPage() {
                         </div>
                       </div>
                       {(c.serial || c.invoice || c.status === "PENDING") && (
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5 ps-[3.375rem] text-micro text-muted-foreground">
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 ps-[3.375rem] text-caption text-muted-foreground">
                           {c.serial && (
                             <span className="nums rounded-lg bg-muted px-2 py-0.5">سریال {c.serial}</span>
                           )}
@@ -717,7 +721,7 @@ export default function ChecksPage() {
               <Button
                 onClick={() => (actionSheet.isRegistered ? setAccountSheet(true) : toast.error("چک ثبت‌نشده قابل پاس شدن نیست"))}
                 disabled={!actionSheet.isRegistered}
-                className="h-[3.25rem] rounded-2xl bg-income text-[0.95rem] font-bold hover:bg-income/90"
+                className="h-[3.25rem] rounded-2xl bg-income text-body font-bold hover:bg-income/90"
               >
                 <CheckCircle2 className="size-5" />
                 {actionSheet.direction === "RECEIVED" ? "پاس شد" : "پرداخت شد"}
@@ -726,7 +730,7 @@ export default function ChecksPage() {
                 onClick={() => (actionSheet.isRegistered ? bounceCheck(actionSheet) : toast.error("چک ثبت‌نشده قابل برگشت نیست"))}
                 disabled={!actionSheet.isRegistered}
                 variant="ghost"
-                className="h-[3.25rem] rounded-2xl bg-destructive/10 text-[0.95rem] font-bold text-destructive hover:bg-destructive/15 hover:text-destructive"
+                className="h-[3.25rem] rounded-2xl bg-destructive/10 text-body font-bold text-destructive hover:bg-destructive/15 hover:text-destructive"
               >
                 <Undo2 className="size-5" />
                 برگشت خورد
@@ -758,7 +762,7 @@ export default function ChecksPage() {
                 </span>
                 <span
                   className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                    "shrink-0 rounded-full px-2 py-0.5 text-caption font-bold leading-4",
                     actionSheet.isRegistered ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
                   )}
                 >
@@ -817,7 +821,7 @@ export default function ChecksPage() {
                             ) : (
                               <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
                                 <FileText className="size-5 text-muted-foreground" />
-                                <span className="w-full truncate text-micro text-muted-foreground">
+                                <span className="w-full truncate text-caption text-muted-foreground">
                                   {att.filename}
                                 </span>
                               </div>

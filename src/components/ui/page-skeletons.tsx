@@ -12,7 +12,7 @@ export function DashboardSkeleton() {
       {/* قهرمان + میانبرها | کاشی‌ها — هم‌شکل داشبورد نسخهٔ ۷ */}
       <div className="grid items-start gap-4 lg:grid-cols-[1.15fr_1fr]">
         <div>
-          <div className="hero-solid space-y-2.5 rounded-[1.4rem] p-5 opacity-80 sm:p-6">
+          <div className="hero-solid space-y-2.5 rounded-3xl p-5 opacity-80 sm:p-6">
             <Skeleton className="h-3 w-20 bg-white/20" />
             <Skeleton className="h-9 w-52 bg-white/25" />
             <Skeleton className="h-3 w-36 bg-white/20" />
@@ -30,7 +30,7 @@ export function DashboardSkeleton() {
         </div>
         <div className="grid grid-cols-2 gap-2.5">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-[1.15rem] border border-border/80 bg-card p-3.5 sm:p-4">
+            <div key={i} className="rounded-3xl border border-border/80 bg-card p-3.5 sm:p-4">
               <Skeleton className="h-3 w-24" />
               <Skeleton className="mt-2 h-7 w-28" />
               <Skeleton className="mt-2 h-3 w-20" />
@@ -80,7 +80,7 @@ export function ListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     // نسخهٔ ۷: هم‌شکل ردیف واقعی — یک کارت با ردیف‌های خط‌دار
     <div
-      className="divide-y divide-border/60 overflow-hidden rounded-[1.25rem] border border-border/80 bg-card"
+      className="divide-y divide-border/60 overflow-hidden rounded-3xl border border-border/80 bg-card"
       aria-busy="true"
       aria-label="در حال بارگذاری لیست"
     >

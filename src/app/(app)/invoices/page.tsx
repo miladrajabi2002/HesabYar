@@ -8,6 +8,7 @@
 import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { usePageSub } from "@/components/layout/page-header"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 import { toast } from "sonner"
@@ -85,7 +86,7 @@ function InvoicesPageInner() {
   const [debouncedQ, setDebouncedQ] = useState("")
   const [page, setPage] = useState(1)
   // فقط نسیه‌های بیش از ۳۰ روز (از بنر هشدار)
-  const [overdueOnly, setOverdueOnly] = useState(false)
+  const [overdueOnly, setOverdueOnly] = useState(searchParams.get("overdue") === "1")
   // ADV-02: وضعیت ساخت خروجی اکسل
   const [exporting, setExporting] = useState(false)
 
@@ -123,6 +124,16 @@ function InvoicesPageInner() {
   const overdue = data?.overdue
   const hasMore = page * PAGE_SIZE < total
   const isEmpty = !isLoading && invoices.length === 0
+
+  // X1: جستجوی بی‌نتیجه → نزدیک‌ترین نام شخص را پیشنهاد بده («شاید منظورتان … باشد»)
+  const suggestKey = (debouncedQ.split(/\s+/).sort((a, b) => b.length - a.length)[0] ?? "").trim()
+  const { data: suggestData } = useQuery({
+    queryKey: ["search-suggest", suggestKey],
+    queryFn: () => apiGet<{ people: { id: string; name: string }[] }>(`/api/search?q=${encodeURIComponent(suggestKey)}`),
+    enabled: isEmpty && suggestKey.length >= 2,
+    staleTime: 60_000,
+  })
+  const suggestion = isEmpty ? suggestData?.people.find((p) => p.name !== debouncedQ.trim())?.name : undefined
 
   // ADV-02: دانلود مطمئن CSV — window.location.href داخل مینی‌اپ تلگرام کوکی نشست ندارد
   // (احراز هویت فقط با هدر x-telegram-init-data)؛ پس با fetch + blob دانلود می‌کنیم.
@@ -171,7 +182,13 @@ function InvoicesPageInner() {
     try {
       await apiDelete(`/api/invoices/${inv.id}`)
       haptic.success()
-      toast.success(`فاکتور ${toPersianDigits(inv.number)} حذف شد`)
+      const qty = inv.items.reduce((a, it) => a + it.quantity, 0)
+      toast.success(`فاکتور ${toPersianDigits(inv.number)} حذف شد`, {
+        description:
+          inv.type === "SALE"
+            ? `${toPersianDigits(qty)} واحد کالا به انبار برگشت`
+            : `${toPersianDigits(qty)} واحد کالا از انبار کم شد`,
+      })
       await queryClient.invalidateQueries()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "حذف ناموفق بود")
@@ -214,9 +231,10 @@ function InvoicesPageInner() {
 
   return (
     <div>
+      <PageSub sub={total > 0 ? `${toPersianDigits(total)} فاکتور` : null} />
       <div className="mb-4 hidden items-end justify-between gap-3 lg:flex">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">فاکتورها</h1>
+          <h1 className="text-page font-extrabold tracking-tight">فاکتورها</h1>
           {total > 0 && (
             <p className="nums mt-0.5 text-label text-muted-foreground">{toPersianDigits(total)} فاکتور</p>
           )}
@@ -297,7 +315,7 @@ function InvoicesPageInner() {
               {overdueCount > 0 && (
                 <span
                   className={cn(
-                    "nums grid h-5 min-w-5 place-items-center rounded-full px-1 text-micro",
+                    "nums grid h-5 min-w-5 place-items-center rounded-full px-1 text-caption",
                     overdueOnly ? "bg-white/25" : "bg-warning-ink text-white"
                   )}
                 >
@@ -364,15 +382,26 @@ function InvoicesPageInner() {
                   .join(" ")
               : "اولین خرید یا فروش را ثبت کنید — ۳۰ ثانیه بیشتر طول نمی‌کشد"
           }
-          actionLabel={hasFilters ? undefined : "ثبت اولین فاکتور"}
-          onAction={hasFilters ? undefined : () => router.push("/invoices/new")}
+          hint={suggestion ? `شاید منظورتان «${suggestion}» باشد.` : undefined}
+          actionLabel={suggestion ? `جستجوی «${suggestion}»` : hasFilters ? undefined : "ثبت اولین فاکتور"}
+          actionTone={suggestion ? "tonal" : "primary"}
+          onAction={
+            suggestion
+              ? () => {
+                  setQ(suggestion)
+                  setPage(1)
+                }
+              : hasFilters
+                ? undefined
+                : () => router.push("/invoices/new")
+          }
           secondaryLabel={hasFilters ? "پاک کردن فیلترها" : undefined}
           onSecondary={hasFilters ? clearFilters : undefined}
         />
       ) : (
         <>
           {/* جدول دسکتاپ */}
-          <div className="hidden overflow-hidden rounded-[1.25rem] border border-border/80 bg-card lg:block">
+          <div className="hidden overflow-hidden rounded-3xl border border-border/80 bg-card lg:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/80 bg-muted/40 text-caption text-muted-foreground">
@@ -458,7 +487,7 @@ function InvoicesPageInner() {
                     {toPersianDigits(g.items.length)} فاکتور | {formatTomanCompact(g.sum)}
                   </span>
                 </div>
-                <div className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+                <div className="overflow-hidden rounded-3xl border border-border/80 bg-card">
                   {g.items.map((inv, i) => {
                     const profit = invoiceProfit(inv)
                     return (
@@ -471,7 +500,7 @@ function InvoicesPageInner() {
                         className={cn(i > 0 && "border-t border-border/60")}
                       >
                         <SwipeRow
-                          hint={gi === 0 && i === 0}
+                          hint
                           trailing={[
                             {
                               key: "edit",
@@ -497,7 +526,7 @@ function InvoicesPageInner() {
                           >
                             <InvoiceTypeMark type={inv.type} size={42} />
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-[0.95rem] font-bold">{inv.person.name}</div>
+                              <div className="truncate text-body font-bold">{inv.person.name}</div>
                               <div className="nums mt-0.5 truncate text-caption text-muted-foreground">
                                 {inv.type === "SALE" ? "فروش" : "خرید"}
                                 {inv.items.length > 0 && ` | ${toPersianDigits(inv.items.length)} قلم`} | ش {toPersianDigits(inv.number)}
@@ -509,7 +538,7 @@ function InvoicesPageInner() {
                               </div>
                             </div>
                             <div className="shrink-0 text-end">
-                              <div className="nums text-[0.95rem] font-extrabold leading-tight">
+                              <div className="nums text-body font-extrabold leading-tight">
                                 {formatToman(inv.total, false)}
                               </div>
                               <div className="mt-1 flex justify-end">
@@ -593,12 +622,12 @@ interface OverdueSummary {
 function StatusPill({ credit }: { credit: number }) {
   if (credit > 0)
     return (
-      <span className="nums inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-micro font-bold leading-4 text-warning-ink">
+      <span className="nums inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-caption font-bold leading-4 text-warning-ink">
         مانده {formatTomanCompact(credit)}
       </span>
     )
   return (
-    <span className="inline-flex items-center gap-0.5 rounded-full bg-income/10 px-2 py-0.5 text-micro font-bold leading-4 text-income">
+    <span className="inline-flex items-center gap-0.5 rounded-full bg-income/10 px-2 py-0.5 text-caption font-bold leading-4 text-income">
       <svg viewBox="0 0 24 24" className="size-2.5" fill="none" stroke="currentColor" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M5 12.5l4.5 4.5L19 7.5" />
       </svg>
@@ -613,4 +642,10 @@ export default function InvoicesPage() {
       <InvoicesPageInner />
     </Suspense>
   )
+}
+
+/** زیرعنوان هدر موبایل («۳۴۸ فاکتور») */
+function PageSub({ sub }: { sub: string | null }) {
+  usePageSub(sub)
+  return null
 }

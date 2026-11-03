@@ -108,7 +108,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
             <div key={s.label} className="rounded-2xl border border-border/70 bg-muted/40 p-3 text-center">
               <s.icon className="mx-auto size-5 text-primary" />
               <p className="mt-1.5 text-caption font-bold">{s.label}</p>
-              <p className="text-micro text-muted-foreground">{s.hint}</p>
+              <p className="text-caption text-muted-foreground">{s.hint}</p>
             </div>
           ))}
         </div>
@@ -259,7 +259,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
         </div>
       )}
 
-      <p className="mt-3 flex items-center justify-center gap-1 text-micro text-muted-foreground">
+      <p className="mt-3 flex items-center justify-center gap-1 text-caption text-muted-foreground">
         <CornerDownLeft className="size-3" />
         برای باز شدن جزئیات روی نتیجه بزنید
       </p>

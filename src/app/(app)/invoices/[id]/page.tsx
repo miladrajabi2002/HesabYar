@@ -328,7 +328,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     if (!okRemove) return
     try {
       await apiDelete(`/api/invoices/${inv.id}`)
-      toast.success("فاکتور حذف شد")
+      toast.success(`فاکتور ${toPersianDigits(inv.number)} حذف شد`, {
+        description: isSale ? `${toPersianDigits(qty)} واحد کالا به انبار برگشت` : `${toPersianDigits(qty)} واحد کالا از انبار کم شد`,
+      })
       await queryClient.invalidateQueries()
       window.location.href = "/invoices"
     } catch (e) {
@@ -489,7 +491,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <p className="hidden text-caption text-muted-foreground lg:block">
               <Link href="/invoices" className="hover:text-foreground">فاکتورها</Link> ‹ #{toPersianDigits(inv.number)}
             </p>
-            <h1 className="truncate text-[1.1rem] font-extrabold leading-tight lg:text-2xl">
+            <h1 className="truncate text-title font-extrabold lg:text-page">
               فاکتور {isSale ? "فروش" : "خرید"} <span className="nums">#{toPersianDigits(inv.number)}</span>
             </h1>
           </div>
@@ -526,7 +528,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="rounded-[1.25rem] border border-border/80 bg-card p-4 sm:p-5"
+              className="rounded-3xl border border-border/80 bg-card p-4 sm:p-5"
             >
               <div className="flex items-center gap-3">
                 <InvoiceTypeMark type={inv.type} size={44} />
@@ -548,7 +550,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 </span>
               </div>
 
-              <p className="nums mt-4 text-[1.9rem] font-black leading-tight tracking-tight">
+              <p className="nums mt-4 text-display font-black tracking-tight">
                 <AnimatedAmount value={inv.total} />
                 <span className="ms-1.5 text-label font-semibold tracking-normal text-muted-foreground">تومان</span>
               </p>
@@ -580,7 +582,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 <Button
                   onClick={openSettle}
                   style={{ ["--tile" as string]: tone }}
-                  className="mt-4 h-12 w-full rounded-2xl bg-[color:var(--tile)] text-[0.95rem] font-bold text-white hover:bg-[color:var(--tile)]/90"
+                  className="mt-4 h-12 w-full rounded-2xl bg-[color:var(--tile)] text-body font-bold text-white hover:bg-[color:var(--tile)]/90"
                 >
                   <HandCoins className="size-5" />
                   {isSale ? "دریافت مانده" : "پرداخت مانده"}
@@ -590,9 +592,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </motion.section>
 
             {/* ───────── اقلام (رسیدی) ───────── */}
-            <section className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+            <section className="overflow-hidden rounded-3xl border border-border/80 bg-card">
               <div className="flex items-baseline gap-2 px-4 pb-1 pt-3.5">
-                <h2 className="text-[0.95rem] font-extrabold">اقلام</h2>
+                <h2 className="text-body font-extrabold">اقلام</h2>
                 <span className="nums text-caption font-semibold text-muted-foreground">{toPersianDigits(inv.items.length)} قلم</span>
               </div>
               <div className="divide-y divide-border/60">
@@ -626,7 +628,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <span className="text-destructive">−{formatToman(inv.discount, false)}</span>
                   </div>
                 )}
-                <div className="flex items-baseline justify-between pt-0.5 text-[0.95rem] font-extrabold">
+                <div className="flex items-baseline justify-between pt-0.5 text-body font-extrabold">
                   <span>جمع کل</span>
                   <span>
                     {formatToman(inv.total, false)} <span className="text-caption font-medium text-muted-foreground">تومان</span>
@@ -644,9 +646,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
           <div className="space-y-4">
             {/* ───────── دریافت‌ها / پرداخت‌ها ───────── */}
-            <section className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+            <section className="overflow-hidden rounded-3xl border border-border/80 bg-card">
               <div className="px-4 pb-1 pt-3.5">
-                <h2 className="text-[0.95rem] font-extrabold">{isSale ? "دریافت‌ها" : "پرداخت‌ها"}</h2>
+                <h2 className="text-body font-extrabold">{isSale ? "دریافت‌ها" : "پرداخت‌ها"}</h2>
               </div>
               {timeline.length === 0 ? (
                 <p className="px-4 pb-4 pt-2 text-label text-muted-foreground">
@@ -666,7 +668,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                         <div className="flex items-center gap-1.5 text-sm font-bold">
                           <span className="truncate">{t.title}</span>
                           {t.badge && (
-                            <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-micro font-bold leading-4", t.badge.cls)}>
+                            <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-caption font-bold leading-4", t.badge.cls)}>
                               {t.badge.text}
                             </span>
                           )}
@@ -684,10 +686,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
             {/* ───────── سود (فروش، فقط برای شما) / اثر روی انبار (خرید) ───────── */}
             {isSale ? (
-              <section className="rounded-[1.25rem] border border-border/80 bg-card p-4">
+              <section className="rounded-3xl border border-border/80 bg-card p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-[0.95rem] font-extrabold">سود این فاکتور</h2>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-micro font-bold text-muted-foreground">فقط برای شما</span>
+                  <h2 className="text-body font-extrabold">سود این فاکتور</h2>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-caption font-bold text-muted-foreground">فقط برای شما</span>
                 </div>
                 <div className="mt-3 flex items-center gap-4">
                   <MarginRing pct={marginPct} />
@@ -712,9 +714,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               </section>
             ) : (
-              <section className="overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+              <section className="overflow-hidden rounded-3xl border border-border/80 bg-card">
                 <div className="px-4 pb-1 pt-3.5">
-                  <h2 className="text-[0.95rem] font-extrabold">به انبار اضافه شد</h2>
+                  <h2 className="text-body font-extrabold">به انبار اضافه شد</h2>
                 </div>
                 <div className="divide-y divide-border/60">
                   {inv.items.map((it) => (
@@ -732,10 +734,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* پیوست‌ها (تصاویر) — ADV-04 */}
-        <section className="rounded-[1.25rem] border border-border/80 bg-card p-4 sm:p-5">
+        <section className="rounded-3xl border border-border/80 bg-card p-4 sm:p-5">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-baseline gap-2">
-              <h2 className="text-[0.95rem] font-extrabold">پیوست‌ها</h2>
+              <h2 className="text-body font-extrabold">پیوست‌ها</h2>
               <span className="nums text-caption font-semibold text-muted-foreground">
                 {attachments.length ? `${toPersianDigits(attachments.length)} تصویر` : "عکس فاکتور یا رسید"}
               </span>
@@ -787,7 +789,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     ) : (
                       <div className="flex size-full flex-col items-center justify-center gap-1 p-2 text-center">
                         <FileText className="size-6 text-muted-foreground" />
-                        <span className="w-full truncate text-micro text-muted-foreground">{att.filename}</span>
+                        <span className="w-full truncate text-caption text-muted-foreground">{att.filename}</span>
                       </div>
                     )}
                     <button
@@ -1020,7 +1022,7 @@ function MarginRing({ pct }: { pct: number }) {
       </svg>
       <div className="text-center leading-none">
         <div className="nums text-sm font-black text-income">{toPersianDigits(Math.round(pct))}٪</div>
-        <div className="mt-0.5 text-micro text-muted-foreground">حاشیه</div>
+        <div className="mt-0.5 text-caption text-muted-foreground">حاشیه</div>
       </div>
     </div>
   )

@@ -40,6 +40,7 @@ import { Attachment, postAttachmentForm, useAttachmentUrls } from "@/lib/attachm
 import { cn } from "@/lib/utils"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
 import { Segmented } from "@/components/ui/segmented"
+import { usePageSub } from "@/components/layout/page-header"
 import { PriceHistoryChart, type PricePoint } from "@/components/charts/price-history-chart"
 
 interface Product {
@@ -373,7 +374,7 @@ function ProductForm({
                     ) : (
                       <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
                         <FileText className="size-5 text-muted-foreground" />
-                        <span className="w-full truncate text-micro text-muted-foreground">{att.filename}</span>
+                        <span className="w-full truncate text-caption text-muted-foreground">{att.filename}</span>
                       </div>
                     )}
                     <button
@@ -393,7 +394,7 @@ function ProductForm({
                   className="relative aspect-square overflow-hidden rounded-xl border border-dashed border-primary/40 bg-primary/5"
                 >
                   <img src={p.url} alt={p.file.name} className="size-full object-cover" />
-                  <span className="absolute inset-x-0 bottom-0 bg-primary/80 py-px text-center text-micro font-bold text-white">
+                  <span className="absolute inset-x-0 bottom-0 bg-primary/80 py-px text-center text-caption font-bold text-white">
                     جدید
                   </span>
                   <button
@@ -539,7 +540,7 @@ function ProductDetailsSheet({
               <div className="mb-2 flex items-center gap-1.5 text-xs font-bold">
                 <ImagePlus className="size-3.5 text-primary" />
                 عکس‌های کالا
-                <span className="nums rounded-full bg-muted px-1.5 py-px text-micro font-bold text-muted-foreground">
+                <span className="nums rounded-full bg-muted px-1.5 py-px text-caption font-bold text-muted-foreground">
                   {toPersianDigits(galleryPhotos.length)}
                 </span>
               </div>
@@ -570,7 +571,7 @@ function ProductDetailsSheet({
                       ) : (
                         <div className="flex size-full flex-col items-center justify-center gap-1 p-1.5 text-center">
                           <FileText className="size-5 text-muted-foreground" />
-                          <span className="w-full truncate text-micro text-muted-foreground">{att.filename}</span>
+                          <span className="w-full truncate text-caption text-muted-foreground">{att.filename}</span>
                         </div>
                       )}
                     </div>
@@ -591,7 +592,7 @@ function ProductDetailsSheet({
                 {toPersianDigits(s.stock)} {formatUnit(data?.product.unit)}
               </p>
               {(data?.product.initialStock ?? 0) > 0 && (
-                <p className="nums mt-0.5 text-micro text-primary/70">
+                <p className="nums mt-0.5 text-caption text-primary/70">
                   شامل موجودی اولیه: {toPersianDigits(data!.product.initialStock)}
                   {(data!.product.initialStockCostPrice ?? 0) > 0 &&
                     ` • خرید هر واحد: ${formatToman(data!.product.initialStockCostPrice, false)}`}
@@ -655,7 +656,7 @@ function ProductDetailsSheet({
                       <InvoiceTypeMark type={isPurchase ? "PURCHASE" : "SALE"} size={34} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-caption font-bold">{m.personName}</div>
-                        <div className="nums text-micro text-muted-foreground">
+                        <div className="nums text-caption text-muted-foreground">
                           {formatJalaliShort(new Date(m.date))} • فاکتور {toPersianDigits(m.invoiceNumber)} •{" "}
                           {toPersianDigits(m.quantity)} {formatUnit(m.unit)} × {formatToman(m.unitPrice, false)}
                         </div>
@@ -764,11 +765,19 @@ export default function ProductsPage() {
     (s, p) => s + p.stock * (p.avgCostPrice || p.lastPurchasePrice || 0),
     0
   )
+  const lowCount = allProducts.filter((p) => p.stock <= 0 || stockState(p) === "low").length
+  const productsSub = data
+    ? `${toPersianDigits(allProducts.length)} کالا${lowCount ? ` | ${toPersianDigits(lowCount)} کم‌موجود یا تمام` : ""}`
+    : null
+  usePageSub(productsSub)
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="hidden text-2xl font-extrabold tracking-tight lg:block">کالاها</h1>
+        <div className="hidden lg:block">
+          <h1 className="text-page font-extrabold tracking-tight">کالاها و انبار</h1>
+          {productsSub && <p className="nums text-label text-muted-foreground">{productsSub}</p>}
+        </div>
         <div className="flex items-center gap-2">
           <Button
             onClick={() => downloadCsv("products")}
@@ -864,7 +873,7 @@ export default function ProductsPage() {
         />
       ) : (
         // grid-cols-1 = minmax(0,1fr): ستون ضمنی auto با محتوای پهن کارت (تا عکس‌ها برسند) از صفحه بیرون می‌زد
-        <div className="grid grid-cols-1 divide-y divide-border/60 overflow-hidden rounded-[1.25rem] border border-border/80 bg-card">
+        <div className="grid grid-cols-1 divide-y divide-border/60 overflow-hidden rounded-3xl border border-border/80 bg-card">
           {products.map((p) => (
             <div
               key={p.id}
@@ -891,7 +900,7 @@ export default function ProductsPage() {
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[0.95rem] font-bold">
+                  <div className="truncate text-body font-bold">
                     {p.name}
                     {p.brand ? <span className="font-medium text-muted-foreground"> — {p.brand}</span> : null}
                   </div>
@@ -914,7 +923,7 @@ export default function ProductsPage() {
                     return (
                       <span
                         className={cn(
-                          "mt-1 inline-block rounded-full px-2 py-0.5 text-micro font-bold leading-4",
+                          "mt-1 inline-block rounded-full px-2 py-0.5 text-caption font-bold leading-4",
                           st === "out" ? "bg-destructive/10 text-destructive" : st === "low" ? "bg-warning/15 text-warning-ink" : "bg-income/10 text-income"
                         )}
                       >
