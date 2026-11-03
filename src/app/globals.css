@@ -457,6 +457,11 @@
 /* اعلان واگردانی: پهن‌تر و شمارش معکوس به‌جای آیکون */
 .cn-toast:has(.hy-countdown) { width: var(--width) !important; }
 .cn-toast:has(.hy-countdown) [data-icon] { background: transparent !important; }
+/* حلقه باید کل دایره را بگیرد؛ قانون عمومی ۱٫۰۵rem آن را کوچک می‌کرد و عدد بیرون می‌زد */
+.cn-toast [data-icon] .hy-countdown svg {
+  width: 100% !important;
+  height: 100% !important;
+}
 .hy-countdown circle.hy-cd-ring {
   stroke-dasharray: 100;
   animation: hy-countdown var(--hy-cd, 5s) linear forwards;

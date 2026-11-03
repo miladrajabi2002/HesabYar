@@ -2,8 +2,8 @@
 
 /**
  * آواتار شخص — آیکون نقش (نسخهٔ ۸: بدون حرف اول نام)
- *  CUSTOMER (مشتری)  → آبی، نشان کیسهٔ خرید
- *  SUPPLIER (فروشنده) → بنفش، نشان کامیون
+ *  CUSTOMER (مشتری)  → آبی، نشان آدمک (سر و شانه)
+ *  SUPPLIER (فروشنده) → بنفش، نشان مغازه (سایبان + ویترین)
  *  BOTH (هر دو)       → کاشی دورنگ مورب (آبی/بنفش) + نشان فلش دوطرفه
  */
 import { toPersianDigits } from "@/lib/money"
@@ -26,19 +26,13 @@ function RoleGlyph({ role, size }: { role?: string | null; size: number }) {
     strokeLinejoin: "round" as const,
     "aria-hidden": true,
   }
-  if (role === "CUSTOMER")
-    return (
-      <svg {...common}>
-        <path d="M6 8h12l-1 12H7z" />
-        <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
-      </svg>
-    )
   if (role === "SUPPLIER")
     return (
       <svg {...common}>
-        <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" />
-        <circle cx="7" cy="17.5" r="1.6" />
-        <circle cx="17" cy="17.5" r="1.6" />
+        <path d="M4 9.5 5.5 4h13L20 9.5" />
+        <path d="M4 9.5a2.67 2.67 0 0 0 5.33 0 2.67 2.67 0 0 0 5.34 0 2.67 2.67 0 0 0 5.33 0" />
+        <path d="M5.5 12v8h13v-8" />
+        <path d="M10 20v-4.5h4V20" />
       </svg>
     )
   if (role === "BOTH")
@@ -57,7 +51,7 @@ function RoleGlyph({ role, size }: { role?: string | null; size: number }) {
 
 /**
  * آواتار نقش (نسخهٔ ۸) — بدون حرف اول نام: آیکون نقش روی کاشی رنگی همان نقش
- * (کیسهٔ خرید = مشتری، کامیون = فروشنده، فلش دوطرفه = هر دو). «name» فقط برای سازگاری می‌ماند.
+ * (آدمک = مشتری، مغازه = فروشنده، فلش دوطرفه = هر دو). «name» فقط برای سازگاری می‌ماند.
  */
 export function RoleAvatar({
   role,

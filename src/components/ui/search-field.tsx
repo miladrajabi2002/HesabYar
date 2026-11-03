@@ -52,13 +52,16 @@ export function SearchField({
   return (
     <div
       className={cn(
-        "group/search relative flex h-12 items-center gap-2.5 rounded-2xl border ps-3.5 pe-2 transition-[border-color,box-shadow,background-color]",
+        // min-h: داخل ستون flex با flex-1 هم جمع نمی‌شود • دسکتاپ هم‌قد Segmented (۴۴px)
+        "group/search relative flex h-12 min-h-12 shrink-0 items-center gap-2.5 rounded-2xl border ps-3.5 pe-2 transition-[border-color,box-shadow,background-color] lg:h-11 lg:min-h-11 lg:rounded-xl lg:ps-3",
         "focus-within:border-ring focus-within:bg-card focus-within:ring-[3px] focus-within:ring-ring/15",
-        variant === "filled" ? "border-transparent bg-muted" : "border-input bg-card hover:border-foreground/20",
+        variant === "filled"
+          ? "border-transparent bg-muted"
+          : "border-input bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)] hover:border-foreground/20",
         className
       )}
     >
-      <IconSearch className="size-[1.05rem] shrink-0 text-muted-foreground" />
+      <IconSearch className="size-[1.05rem] shrink-0 text-muted-foreground transition-colors group-focus-within/search:text-primary" />
       <input
         ref={ref}
         type="search"
@@ -84,7 +87,7 @@ export function SearchField({
         }}
         placeholder={placeholder}
         aria-label={placeholder ?? "جستجو"}
-        className="peer h-full min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground/75 [&::-webkit-search-cancel-button]:appearance-none"
+        className="peer h-full min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground/75 lg:text-label [&::-webkit-search-cancel-button]:appearance-none"
       />
       {loading && <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-muted-foreground" />}
       {value ? (
@@ -104,7 +107,8 @@ export function SearchField({
       ) : hotkey ? (
         <kbd
           aria-hidden
-          className="me-1 hidden h-6 min-w-6 place-items-center rounded-md border border-border bg-muted/70 px-1.5 font-sans text-caption font-bold text-muted-foreground lg:grid lg:peer-focus:hidden"
+          title="کلید / برای جستجو"
+          className="me-0.5 hidden h-6 min-w-6 place-items-center rounded-md border border-border bg-background px-1.5 font-sans text-caption font-bold text-muted-foreground shadow-[0_1px_0_var(--border)] lg:grid lg:peer-focus:hidden"
         >
           /
         </kbd>

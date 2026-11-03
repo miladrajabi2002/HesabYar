@@ -216,16 +216,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
             onClick={() => setSearchOpen(true)}
             aria-keyshortcuts="Control+K Meta+K"
-            className="group flex h-10 w-full max-w-[30rem] items-center gap-2.5 rounded-xl bg-muted/80 ps-3.5 pe-2 text-label text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="group flex h-10 w-full max-w-[26rem] items-center gap-2.5 rounded-xl border border-input bg-card ps-3 pe-1.5 text-label text-muted-foreground shadow-[0_1px_2px_rgb(16_24_40/0.04)] transition-[border-color,box-shadow,color] hover:border-foreground/20 hover:text-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/15"
           >
-            <IconSearch className="size-[1.05rem] shrink-0" />
-            <span className="truncate">جستجوی فاکتور، شخص، کالا یا چک…</span>
-            <span className="ms-auto flex shrink-0 items-center gap-0.5" dir="ltr">
-              <kbd className="grid h-6 place-items-center rounded-md border border-border bg-card px-1.5 font-sans text-caption font-bold text-foreground/65 shadow-[0_1px_0_var(--border)]">
-                {isMac ? "⌘" : "Ctrl"}
-              </kbd>
-              <kbd className="grid h-6 min-w-6 place-items-center rounded-md border border-border bg-card px-1.5 font-sans text-caption font-bold text-foreground/65 shadow-[0_1px_0_var(--border)]">
-                K
+            <IconSearch className="size-[1.05rem] shrink-0 transition-colors group-hover:text-primary" />
+            <span className="truncate">جستجو در فاکتورها، اشخاص، کالاها…</span>
+            <span className="ms-auto flex shrink-0 items-center gap-1" dir="ltr">
+              <kbd className="grid h-7 place-items-center rounded-lg bg-muted px-2 font-sans text-caption font-bold text-muted-foreground">
+                {isMac ? "⌘ K" : "Ctrl K"}
               </kbd>
             </span>
           </button>

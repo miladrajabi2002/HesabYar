@@ -39,27 +39,48 @@ export async function GET(req: NextRequest) {
     const saturdayOffset = (gteDay + 1) % 7
     const weekStart = new Date(startOfJalaliDay(now).getTime() - saturdayOffset * 86_400_000)
 
-    const [today, week, month, prevMonth, accounts, personBalances, monthCollection, activity] = await Promise.all([
-      periodSummary(dayStart, dayEnd),
-      periodSummary(weekStart, dayEnd),
-      periodSummary(monthStart, monthEnd),
-      periodSummary(prevMonthStart, prevMonthEnd),
-      getAccountBalances(),
-      getPersonBalances(),
-      salesCollection(monthStart, monthEnd),
-      getPersonActivity(),
-    ])
+    // مقایسهٔ منصفانه: بازهٔ جاری تا امروز در برابر همان تعداد روز از دورهٔ قبل
+    // (فاکتور ساعت ندارد، پس مقایسه روزبه‌روز است نه ساعت‌به‌ساعت)
+    const DAY = 86_400_000
+    const yesterday = new Date(now.getTime() - DAY)
+    const prevWeekStart = new Date(weekStart.getTime() - 7 * DAY)
+    const prevWeekEnd = new Date(dayEnd.getTime() - 7 * DAY)
+    // همان روز ماه قبل (اگر ماه قبل کوتاه‌تر بود، آخرین روزش)
+    const prevMonthToDateEnd = endOfJalaliDay(addJalaliMonths(now, -1))
 
-    // ST-01: درصد تغییر ماه جاری نسبت به ماه قبل (null = ماه قبل صفر بوده)
+    const [today, week, month, prevMonth, yesterdaySum, prevWeek, monthToDate, prevMonthToDate, accounts, personBalances, monthCollection, activity] =
+      await Promise.all([
+        periodSummary(dayStart, dayEnd),
+        periodSummary(weekStart, dayEnd),
+        periodSummary(monthStart, monthEnd),
+        periodSummary(prevMonthStart, prevMonthEnd),
+        periodSummary(startOfJalaliDay(yesterday), endOfJalaliDay(yesterday)),
+        periodSummary(prevWeekStart, prevWeekEnd),
+        periodSummary(monthStart, dayEnd),
+        periodSummary(prevMonthStart, prevMonthToDateEnd),
+        getAccountBalances(),
+        getPersonBalances(),
+        salesCollection(monthStart, monthEnd),
+        getPersonActivity(),
+      ])
+
+    // ST-01: درصد تغییر نسبت به دورهٔ قبل (null = دورهٔ قبل صفر بوده)
     const pct = (cur: number, prev: number): number | null => {
       if (prev === 0) return cur === 0 ? 0 : null
       return Math.round(((cur - prev) / Math.abs(prev)) * 100)
     }
-    const monthComparison = {
-      sales: pct(month.sales, prevMonth.sales),
-      purchases: pct(month.purchases, prevMonth.purchases),
-      profit: pct(month.profit, prevMonth.profit),
-      saleCount: pct(month.saleCount, prevMonth.saleCount),
+    const compare = (cur: typeof today, prev: typeof today) => ({
+      sales: pct(cur.sales, prev.sales),
+      purchases: pct(cur.purchases, prev.purchases),
+      profit: pct(cur.profit, prev.profit),
+      saleCount: pct(cur.saleCount, prev.saleCount),
+    })
+    // ماه: «از اول ماه تا امروز» در برابر «از اول ماه قبل تا همین روز»
+    const monthComparison = compare(monthToDate, prevMonthToDate)
+    const comparison = {
+      day: compare(today, yesterdaySum),
+      week: compare(week, prevWeek),
+      month: monthComparison,
     }
 
     // طلبکاران و بستانکاران (۱۵ نفر اول هر کدام)
@@ -126,7 +147,9 @@ export async function GET(req: NextRequest) {
       week,
       month,
       prevMonth,
+      monthToDate,
       monthComparison,
+      comparison,
       accounts,
       totalBankBalance: accounts.reduce((s, a) => s + a.balance, 0),
       debtors,

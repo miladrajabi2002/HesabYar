@@ -264,7 +264,7 @@ function InvoicesPageInner() {
             placeholder="شخص، شمارهٔ فاکتور، کالا یا مبلغ"
             loading={isFetching && !!debouncedQ}
             hotkey
-            className="flex-1"
+            className="lg:flex-1"
           />
           <Segmented
             value={type}
@@ -283,59 +283,59 @@ function InvoicesPageInner() {
                 icon: <span className="size-1.5 rounded-full bg-[color:var(--purchase)]" />,
               },
             ]}
-            className="lg:w-80"
+            className="lg:w-72 lg:shrink-0"
           />
-        </div>
-        <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-          {(overdueCount > 0 || overdueOnly) && (
-            <button
-              type="button"
-              onClick={() => {
-                haptic.tap()
-                setOverdueOnly((v) => !v)
+          <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0 lg:shrink-0 lg:overflow-visible lg:[&_button]:h-11">
+            {(overdueCount > 0 || overdueOnly) && (
+              <button
+                type="button"
+                onClick={() => {
+                  haptic.tap()
+                  setOverdueOnly((v) => !v)
+                  setPage(1)
+                }}
+                aria-pressed={overdueOnly}
+                className={cn(
+                  "flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-label font-bold transition-colors",
+                  overdueOnly ? "bg-warning-ink text-white" : "bg-warning/15 text-warning-ink hover:bg-warning/20"
+                )}
+              >
+                <AlertTriangle className="size-3.5" />
+                نسیهٔ معوق
+                {overdueCount > 0 && (
+                  <span
+                    className={cn(
+                      "nums grid h-5 min-w-5 place-items-center rounded-full px-1 text-caption",
+                      overdueOnly ? "bg-white/25" : "bg-warning-ink text-white"
+                    )}
+                  >
+                    {toPersianDigits(overdueCount)}
+                  </span>
+                )}
+                {overdueOnly && <X className="size-3.5" />}
+              </button>
+            )}
+            <FilterChip
+              active={!!personId}
+              label={personId ? (personName ?? "شخص") : "همهٔ اشخاص"}
+              icon={<UserRound className="size-4" />}
+              onClick={() => setPersonSheet(true)}
+              onClear={() => {
+                setPersonId(null)
+                setPersonName(null)
                 setPage(1)
               }}
-              aria-pressed={overdueOnly}
-              className={cn(
-                "flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-label font-bold transition-colors",
-                overdueOnly ? "bg-warning-ink text-white" : "bg-warning/15 text-warning-ink hover:bg-warning/20"
-              )}
+            />
+            <button
+              type="button"
+              onClick={() => downloadCsv("invoices")}
+              disabled={exporting}
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-label font-semibold text-muted-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50 lg:hidden"
             >
-              <AlertTriangle className="size-3.5" />
-              نسیهٔ معوق
-              {overdueCount > 0 && (
-                <span
-                  className={cn(
-                    "nums grid h-5 min-w-5 place-items-center rounded-full px-1 text-caption",
-                    overdueOnly ? "bg-white/25" : "bg-warning-ink text-white"
-                  )}
-                >
-                  {toPersianDigits(overdueCount)}
-                </span>
-              )}
-              {overdueOnly && <X className="size-3.5" />}
+              {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              اکسل
             </button>
-          )}
-          <FilterChip
-            active={!!personId}
-            label={personId ? (personName ?? "شخص") : "همهٔ اشخاص"}
-            icon={<UserRound className="size-4" />}
-            onClick={() => setPersonSheet(true)}
-            onClear={() => {
-              setPersonId(null)
-              setPersonName(null)
-              setPage(1)
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => downloadCsv("invoices")}
-            disabled={exporting}
-            className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-label font-semibold text-muted-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50 lg:hidden"
-          >
-            {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            اکسل
-          </button>
+          </div>
         </div>
         {overdueOnly && overdue && (
           <p className="nums text-caption text-muted-foreground">

@@ -828,7 +828,7 @@ function SearchPanel({ onClose }: { onClose: () => void }) {
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       className="fixed inset-0 z-[100] flex flex-col bg-background"
     >
-      <div className="relative shrink-0 bg-background px-3 pb-2 pt-[calc(env(safe-area-inset-top,0px)+1.1rem)]">
+      <div className="relative shrink-0 bg-background px-3 pb-2 pt-[calc(env(safe-area-inset-top,0px)+1.85rem)]">
         <div className="flex items-center gap-1.5">
           {!isTelegram && (
             <button

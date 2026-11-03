@@ -6,6 +6,7 @@
  * نسخهٔ ۳: اعداد ثابت خوانا (بدون شمارندهٔ انیمیشنی)
  * نسخهٔ ۷: بدون ورود پلکانی کارت‌ها (حرکت کمتر)؛ قهرمان یکدست + میانبرها، کاشی‌های تخت با جملهٔ مقایسه، فهرست‌ها با خط جداکننده و چیپ وضعیت
  */
+import { useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { HandCoins, CheckSquare2, ChevronLeft, ArrowDownLeft, ArrowUpRight } from "lucide-react"
@@ -38,7 +39,9 @@ interface DashboardData {
   week: PeriodSum
   month: PeriodSum
   prevMonth: PeriodSum
-  monthComparison: { sales: number | null; purchases: number | null; profit: number | null; saleCount: number | null }
+  monthComparison: Comparison
+  /** مقایسهٔ هم‌بازه: امروز/دیروز، هفته تا امروز/همان روزهای هفتهٔ قبل، ماه تا امروز/همان روزهای ماه قبل */
+  comparison: { day: Comparison; week: Comparison; month: Comparison }
   accounts: { id: string; name: string; bankKey: string; balance: number }[]
   totalBankBalance: number
   debtors: PersonBalanceRow[]
@@ -71,6 +74,8 @@ interface DashboardData {
     person: { id: string; name: string; role: string | null }
   }[]
 }
+
+type Comparison = { sales: number | null; purchases: number | null; profit: number | null; saleCount: number | null }
 
 interface PeriodSum {
   sales: number
@@ -139,6 +144,34 @@ function deltaNote(pct: number | null, prevLabel: string, invert = false): { tex
   if (pct === 0) return { text: `بدون تغییر نسبت به ${prevLabel}`, tone: "muted" }
   const good = invert ? pct < 0 : pct > 0
   return { text: `${pct > 0 ? "↑" : "↓"} ${toPersianDigits(Math.abs(pct))}٪ از ${prevLabel}`, tone: good ? "good" : "bad" }
+}
+
+/** تغییر درصدی روی کارت قهرمان سبز: «↑ ۱۲٪» — سبز روشن خوب، صورتی بد، خنثی برای خرید */
+function HeroDelta({
+  pct,
+  prevLabel,
+  neutral = false,
+  className,
+}: {
+  pct: number | null
+  /** «هفتهٔ قبل» — وقتی دورهٔ قبل صفر بوده درصد معنا ندارد: «هفتهٔ قبل ۰» */
+  prevLabel: string
+  neutral?: boolean
+  className?: string
+}) {
+  if (pct === null)
+    return <span className={cn("nums text-caption font-semibold text-white/60", className)}>{prevLabel} ۰</span>
+  return (
+    <span
+      className={cn(
+        "nums inline-flex items-center gap-0.5 text-caption font-bold",
+        pct === 0 || neutral ? "text-white/75" : pct > 0 ? "text-[#a7f0cd]" : "text-[#ffc4bc]",
+        className
+      )}
+    >
+      {pct === 0 ? "بدون تغییر" : `${pct > 0 ? "↑" : "↓"} ${toPersianDigits(Math.abs(pct))}٪`}
+    </span>
+  )
 }
 
 /** کارت بخش (نسخهٔ ۷) — سربرگ با عنوان + جمع کوتاه + «همه»؛ ردیف‌ها با خط جداکننده، نه قاب جدا */
@@ -217,6 +250,8 @@ const QUICK_ACTIONS = [
 ] as const
 
 export default function DashboardPage() {
+  // ردیف پایین کارت قهرمان: هفته یا ماه، هر کدام در برابر دورهٔ قبلش
+  const [heroPeriod, setHeroPeriod] = useState<"week" | "month">("week")
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => apiGet<DashboardData>("/api/dashboard"),
@@ -243,11 +278,12 @@ export default function DashboardPage() {
   const monthDays = data.series.filter((s) => s.day.startsWith(monthPrefix) && s.day <= todayK)
   const monthName = JALALI_MONTHS[j.jm - 1]
   const prevMonthName = JALALI_MONTHS[(j.jm + 10) % 12]
-  // مقایسه با دیروز (از سری روزانه)
+  // مقایسه با دیروز
   const yesterdayK = jalaliDayKey(new Date(now.getTime() - 86_400_000))
   const yesterdaySales = data.series.find((s) => s.day === yesterdayK)?.sales ?? 0
-  const vsYesterday =
-    yesterdaySales > 0 ? Math.round(((data.today.sales - yesterdaySales) / yesterdaySales) * 100) : null
+  const vsYesterday = data.comparison.day.sales
+  const heroStats = heroPeriod === "week" ? data.week : data.month
+  const heroCmp = heroPeriod === "week" ? data.comparison.week : data.comparison.month
   const profitNote = deltaNote(data.monthComparison.profit, prevMonthName)
   const salesNote = deltaNote(data.monthComparison.sales, prevMonthName)
   const overdueDebtors = data.debtors.filter((p) => (p.openDays ?? 0) > 30).length
@@ -261,11 +297,17 @@ export default function DashboardPage() {
           <div className="hero-solid relative overflow-hidden rounded-3xl p-5 text-white sm:p-6">
             <div className="flex items-center gap-2 text-label font-semibold text-white/85">
               فروش امروز
-              {vsYesterday !== null && data.today.saleCount > 0 && (
+              {data.today.saleCount > 0 && vsYesterday !== null ? (
                 <span className="nums ms-auto rounded-full bg-white/15 px-2.5 py-0.5 text-caption font-bold text-white">
-                  {vsYesterday >= 0 ? "↑" : "↓"} {toPersianDigits(Math.abs(vsYesterday))}٪ از دیروز
+                  {vsYesterday === 0
+                    ? "هم‌اندازهٔ دیروز"
+                    : `${vsYesterday > 0 ? "↑" : "↓"} ${toPersianDigits(Math.abs(vsYesterday))}٪ از دیروز`}
                 </span>
-              )}
+              ) : data.today.saleCount === 0 && yesterdaySales > 0 ? (
+                <span className="nums ms-auto rounded-full bg-white/15 px-2.5 py-0.5 text-caption font-bold text-white/90">
+                  دیروز {formatTomanCompact(yesterdaySales)}
+                </span>
+              ) : null}
             </div>
             {data.today.saleCount > 0 ? (
               <>
@@ -283,19 +325,54 @@ export default function DashboardPage() {
                 <p className="mt-1 text-label text-white/80">اولین فروش امروز را با دکمهٔ + ثبت کنید</p>
               </>
             )}
-            <div className="mt-4 grid grid-cols-3 border-t border-white/15 pt-3.5">
-              {(
-                [
-                  ["فروش هفته", data.week.sales],
-                  ["سود هفته", data.week.profit],
-                  ["خرید هفته", data.week.purchases],
-                ] as const
-              ).map(([label, v], i) => (
-                <div key={label} className={cn(i > 0 && "border-s border-white/15 ps-3")}>
-                  <p className="text-caption text-white/70">{label}</p>
-                  <Amt v={v} className="text-body font-extrabold" unitClassName="opacity-70" />
+            <div className="mt-4 border-t border-white/15 pt-3">
+              <div className="mb-2.5 flex items-center justify-between gap-2">
+                <div role="tablist" aria-label="دورهٔ خلاصه" className="flex rounded-full bg-black/15 p-0.5">
+                  {(
+                    [
+                      ["week", "این هفته"],
+                      ["month", "این ماه"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      role="tab"
+                      aria-selected={heroPeriod === k}
+                      onClick={() => setHeroPeriod(k)}
+                      className={cn(
+                        "h-7 rounded-full px-3 text-caption font-bold transition-colors",
+                        heroPeriod === k ? "bg-white text-[#0a6a55]" : "text-white/75 hover:text-white"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-              ))}
+                <span className="truncate text-caption text-white/65">
+                  {heroPeriod === "week" ? "در برابر هفتهٔ قبل" : `در برابر همین روزهای ${prevMonthName}`}
+                </span>
+              </div>
+              <div className="grid grid-cols-3">
+                {(
+                  [
+                    ["فروش", heroStats.sales, heroCmp.sales, false],
+                    ["سود", heroStats.profit, heroCmp.profit, false],
+                    ["خرید", heroStats.purchases, heroCmp.purchases, true],
+                  ] as const
+                ).map(([label, v, d, neutral], i) => (
+                  <div key={label} className={cn("min-w-0", i > 0 && "border-s border-white/15 ps-3")}>
+                    <p className="text-caption text-white/70">{label}</p>
+                    <Amt v={v} className="text-body font-extrabold" unitClassName="opacity-70" />
+                    <HeroDelta
+                      pct={d}
+                      prevLabel={heroPeriod === "week" ? "هفتهٔ قبل" : prevMonthName}
+                      neutral={neutral}
+                      className="mt-0.5 flex truncate"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
