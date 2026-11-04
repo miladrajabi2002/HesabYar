@@ -46,8 +46,14 @@ src/lib/telegram/           # ربات polling + ارسال هشدار + اعت�
 src/lib/scheduler.ts        # اسکن سررسید چک (هر ساعت) + بکاپ روزانه
 src/app/(app)/              # صفحات: داشبورد، فاکتورها، اشخاص، چک‌ها، کالاها، حساب‌ها، گزارش‌ها، تنظیمات
 src/app/api/                # REST API با اعتبارسنجی Zod
+src/lib/storage.ts          # مسیر داده‌ها: DATA_DIR (خارج از وب‌روت، الگوی app)
 public/banks/               # اسپریت لوگوی بانک‌ها
 instrumentation.ts          # راه‌انداز زمان‌بند و ربات
+
+# داده‌های زنده (دیتابیس، پیوست‌ها، بکاپ‌ها) خارج از ریپو:
+/var/lib/hesabyar/hesabyar.db      # دیتابیس SQLite
+/var/lib/hesabyar/uploads/         # پیوست چک‌ها و اسناد
+/var/lib/hesabyar/backups/         # بکاپ خودکار روزانه (۷ نسخه)
 ```
 
 ## 🚀 راه‌اندازی روی سرور
@@ -71,7 +77,8 @@ pm2 save
 ### فایل `.env`
 
 ```env
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="file:/var/lib/hesabyar/hesabyar.db"
+DATA_DIR="/var/lib/hesabyar"
 APP_USERNAME="milad"
 APP_PASSWORD="رمز-قوی-انتخاب-کنید"
 SESSION_SECRET="یک-رشته-تصادفی-طولانی"
@@ -93,11 +100,10 @@ pm2 logs hesabyar           # لاگ برنامه
 pm2 restart hesabyar        # ری‌استارت بعد از تغییرات
 pm2 monit                   # مانیتور منابع
 
-# بکاپ دستی دیتابیس
-sqlite3 prisma/dev.db ".backup backup.db"
+# بکاپ دستی دیتابیس (مسیر دادهٔ جدید)
+sqlite3 /var/lib/hesabyar/hesabyar.db ".backup /tmp/backup.db"
 
-# بازیابی
-sqlite3 prisma/dev.db ".restore backup.db" && pm2 restart hesabyar
+# بازیابی: از داخل خود اپ (تنظیمات ← بکاپ ← بازیابی فایل) — توصیه می‌شود
 ```
 
 ## 🤖 فعال‌سازی ربات تلگرام (گام‌به‌گام)
