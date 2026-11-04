@@ -4,7 +4,7 @@
  * پوستهٔ اصلی حساب‌یار (نسخهٔ ۷)
  *  • دسکتاپ: سایدبار تخت با آیکون‌های خطی تک‌رنگ (فقط آیتم فعال رنگی) + نوار بالا با جستجوی سراسری (Ctrl/⌘ K) و زنگ
  *  • موبایل: هدر جمع‌وجور (عنوان بزرگ + جستجو + زنگ «کار امروز») — بدون لوگو تا محتوا جا داشته باشد
- *  | نوار پایین چسبیده به لبه با دکمهٔ «فاکتور جدید» هم‌تراز تب‌ها؛ نشانگر فعال (خط نارنجی بالای تب) با فنر لیز می‌خورد
+ *  | نوار پایین چسبیده به لبه با دکمهٔ + برجسته و حلقهٔ چرخان؛ نشانگر فعال (خط بالای تب) با فنر لیز می‌خورد
  *    با اسکرول به پایین کنار می‌رود و در صفحات فرم (فاکتور جدید) پنهان است
  *  • شیت «بیشتر»: صفحهٔ پشت کمی عقب می‌رود و کاشی‌ها پشت سر هم ظاهر می‌شوند
  *  • زنگ: اعلان‌های «کار امروز» (چک سررسیدشده، نسیهٔ معوق، کالای رو به اتمام) — /api/alerts و AlertsSheet
@@ -33,6 +33,7 @@ import {
   IconLogout,
   IconPlus,
   IconSearch,
+  IconSettings,
   SECTION_META,
   type SectionHref,
 } from "@/components/icons/app-icons"
@@ -55,6 +56,8 @@ export const NAV_ITEMS = NAV_LIST
 
 /** آیتم‌های منوی «بیشتر» موبایل (داشبورد/فاکتورها/تقویم در نوار پایین هستند) */
 const MORE_ITEMS = NAV_ITEMS.filter((i) => !["/", "/invoices", "/calendar"].includes(i.href))
+/** کاشی‌های شیت «بیشتر» — تنظیمات کم‌کاربرد است و کنار «خروج» در ردیف پایین می‌نشیند */
+const MORE_TILES = MORE_ITEMS.filter((i) => i.href !== "/settings")
 
 /** صفحاتی که فرم تمام‌صفحه دارند — نوار پایین پنهان می‌شود تا با دکمهٔ ثبت تداخل نکند */
 const FORM_ROUTES = ["/invoices/new"]
@@ -125,6 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const moreActive = MORE_ITEMS.some((m) => isActive(m.href)) || moreSheetOpen
   // وقتی شیت «بیشتر» باز است خط فعال روی «بیشتر» می‌رود (دو خط هم‌زمان نداریم)
   const tabActive = (href: string) => !moreSheetOpen && isActive(href)
+  const [fabBurst, setFabBurst] = useState(0)
 
   // شیت «بیشتر»: صفحهٔ پشت کمی عقب می‌رود؛ مبدأ کوچک شدن وسطِ همان بخشی از صفحه است که دیده می‌شود
   const contentRef = useRef<HTMLDivElement>(null)
@@ -288,22 +292,24 @@ export function AppShell({ children }: { children: ReactNode }) {
           <BottomNavItem href="/" label="خانه" active={tabActive("/")} />
           <BottomNavItem href="/invoices" label="فاکتورها" active={tabActive("/invoices")} />
 
-          {/* دکمهٔ + مرکزی — قرص کم‌رنگ هم‌تراز بقیهٔ تب‌ها، با برچسب */}
-          <motion.button
-            type="button"
-            onClick={() => {
-              haptic.medium()
-              router.push("/invoices/new")
-            }}
-            whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-            transition={{ type: "spring", stiffness: 520, damping: 26 }}
-            className="relative flex h-full flex-col items-center justify-center gap-1"
-          >
-            <span className="grid h-7 w-11 place-items-center rounded-full bg-primary/12 text-primary">
-              <IconPlus className="size-[1.2rem]" strokeWidth={2.6} />
-            </span>
-            <span className="text-micro font-bold leading-none text-primary">فاکتور جدید</span>
-          </motion.button>
+          {/* دکمهٔ + مرکزی — برجسته و کمی بالاتر از نوار، با حلقهٔ چرخان دائمی (globals.css → .hy-fab) */}
+          <div className="relative flex h-full items-center justify-center">
+            <motion.button
+              type="button"
+              onClick={() => {
+                haptic.medium()
+                setFabBurst((n) => n + 1)
+                router.push("/invoices/new")
+              }}
+              aria-label="فاکتور جدید"
+              whileTap={reduceMotion ? undefined : { scale: 0.92 }}
+              transition={{ type: "spring", stiffness: 520, damping: 26 }}
+              className="hy-fab absolute -top-5 grid size-14 place-items-center rounded-2xl text-primary-foreground"
+            >
+              <FabBurst burst={fabBurst} />
+              <IconPlus className="relative size-6" strokeWidth={2.6} />
+            </motion.button>
+          </div>
 
           <BottomNavItem href="/calendar" label="تقویم" active={tabActive("/calendar")} />
           <NavButton
@@ -325,8 +331,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* ───────── شیت «بیشتر» ───────── */}
       <BottomSheet open={moreSheetOpen} onClose={() => setMoreSheetOpen(false)} title="همهٔ بخش‌ها" desktopMode="dialog">
-        <div className="grid grid-cols-3 gap-x-2 gap-y-4 pt-1">
-          {MORE_ITEMS.map((item, i) => {
+        {/* ۵ کاشی: ردیف دوم وسط‌چین تا جای خالی یک‌طرفه نماند */}
+        <div className="flex flex-wrap justify-center gap-y-4 pt-1">
+          {MORE_TILES.map((item, i) => {
             const { icon: Icon, hue } = SECTION_META[item.href]
             const active = isActive(item.href)
             return (
@@ -346,7 +353,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   go(item.href)
                 }}
                 style={{ ["--tile" as string]: hue }}
-                className="group flex flex-col items-center gap-2 rounded-2xl py-1 text-center"
+                className="group flex w-1/3 flex-col items-center gap-2 rounded-2xl px-1 py-1 text-center"
               >
                 <span
                   className={cn(
@@ -368,20 +375,38 @@ export function AppShell({ children }: { children: ReactNode }) {
             )
           })}
         </div>
-        <motion.button
-          type="button"
+        <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1], delay: 0.09 + MORE_ITEMS.length * 0.026 }}
-          onClick={() => {
-            setMoreSheetOpen(false)
-            logout()
-          }}
-          className="group mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-destructive/8 py-3 text-label font-bold text-destructive transition-colors hover:bg-destructive/12 active:scale-[0.98]"
+          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1], delay: 0.09 + MORE_TILES.length * 0.026 }}
+          className="mt-5 flex gap-2"
         >
-          <IconLogout className="size-4" />
-          خروج از حساب
-        </motion.button>
+          <button
+            type="button"
+            onClick={() => {
+              setMoreSheetOpen(false)
+              go("/settings")
+            }}
+            className={cn(
+              "group flex flex-1 items-center justify-center gap-2 rounded-2xl py-3 text-label font-bold transition-colors active:scale-[0.98]",
+              isActive("/settings") ? "bg-primary/10 text-primary" : "bg-muted text-foreground/80 hover:bg-accent"
+            )}
+          >
+            <IconSettings className="size-4" active={isActive("/settings")} />
+            تنظیمات
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMoreSheetOpen(false)
+              logout()
+            }}
+            className="group flex flex-1 items-center justify-center gap-2 rounded-2xl bg-destructive/8 py-3 text-label font-bold text-destructive transition-colors hover:bg-destructive/12 active:scale-[0.98]"
+          >
+            <IconLogout className="size-4" />
+            خروج از حساب
+          </button>
+        </motion.div>
       </BottomSheet>
     </div>
   )
@@ -512,7 +537,23 @@ function SidebarItem({ item, active, count }: { item: NavItem; active: boolean; 
   )
 }
 
-/** نشانگر فعال نوار پایین — خط نارنجی روی لبهٔ بالای تب که بین آیتم‌ها لیز می‌خورد */
+/** موج لمس دکمهٔ مرکزی — با هر لمس یک حلقه از لبهٔ دکمه بیرون می‌رود و محو می‌شود */
+function FabBurst({ burst }: { burst: number }) {
+  const reduceMotion = useReducedMotion()
+  if (!burst || reduceMotion) return null
+  return (
+    <motion.span
+      key={burst}
+      aria-hidden
+      initial={{ scale: 1, opacity: 0.5 }}
+      animate={{ scale: 1.6, opacity: 0 }}
+      transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+      className="pointer-events-none absolute inset-0 rounded-2xl border-2 border-primary"
+    />
+  )
+}
+
+/** نشانگر فعال نوار پایین — خط رنگ اصلی روی لبهٔ بالای تب که بین آیتم‌ها لیز می‌خورد */
 function NavIndicator() {
   return (
     <span aria-hidden className="pointer-events-none absolute inset-x-0 -top-px flex justify-center">

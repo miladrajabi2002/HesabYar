@@ -556,6 +556,45 @@
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
 }
+.hy-fab {
+  background: var(--primary);
+  box-shadow:
+    0 0 0 5px var(--background),
+    0 10px 20px -8px color-mix(in srgb, var(--primary) 70%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.18);
+}
+/* حلقهٔ دائمی دکمهٔ مرکزی — گرادیان مخروطی که دور لبه می‌چرخد، در فاصلهٔ بریدگی دکمه (۵px)
+   زاویه یک custom property ثبت‌شده است تا خود حلقه نچرخد و شکل گوشه‌گرد بماند؛ فقط همین ناحیهٔ کوچک دوباره رنگ می‌شود */
+@property --hy-fab-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.hy-fab::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: calc(1rem + 4px);
+  padding: 2px;
+  background: conic-gradient(
+    from var(--hy-fab-angle),
+    transparent 0 52%,
+    color-mix(in srgb, var(--primary) 35%, transparent) 70%,
+    var(--primary) 92%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: hy-fab-spin 3.2s linear infinite;
+}
+@keyframes hy-fab-spin {
+  to { --hy-fab-angle: 360deg; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hy-fab::before { animation: none; }
+}
 
 
 /* کارت قهرمان داشبورد (نسخهٔ ۷) — زمردی یکدست با یک نور ملایم؛ بدون بافت نقطه‌ای */
