@@ -22,6 +22,7 @@ import {
   JALALI_MONTHS,
   WEEKDAYS,
   currentMonthKey,
+  jalaliMonthLengthOf,
   parseMonthKey,
   dayKeyToDate,
   formatJalaliWithWeekday,
@@ -114,7 +115,7 @@ const LEGEND = [
   { dot: DOT.settle, label: "تسویه" },
 ] as const
 
-/** انواع نشانگر یک روز — حداکثر ۳ نقطه در سلول (بدون عدد؛ جزئیات در برنامهٔ روز) */
+/** انواع نشانگر یک روز — یک نقطه برای هر نوع (بدون عدد؛ جزئیات در برنامهٔ روز) */
 function dayKinds(events: DayEvents): Array<{ dot: string; count: number }> {
   const sales = events.invoices.filter((i) => i.type === "SALE").length
   const purchases = events.invoices.filter((i) => i.type === "PURCHASE").length
@@ -123,7 +124,19 @@ function dayKinds(events: DayEvents): Array<{ dot: string; count: number }> {
   if (sales > 0) kinds.push({ dot: DOT.sale, count: sales })
   if (purchases > 0) kinds.push({ dot: DOT.purchase, count: purchases })
   if (events.settlements.length > 0) kinds.push({ dot: DOT.settle, count: events.settlements.length })
-  return kinds.slice(0, 3)
+  return kinds
+}
+
+/** نقطه‌های زیر روز — تا ۳ تا با فاصله کنار هم، بیشتر از آن روی هم می‌افتند */
+function DayDots({ dots }: { dots: string[] }) {
+  const stack = dots.length > 3
+  return (
+    <span className="flex h-[5px] items-center" aria-hidden="true">
+      {dots.map((d, i) => (
+        <span key={d} className={cn("size-[5px] rounded-full", d, stack && "ring-[1.5px] ring-card", i > 0 && (stack ? "-ms-[1.5px]" : "ms-[3px]"))} />
+      ))}
+    </span>
+  )
 }
 
 // ───────────────────────── اجزای کوچک ─────────────────────────
@@ -135,7 +148,7 @@ function CalendarSkeleton() {
         <Skeleton className="mb-4 h-6 w-32" />
         <div className="grid grid-cols-7 gap-1">
           {Array.from({ length: 35 }).map((_, i) => (
-            <Skeleton key={i} className="h-11 rounded-xl lg:h-14" />
+            <Skeleton key={i} className="mx-auto my-1 mb-[13px] size-9 rounded-full lg:size-11" />
           ))}
         </div>
       </div>
@@ -363,12 +376,16 @@ export default function CalendarPage() {
     }
   }, [data])
 
-  // سلول‌های شبکه: خالی‌های ابتدای ماه + روزهای ۱ تا طول ماه
-  const cells = useMemo<Array<number | null>>(() => {
+  // سلول‌های شبکه: روزهای پایانی ماه قبل + روزهای ۱ تا طول ماه + روزهای ابتدای ماه بعد (تا پر شدن ردیف آخر)
+  const cells = useMemo<Array<{ day: number; outside?: boolean }>>(() => {
     if (!data) return []
+    const prev = parseMonthKey(previousMonthKey(data.month))
+    const prevLen = jalaliMonthLengthOf(prev.jy, prev.jm)
+    const tail = (7 - ((data.firstWeekday + data.monthLength) % 7)) % 7
     return [
-      ...Array.from({ length: data.firstWeekday }, () => null),
-      ...Array.from({ length: data.monthLength }, (_, i) => i + 1),
+      ...Array.from({ length: data.firstWeekday }, (_, i) => ({ day: prevLen - data.firstWeekday + 1 + i, outside: true })),
+      ...Array.from({ length: data.monthLength }, (_, i) => ({ day: i + 1 })),
+      ...Array.from({ length: tail }, (_, i) => ({ day: i + 1, outside: true })),
     ]
   }, [data])
 
@@ -498,10 +515,15 @@ export default function CalendarPage() {
                   else if (info.offset.x < -70) goPrev()
                 }}
                 style={{ touchAction: "pan-y" }}
-                className="grid grid-cols-7 gap-0.5"
+                className="grid grid-cols-7 gap-y-0.5"
               >
-                {cells.map((dayNumber, i) => {
-                  if (dayNumber === null) return <div key={`pad-${i}`} aria-hidden="true" />
+                {cells.map(({ day: dayNumber, outside }, i) => {
+                  if (outside)
+                    return (
+                      <div key={`pad-${i}`} aria-hidden="true" className="flex flex-col items-center py-1">
+                        <span className="nums grid size-9 place-items-center text-sm leading-none text-muted-foreground/45 lg:size-11">{toPersianDigits(dayNumber)}</span>
+                      </div>
+                    )
                   const dayKey = `${data.month}-${String(dayNumber).padStart(2, "0")}`
                   const events = data.days[dayKey]
                   const count = events ? events.checks.length + events.invoices.length + events.settlements.length : 0
@@ -516,20 +538,20 @@ export default function CalendarPage() {
                       onClick={() => setSelectedDay(dayKey)}
                       aria-pressed={isSelected}
                       aria-label={`${toPersianDigits(dayNumber)} ${monthKeyLabel(data.month)}${count ? ` — ${toPersianDigits(count)} رویداد` : ""}${isToday ? " (امروز)" : ""}`}
-                      className={cn(
-                        "flex h-11 flex-col items-center justify-center gap-[3px] rounded-xl text-sm transition-colors lg:h-14",
-                        isSelected
-                          ? "bg-primary font-extrabold text-primary-foreground"
-                          : cn("hover:bg-accent", isToday && "font-extrabold ring-[1.5px] ring-inset ring-primary"),
-                        !isSelected && (isFriday ? "text-destructive/75" : "font-medium")
-                      )}
+                      className="group flex flex-col items-center gap-1 py-1 text-sm outline-none"
                     >
-                      <span className="nums leading-none">{toPersianDigits(dayNumber)}</span>
-                      <span className="flex h-[5px] gap-[3px]" aria-hidden="true">
-                        {kinds.map((k) => (
-                          <span key={k.dot} className={cn("size-[5px] rounded-full", isSelected ? "bg-white" : k.dot)} />
-                        ))}
+                      <span
+                        className={cn(
+                          "nums grid size-9 place-items-center rounded-full leading-none transition-[background-color,color,transform] duration-150 group-active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-ring lg:size-11",
+                          isSelected
+                            ? "bg-primary font-extrabold text-primary-foreground shadow-sm"
+                            : cn("group-hover:bg-accent", isToday && "font-extrabold text-primary ring-[1.5px] ring-inset ring-primary"),
+                          !isSelected && !isToday && (isFriday ? "text-destructive/75" : "font-medium")
+                        )}
+                      >
+                        {toPersianDigits(dayNumber)}
                       </span>
+                      <DayDots dots={kinds.map((k) => k.dot)} />
                     </button>
                   )
                 })}

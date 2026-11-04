@@ -4,12 +4,13 @@
  * پوستهٔ اصلی حساب‌یار (نسخهٔ ۷)
  *  • دسکتاپ: سایدبار تخت با آیکون‌های خطی تک‌رنگ (فقط آیتم فعال رنگی) + نوار بالا با جستجوی سراسری (Ctrl/⌘ K) و زنگ
  *  • موبایل: هدر جمع‌وجور (عنوان بزرگ + جستجو + زنگ «کار امروز») — بدون لوگو تا محتوا جا داشته باشد
- *  | نوار پایین شناور مینیمال با دکمهٔ + برجسته؛ نشانگر فعال (قرص پشت آیکون) با فنر بین آیتم‌ها لیز می‌خورد
+ *  | نوار پایین چسبیده به لبه با دکمهٔ «فاکتور جدید» هم‌تراز تب‌ها؛ نشانگر فعال (خط نارنجی بالای تب) با فنر لیز می‌خورد
  *    با اسکرول به پایین کنار می‌رود و در صفحات فرم (فاکتور جدید) پنهان است
+ *  • شیت «بیشتر»: صفحهٔ پشت کمی عقب می‌رود و کاشی‌ها پشت سر هم ظاهر می‌شوند
  *  • زنگ: اعلان‌های «کار امروز» (چک سررسیدشده، نسیهٔ معوق، کالای رو به اتمام) — /api/alerts و AlertsSheet
  *    عدد زنگ = اعلان‌های دیده‌نشده
  */
-import { useEffect, ReactNode, useState, useRef, useSyncExternalStore } from "react"
+import { useEffect, useLayoutEffect, ReactNode, useState, useRef, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -122,6 +123,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const ownHeader = isFormRoute || /^\/invoices\/(?!new)[^/]+/.test(pathname) || /^\/people\/[^/]+/.test(pathname)
   const navHidden = isFormRoute || (scrolledAway && !moreSheetOpen)
   const moreActive = MORE_ITEMS.some((m) => isActive(m.href)) || moreSheetOpen
+  // وقتی شیت «بیشتر» باز است خط فعال روی «بیشتر» می‌رود (دو خط هم‌زمان نداریم)
+  const tabActive = (href: string) => !moreSheetOpen && isActive(href)
+
+  // شیت «بیشتر»: صفحهٔ پشت کمی عقب می‌رود؛ مبدأ کوچک شدن وسطِ همان بخشی از صفحه است که دیده می‌شود
+  const contentRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (moreSheetOpen && contentRef.current) {
+      contentRef.current.style.transformOrigin = `50% ${window.scrollY + window.innerHeight / 2}px`
+    }
+  }, [moreSheetOpen])
 
   // جستجوی سراسری با Ctrl/⌘ + K (دسکتاپ)
   useEffect(() => {
@@ -190,7 +201,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       {/* ───────── محتوا ───────── */}
-      <div className={cn("flex min-h-screen flex-col", showSidebar && "lg:ps-[15.25rem]")}>
+      {/* transform فقط وقتی شیت باز است می‌ماند تا fixedهای داخل محتوا در حالت عادی سالم باشند */}
+      <div
+        ref={contentRef}
+        className={cn(
+          "flex min-h-screen flex-col transition-[scale,translate]",
+          showSidebar && "lg:ps-[15.25rem]",
+          moreSheetOpen && !reduceMotion
+            ? "duration-[460ms] ease-[cubic-bezier(0.32,0.72,0,1)] max-lg:translate-y-2 max-lg:scale-[0.955]"
+            : "duration-[280ms] ease-[cubic-bezier(0.23,1,0.32,1)]"
+        )}
+      >
         {/* هدر موبایل — جمع‌وجور: عنوان بزرگ + جستجو + زنگ */}
         <header
           className={cn(
@@ -255,44 +276,46 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {/* ───────── نوار پایین شناور موبایل ───────── */}
+      {/* ───────── نوار پایین موبایل — چسبیده به لبه، خط نارنجی بالای تب فعال ───────── */}
       <motion.nav
         aria-label="منوی اصلی"
         initial={false}
-        animate={{ y: navHidden ? 150 : 0, opacity: navHidden ? 0 : 1 }}
+        animate={{ y: navHidden ? "100%" : 0 }}
         transition={{ type: "spring", stiffness: 420, damping: 38 }}
-        className="hy-nav fixed inset-x-4 z-40 mx-auto grid h-16 max-w-md grid-cols-5 items-center rounded-3xl px-1 [bottom:max(1rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)+0.25rem))] lg:hidden"
+        className="hy-nav fixed inset-x-0 bottom-0 z-40 [padding-bottom:max(0.5rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden"
       >
-        <BottomNavItem href="/" label="خانه" active={isActive("/")} />
-        <BottomNavItem href="/invoices" label="فاکتورها" active={isActive("/invoices")} />
+        <div className="mx-auto grid h-[3.75rem] max-w-md grid-cols-5 px-1">
+          <BottomNavItem href="/" label="خانه" active={tabActive("/")} />
+          <BottomNavItem href="/invoices" label="فاکتورها" active={tabActive("/invoices")} />
 
-        {/* دکمهٔ + مرکزی — برجسته و کمی بالاتر از نوار، بدون برچسب */}
-        <div className="relative flex h-full items-center justify-center">
+          {/* دکمهٔ + مرکزی — قرص کم‌رنگ هم‌تراز بقیهٔ تب‌ها، با برچسب */}
           <motion.button
             type="button"
             onClick={() => {
               haptic.medium()
               router.push("/invoices/new")
             }}
-            aria-label="فاکتور جدید"
-            whileTap={reduceMotion ? undefined : { scale: 0.92 }}
+            whileTap={reduceMotion ? undefined : { scale: 0.94 }}
             transition={{ type: "spring", stiffness: 520, damping: 26 }}
-            className="hy-fab absolute -top-5 grid size-14 place-items-center rounded-2xl text-primary-foreground"
+            className="relative flex h-full flex-col items-center justify-center gap-1"
           >
-            <IconPlus className="relative size-6" strokeWidth={2.6} />
+            <span className="grid h-7 w-11 place-items-center rounded-full bg-primary/12 text-primary">
+              <IconPlus className="size-[1.2rem]" strokeWidth={2.6} />
+            </span>
+            <span className="text-micro font-bold leading-none text-primary">فاکتور جدید</span>
           </motion.button>
-        </div>
 
-        <BottomNavItem href="/calendar" label="تقویم" active={isActive("/calendar")} />
-        <NavButton
-          label="بیشتر"
-          active={moreActive}
-          onClick={() => {
-            haptic.tap()
-            setMoreSheetOpen(true)
-          }}
-          icon={<IconApps active={moreActive} className="size-[1.3rem]" />}
-        />
+          <BottomNavItem href="/calendar" label="تقویم" active={tabActive("/calendar")} />
+          <NavButton
+            label="بیشتر"
+            active={moreActive}
+            onClick={() => {
+              haptic.tap()
+              setMoreSheetOpen(true)
+            }}
+            icon={<IconApps active={moreActive} className="size-[1.3rem]" />}
+          />
+        </div>
       </motion.nav>
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
@@ -303,13 +326,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ───────── شیت «بیشتر» ───────── */}
       <BottomSheet open={moreSheetOpen} onClose={() => setMoreSheetOpen(false)} title="همهٔ بخش‌ها" desktopMode="dialog">
         <div className="grid grid-cols-3 gap-x-2 gap-y-4 pt-1">
-          {MORE_ITEMS.map((item) => {
+          {MORE_ITEMS.map((item, i) => {
             const { icon: Icon, hue } = SECTION_META[item.href]
             const active = isActive(item.href)
             return (
               <motion.button
                 key={item.href}
                 type="button"
+                // کاشی‌ها پشت سر هم با کمی فنر می‌آیند، بعد از اینکه شیت راه افتاد
+                initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{
+                  opacity: { duration: 0.26, delay: 0.09 + i * 0.026 },
+                  default: { type: "spring", stiffness: 420, damping: 22, delay: 0.09 + i * 0.026 },
+                }}
                 whileTap={reduceMotion ? undefined : { scale: 0.95 }}
                 onClick={() => {
                   setMoreSheetOpen(false)
@@ -338,8 +368,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             )
           })}
         </div>
-        <button
+        <motion.button
           type="button"
+          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1], delay: 0.09 + MORE_ITEMS.length * 0.026 }}
           onClick={() => {
             setMoreSheetOpen(false)
             logout()
@@ -348,7 +381,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <IconLogout className="size-4" />
           خروج از حساب
-        </button>
+        </motion.button>
       </BottomSheet>
     </div>
   )
@@ -479,23 +512,24 @@ function SidebarItem({ item, active, count }: { item: NavItem; active: boolean; 
   )
 }
 
-/** نشانگر فعال نوار پایین — یک قرص کم‌رنگ پشت آیکون که با فنر بین آیتم‌ها لیز می‌خورد */
+/** نشانگر فعال نوار پایین — خط نارنجی روی لبهٔ بالای تب که بین آیتم‌ها لیز می‌خورد */
 function NavIndicator() {
   return (
-    <motion.span
-      layoutId="bottom-nav-pill"
-      aria-hidden
-      className="absolute inset-0 rounded-full bg-primary/10"
-      transition={{ type: "spring", stiffness: 520, damping: 36 }}
-    />
+    <span aria-hidden className="pointer-events-none absolute inset-x-0 -top-px flex justify-center">
+      <motion.span
+        layoutId="bottom-nav-line"
+        className="block h-[3px] w-7 rounded-b-full bg-primary"
+        transition={{ type: "spring", stiffness: 520, damping: 40 }}
+      />
+    </span>
   )
 }
 
 function NavContent({ active, icon, label }: { active: boolean; icon: ReactNode; label: string }) {
   return (
     <>
+      {active && <NavIndicator />}
       <span className="relative grid h-7 w-12 place-items-center">
-        {active && <NavIndicator />}
         <span className={cn("relative z-10 transition-colors duration-200", active ? "text-primary" : "text-muted-foreground")}>
           {icon}
         </span>

@@ -343,7 +343,7 @@
 /* جای اعلان: زیر هدر موبایل (روی عنوان/جستجو نمی‌نشیند)؛ در دسکتاپ هدر نیست → بالای صفحه.
    ارتفاع هدر = padding بالا (safe-area + ۰٫۷۵rem) + کارت ۴٫۵rem + padding پایین ۰٫۵rem */
 :root {
-  --hy-toast-bottom: calc(max(1.15rem, calc(env(safe-area-inset-bottom, 0px) + var(--tg-safe-bottom, 0px) + 0.35rem)) + 4.4rem + 0.75rem);
+  --hy-toast-bottom: calc(max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + var(--tg-safe-bottom, 0px))) + 3.75rem + 0.75rem);
   --hy-toast-top: calc(env(safe-area-inset-top, 0px) + 0.75rem + 4.5rem + 0.5rem + 0.5rem);
 }
 @media (min-width: 1024px) {
@@ -379,14 +379,14 @@
   align-items: center !important;
   gap: 0.6rem !important;
   min-height: 3rem;
-  /* قرص به اندازهٔ متن، دقیقاً وسط (sonner عرض ثابت می‌دهد) */
+  /* قرص به اندازهٔ متن، دقیقاً وسط (sonner عرض ثابت می‌دهد) — بدون حداقل عرض، تا پیام کوتاه
+     ته قرص جای خالی نداشته باشد */
   width: fit-content !important;
-  min-width: 11rem;
   max-width: var(--width);
   left: 0 !important;
   right: 0 !important;
   margin-inline: auto !important;
-  padding: 0.5rem 0.55rem 0.5rem 1.15rem !important; /* RTL: آیکون سمت راست */
+  padding: 0.5rem 0.55rem 0.5rem 1rem !important; /* RTL: آیکون سمت راست */
   border-radius: 1rem !important; /* نسخهٔ ۷ (X1): کارت کوچک، نه قرص — جا برای توضیح و دکمه */
   border: 1px solid rgb(255 255 255 / 0.06) !important;
   /* کاملاً مات و بدون backdrop-filter: در وب‌اپ iOS، بلورِ پشت اعلان هنگام محو شدن روی هدر
@@ -548,21 +548,13 @@
    نوار پایین موبایل (نسخهٔ ۷) — شیشهٔ روشن با لبهٔ نوری بالا و سایهٔ شناور نرم
    دکمهٔ + : گرادیان زمردی با درخشش بالا، حلقهٔ هم‌رنگ پس‌زمینه تا از نوار «جدا» دیده شود
    ═══════════════════════════════════════════════════════════════ */
+/* نوار پایین موبایل — چسبیده به لبه؛ فقط خط بالا و سایهٔ نرم رو به بالا */
 .hy-nav {
   background: rgb(255 255 255 / 0.94);
-  border: 1px solid rgb(15 26 23 / 0.06);
-  box-shadow:
-    0 1px 2px rgb(15 26 23 / 0.04),
-    0 16px 40px -14px rgb(15 26 23 / 0.22);
+  border-top: 1px solid rgb(15 26 23 / 0.08);
+  box-shadow: 0 -10px 30px -22px rgb(15 26 23 / 0.28);
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
-}
-.hy-fab {
-  background: var(--primary);
-  box-shadow:
-    0 0 0 5px var(--background),
-    0 10px 20px -8px color-mix(in srgb, var(--primary) 70%, transparent),
-    inset 0 1px 0 rgb(255 255 255 / 0.18);
 }
 
 

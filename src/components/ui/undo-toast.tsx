@@ -14,16 +14,19 @@ import { useUIStore } from "@/lib/ui-store"
 function Countdown({ ms }: { ms: number }) {
   const [left, setLeft] = useState(Math.ceil(ms / 1000))
   useEffect(() => {
-    const t = setInterval(() => setLeft((v) => Math.max(0, v - 1)), 1000)
+    // از روی زمان پایان حساب می‌شود تا با کند شدن تایمر (تب پس‌زمینه) از حلقه عقب نیفتد
+    const end = Date.now() + ms
+    const t = setInterval(() => setLeft(Math.max(0, Math.ceil((end - Date.now()) / 1000))), 250)
     return () => clearInterval(t)
-  }, [])
+  }, [ms])
   return (
-    <span className="hy-countdown relative grid size-8 place-items-center" style={{ ["--hy-cd" as string]: `${ms}ms` }}>
+    <span className="hy-countdown relative block size-8" style={{ ["--hy-cd" as string]: `${ms}ms` }}>
       <svg viewBox="0 0 36 36" className="absolute inset-0 size-8 -rotate-90" aria-hidden>
         <circle cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" strokeOpacity={0.2} strokeWidth={3} />
         <circle className="hy-cd-ring" cx="18" cy="18" r="15.9" fill="none" stroke="currentColor" strokeWidth={3} pathLength={100} strokeLinecap="round" />
       </svg>
-      <span className="nums relative text-caption font-extrabold">{toPersianDigits(left)}</span>
+      {/* عدد مطلقاً وسط حلقه — قانون عمومی آیکون اعلان روی فرزند مستقیم display:block می‌گذارد و grid را خنثی می‌کرد */}
+      <span className="nums absolute inset-0 grid place-items-center text-caption font-extrabold leading-none">{toPersianDigits(left)}</span>
     </span>
   )
 }
@@ -52,6 +55,12 @@ export function showUndoToast(options: {
       },
     },
   })
+}
+
+/** «کار حذف شد» → «کار سر جایش برگشت»؛ اگر موضوعی در پیام نبود: «حذف لغو شد» */
+function restoredMessage(message: string): string {
+  const subject = message.replace(/\s*(حذف|بایگانی|بسته) شد$/, "").trim()
+  return subject && subject !== message ? `${subject} سر جایش برگشت` : "حذف لغو شد"
 }
 
 // حذف‌های در انتظار — اگر صفحه بسته شود، همان لحظه نهایی می‌شوند
@@ -113,7 +122,7 @@ export function deferDelete(options: {
         settled = true
         pendingCommits.delete(options.id)
         setPendingDelete(options.id, false)
-        toast.success("بازگردانی شد")
+        toast.success(restoredMessage(options.message))
       },
     },
   })
