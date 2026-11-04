@@ -3,16 +3,12 @@ import fs from "node:fs"
 import path from "node:path"
 import { ok, fail, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
+import { uploadsDir } from "@/lib/storage"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-/** پوشه ذخیره پیوست‌ها — خارج از public و سرو از طریق API */
-function uploadsDir(): string {
-  const dir = path.join(process.cwd(), "uploads")
-  fs.mkdirSync(dir, { recursive: true })
-  return dir
-}
+/** پوشه ذخیره پیوست‌ها — خارج از وب‌روت (DATA_DIR) و سرو از طریق API */
 
 const MAX_SIZE = 8 * 1024 * 1024 // ۸ مگابایت
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "application/pdf"]

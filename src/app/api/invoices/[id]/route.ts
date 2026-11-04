@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import fs from "node:fs"
 import path from "node:path"
+import { uploadsDir } from "@/lib/storage"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { invoiceCreateSchema } from "@/lib/validation"
@@ -222,7 +223,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     // پاک‌سازی فایل‌های پیوست چک‌های حذف‌شده (خارج از تراکنش — خطایش بحرانی نیست)
     for (const attId of removedAttachmentFiles) {
       try {
-        fs.unlinkSync(path.join(process.cwd(), "uploads", attId))
+        fs.unlinkSync(path.join(uploadsDir(), attId))
       } catch {
         /* فایل از قبل نبود */
       }
@@ -299,7 +300,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     // پاک‌سازی فایل‌های پیوست حذف‌شده (خارج از تراکنش — خطایش بحرانی نیست)
     for (const attId of orphanFiles) {
       try {
-        fs.unlinkSync(path.join(process.cwd(), "uploads", attId))
+        fs.unlinkSync(path.join(uploadsDir(), attId))
       } catch {
         /* فایل از قبل نبود */
       }

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import fs from "node:fs"
 import path from "node:path"
+import { uploadsDir } from "@/lib/storage"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { productUpdateSchema } from "@/lib/validation"
@@ -12,7 +13,7 @@ async function deleteProductAttachments(productId: string) {
   for (const att of atts) {
     await db.attachment.delete({ where: { id: att.id } })
     try {
-      fs.unlinkSync(path.join(process.cwd(), "uploads", att.id))
+      fs.unlinkSync(path.join(uploadsDir(), att.id))
     } catch {
       /* فایل از قبل نیست — بی‌خیال */
     }

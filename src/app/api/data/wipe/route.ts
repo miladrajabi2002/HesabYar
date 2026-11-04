@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import fs from "node:fs"
-import path from "node:path"
+import { uploadsDir } from "@/lib/storage"
 import { db } from "@/lib/db"
 import { ok, fail, requireApiAuth, serverError } from "@/lib/api-helpers"
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     ])
     // فایل‌های پیوست روی دیسک هم پاک شوند — خطایش بحرانی نیست
     try {
-      const dir = path.join(process.cwd(), "uploads")
+      const dir = uploadsDir()
       if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
     } catch {
       /* ignore */

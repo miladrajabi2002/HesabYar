@@ -23,6 +23,7 @@ import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client"
 import { formatToman, toLatinDigits, toPersianDigits } from "@/lib/money"
 import { BANKS, bankFromCard, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
+import { Select } from "@/components/ui/select"
 import { EmptyState } from "@/components/ui/empty-state"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { showUndoToast } from "@/components/ui/undo-toast"
@@ -34,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatJalaliShort } from "@/lib/jalali"
 import { useConfirm } from "@/components/ui/confirm"
+import { useDirty } from "@/hooks/use-dirty"
 
 interface Account {
   id: string
@@ -209,8 +211,9 @@ function AccountForm({
   )
   const [cardNumber, setCardNumber] = useState(editing?.cardNumber ?? "")
   const [initialBalance, setInitialBalance] = useState(editing?.initialBalance ?? 0)
-  const [bankSheet, setBankSheet] = useState(false)
   const [saving, setSaving] = useState(false)
+  // ویرایش: «ذخیره» تا وقتی چیزی عوض نشده خاموش است
+  const dirty = useDirty({ name, bankKey, shebaDigits, cardNumber, initialBalance }, editing?.id ?? null)
 
   const submit = async () => {
     if (name.trim().length < 2) return toast.error("نام حساب را وارد کنید")
@@ -256,7 +259,7 @@ function AccountForm({
       title={editing ? "ویرایش حساب" : "حساب بانکی جدید"}
       size="tall"
       footer={
-        <Button onClick={submit} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
+        <Button onClick={submit} disabled={saving || (!!editing && !dirty)} className="h-12 w-full rounded-2xl font-bold">
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           ذخیره
         </Button>
@@ -271,15 +274,18 @@ function AccountForm({
         </div>
         <div>
           <label className="mb-1.5 block text-label font-bold text-foreground/80">بانک *</label>
-          <button
-            type="button"
-            onClick={() => setBankSheet(true)}
-            className="flex h-12 w-full items-center gap-2.5 rounded-2xl border border-input bg-card px-3 transition-[color,border-color,box-shadow] hover:border-input/80"
-          >
-            <BankLogo bankKey={bankKey} size={34} />
-            <span className="flex-1 text-start text-sm">{getBank(bankKey).name}</span>
-            <span className="text-caption text-muted-foreground">تغییر</span>
-          </button>
+          {/* انتخاب‌گر یکدست: دسکتاپ فهرست شناور، موبایل شیت با جستجو (۳۳ بانک) */}
+          <Select
+            value={bankKey}
+            onChange={setBankKey}
+            title="انتخاب بانک"
+            aria-label="بانک"
+            options={BANKS.map((b) => ({
+              value: b.key,
+              label: b.name,
+              icon: <BankLogo bankKey={b.key} size={26} />,
+            }))}
+          />
         </div>
         <div>
           <label className="mb-1.5 flex items-center justify-between text-label font-bold text-foreground/80">
@@ -347,35 +353,6 @@ function AccountForm({
           </p>
         </div>
       </div>
-
-      <BottomSheet
-        open={bankSheet}
-        onClose={() => setBankSheet(false)}
-        title="انتخاب بانک"
-        size="tall"
-      >
-        <div className="grid grid-cols-2 gap-2">
-          {BANKS.map((b) => (
-            <button
-              key={b.key}
-              type="button"
-              onClick={() => {
-                setBankKey(b.key)
-                setBankSheet(false)
-              }}
-              className={cn(
-                "flex items-center gap-2 rounded-2xl border p-2.5 text-start transition-all active:scale-[0.98]",
-                bankKey === b.key
-                  ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                  : "border-border hover:bg-accent/60"
-              )}
-            >
-              <BankLogo bankKey={b.key} size={36} />
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{b.name}</span>
-            </button>
-          ))}
-        </div>
-      </BottomSheet>
     </BottomSheet>
   )
 }

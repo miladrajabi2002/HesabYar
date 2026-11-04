@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { haptic as buzzHaptic } from "@/hooks/use-haptics"
 
 interface TelegramWebApp {
   initData: string
@@ -116,12 +117,13 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       webApp,
       isTelegram,
       user: u ? { id: u.id, name: u.first_name || u.username || "" } : null,
+      // داخل تلگرام از HapticFeedback بومی؛ بیرون تلگرام (PWA/مرورگر) fallback به Vibration API
       haptic: {
-        success: () => haptic?.notificationOccurred("success"),
-        error: () => haptic?.notificationOccurred("error"),
-        warning: () => haptic?.notificationOccurred("warning"),
-        tap: () => haptic?.selectionChanged(),
-        medium: () => haptic?.impactOccurred("medium"),
+        success: () => (haptic ? haptic.notificationOccurred("success") : buzzHaptic.success()),
+        error: () => (haptic ? haptic.notificationOccurred("error") : buzzHaptic.error()),
+        warning: () => (haptic ? haptic.notificationOccurred("warning") : buzzHaptic.warning()),
+        tap: () => (haptic ? haptic.selectionChanged() : buzzHaptic.tap()),
+        medium: () => (haptic ? haptic.impactOccurred("medium") : buzzHaptic.medium()),
       },
     }
   }, [webApp])

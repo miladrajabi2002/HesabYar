@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import fs from "node:fs"
 import path from "node:path"
+import { uploadsDir } from "@/lib/storage"
 import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { personUpdateSchema } from "@/lib/validation"
@@ -99,7 +100,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     // حذف فایل‌ها خارج از تراکنش — خطایش بحرانی نیست
     for (const a of atts) {
       try {
-        fs.unlinkSync(path.join(process.cwd(), "uploads", a.id))
+        fs.unlinkSync(path.join(uploadsDir(), a.id))
       } catch {
         /* فایل از قبل نبود */
       }

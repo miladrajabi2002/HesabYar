@@ -16,7 +16,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 15_000,
             retry: 1,
-            refetchOnWindowFocus: false,
+            // با بازگشت به تب/اپ، داده‌ها تازه می‌شوند (الگوی app) — برای دادهٔ مالی حیاتی است
+            refetchOnWindowFocus: true,
           },
         },
       })

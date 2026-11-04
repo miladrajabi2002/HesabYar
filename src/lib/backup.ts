@@ -7,6 +7,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { db } from "./db"
 import { jalaliOf } from "./jalali"
+import { backupsDir } from "./storage"
 
 const ENC_MAGIC = "HESABYAR-ENC1" // ۱۴ بایت
 
@@ -49,7 +50,9 @@ export function decryptBackup(data: Buffer, password: string): Buffer {
   }
 }
 
-/** مسیر فیزیکی فایل دیتابیس (پشتیبانی از مسیر نسبی و مطلق) */
+/**
+ * مسیر فیزیکی فایل دیتابیس — DATA_DIR مطلق است؛ مسیر نسبی قدیمی هم هنوز پشتیبانی می‌شود
+ */
 export function getDbPath(): string {
   const url = process.env.DATABASE_URL || "file:./dev.db"
   if (url.startsWith("file:")) {
@@ -59,8 +62,9 @@ export function getDbPath(): string {
   return path.resolve(process.cwd(), "prisma", "dev.db")
 }
 
+/** بکاپ‌ها خارج از وب‌روت، در DATA_DIR/backups (الگوی app) */
 export function getBackupsDir(): string {
-  return path.join(process.cwd(), "backups")
+  return backupsDir()
 }
 
 function jalaliStamp(): string {
