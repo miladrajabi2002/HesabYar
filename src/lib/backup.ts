@@ -118,11 +118,22 @@ export function listBackups(): { name: string; size: number; mtime: string }[] {
  * بکاپ خودکار از وضعیت فعلی پیش از جایگزینی.
  * فایل رمزگذاری‌شده (SEC-08) با رمز همراه فایل باز می‌شود.
  */
-export async function restoreBackup(data: Buffer, password?: string): Promise<void> {
+export async function restoreBackup(data: Buffer, passwords: string[] = []): Promise<void> {
   let buf = data
   if (isEncryptedBackup(data)) {
-    if (!password) throw new Error("این فایل بکاپ رمزدار است — رمز عبورش را وارد کنید")
-    buf = decryptBackup(data, password)
+    if (!passwords.length) throw new Error("این فایل بکاپ رمزدار است — رمز عبورش را وارد کنید")
+    // به ترتیب: رمزی که کاربر زد، رمز ورود فعلی، رمز بکاپ قدیمی
+    let opened: Buffer | null = null
+    for (const pw of passwords) {
+      try {
+        opened = decryptBackup(data, pw)
+        break
+      } catch {
+        /* رمز بعدی */
+      }
+    }
+    if (!opened) throw new Error("رمز این فایل با رمز ورود فعلی یکی نیست — رمزی را که موقع ساختنش داشتید وارد کنید")
+    buf = opened
   }
   const header = buf.subarray(0, 16).toString("utf8")
   if (header !== "SQLite format 3\u0000") {

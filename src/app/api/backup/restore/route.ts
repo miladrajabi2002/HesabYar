@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { ok, fail, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { restoreBackup } from "@/lib/backup"
+import { restoreCandidates } from "@/lib/account-password"
 import { clientIp, rateLimit } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer())
     const password = (formData.get("password") as string | null)?.trim() || undefined
-    await restoreBackup(buffer, password)
+    await restoreBackup(buffer, [...(password ? [password] : []), ...(await restoreCandidates())])
     return ok({ ok: true, message: "بازیابی با موفقیت انجام شد" })
   } catch (e) {
     return fail(e instanceof Error ? e.message : "بازیابی بکاپ ناموفق بود", 400)

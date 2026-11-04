@@ -3,6 +3,7 @@ import { db } from "@/lib/db"
 import { ok, fail, parseBody, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { resolveTelegramConfig, maskSecret } from "@/lib/telegram/config"
 import { settingsSchema } from "@/lib/validation"
+import { passwordStatus } from "@/lib/account-password"
 
 export const dynamic = "force-dynamic"
 
@@ -26,7 +27,9 @@ export async function GET(req: NextRequest) {
       morningReminder: setting?.morningReminder ?? true,
       morningHour: setting?.morningHour ?? 8,
       telegramBackup: setting?.telegramBackup ?? false,
-      hasBackupPassword: !!setting?.backupPassword,
+      // بکاپ همیشه با رمز ورود قفل می‌شود
+      hasBackupPassword: true,
+      password: await passwordStatus(),
     })
   } catch (e) {
     return serverError(e)
@@ -62,17 +65,7 @@ export async function PUT(req: NextRequest) {
     }
     if (data.morningReminder !== undefined) update.morningReminder = data.morningReminder
     if (data.morningHour !== undefined) update.morningHour = data.morningHour
-    if (data.backupPassword) {
-      if (data.backupPassword.length < 6) return fail("رمز بکاپ حداقل ۶ کاراکتر باشد", 400)
-      update.backupPassword = data.backupPassword
-    }
-    if (data.telegramBackup !== undefined) {
-      const current = await db.setting.findUnique({ where: { id: "default" }, select: { backupPassword: true } })
-      if (data.telegramBackup && !data.backupPassword && !current?.backupPassword) {
-        return fail("برای بکاپ رمزدار، اول یک رمز انتخاب کنید", 400)
-      }
-      update.telegramBackup = data.telegramBackup
-    }
+    if (data.telegramBackup !== undefined) update.telegramBackup = data.telegramBackup
 
     if (Object.keys(update).length > 0) {
       await db.setting.update({ where: { id: "default" }, data: update })
@@ -89,7 +82,8 @@ export async function PUT(req: NextRequest) {
       morningReminder: setting?.morningReminder ?? true,
       morningHour: setting?.morningHour ?? 8,
       telegramBackup: setting?.telegramBackup ?? false,
-      hasBackupPassword: !!setting?.backupPassword,
+      hasBackupPassword: true,
+      password: await passwordStatus(),
     })
   } catch (e) {
     return serverError(e)

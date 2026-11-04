@@ -1,11 +1,12 @@
 /**
  * بکاپ خودکار رمزدار به تلگرام — lib/telegram/backup.ts
  * فایل دیتابیس با AES-256-GCM (همان قالب SEC-08 در lib/backup.ts) رمز می‌شود و
- * به‌صورت سند برای ادمین ارسال می‌شود. بازیابی: تنظیمات ← بازیابی بکاپ + همان رمز.
+ * به‌صورت سند برای ادمین ارسال می‌شود. رمز = رمز ورود؛ بازیابی: تنظیمات ← بازیابی از فایل.
  */
 import fs from "node:fs"
 import { db } from "@/lib/db"
 import { createBackup, encryptBackup } from "@/lib/backup"
+import { backupPassword } from "@/lib/account-password"
 import { jalaliOf, formatJalaliWithWeekday } from "@/lib/jalali"
 import { resolveTelegramConfig } from "./config"
 import { alreadySent } from "./alerts"
@@ -15,8 +16,9 @@ const MAX_TELEGRAM_FILE = 49 * 1024 * 1024
 export async function sendBackupToTelegram(opts: { force?: boolean } = {}): Promise<{ ok: boolean; error?: string }> {
   const setting = await db.setting.findUnique({ where: { id: "default" } }).catch(() => null)
   if (!opts.force && !setting?.telegramBackup) return { ok: false, error: "بکاپ تلگرام خاموش است" }
-  const password = setting?.backupPassword
-  if (!password) return { ok: false, error: "رمز بکاپ تنظیم نشده است" }
+  // همان رمز ورود (تنظیمات ← امنیت ← رمز ورود و بکاپ)
+  const password = await backupPassword()
+  if (!password) return { ok: false, error: "رمز ورود تنظیم نشده است" }
 
   const cfg = await resolveTelegramConfig()
   if (!cfg.token || !cfg.chatId) return { ok: false, error: "ربات یا شناسهٔ چت تنظیم نشده است" }
@@ -36,7 +38,7 @@ export async function sendBackupToTelegram(opts: { force?: boolean } = {}): Prom
   form.append(
     "caption",
     `🔐 بکاپ رمزدار حساب‌یار\n${formatJalaliWithWeekday(new Date())}\n\n` +
-      `برای بازیابی: تنظیمات ← بازیابی بکاپ ← همین فایل + رمز بکاپ`
+      `برای بازیابی: تنظیمات ← بازیابی از فایل ← همین فایل (رمز = رمز ورود)`
   )
   form.append("disable_notification", "true")
   form.append(

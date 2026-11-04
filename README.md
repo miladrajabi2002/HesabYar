@@ -114,7 +114,7 @@ sqlite3 prisma/dev.db ".restore backup.db" && pm2 restart hesabyar
 ## 🔄 آپدیت نسخه‌های بعدی
 
 ```bash
-cd /var/www/miladrajabi.com/bot/hesabyar
+cd /var/www/miladrajabi.com/hesabyar
 git pull
 npm install
 npx prisma db push

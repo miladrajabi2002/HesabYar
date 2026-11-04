@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import fs from "node:fs"
 import { fail, requireApiAuth, serverError } from "@/lib/api-helpers"
 import { createBackup, encryptBackup } from "@/lib/backup"
+import { backupPassword } from "@/lib/account-password"
 import { jalaliOf } from "@/lib/jalali"
 import { clientIp, rateLimit } from "@/lib/rate-limit"
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 /** GET /api/backup — دانلود فایل بکاپ دیتابیس با نام تاریخ شمسی
- * SEC-08: با پارامتر password فایل با AES-256-GCM رمزگذاری می‌شود */
+ * SEC-08: فایل با رمز ورود (AES-256-GCM) قفل می‌شود — همان رمزی که در تنظیمات عوض می‌شود */
 export async function GET(req: NextRequest) {
   const auth = await requireApiAuth(req)
   if (auth) return auth
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
   if (!rl.ok) return fail(`درخواست‌های زیاد؛ ${rl.retryAfterSec} ثانیه دیگر امتحان کنید`, 429)
 
   try {
-    const password = new URL(req.url).searchParams.get("password")?.trim() || ""
+    const password = (await backupPassword()) || ""
     const filePath = await createBackup()
     const raw = fs.readFileSync(filePath)
     const buffer = password.length >= 4 ? encryptBackup(raw, password) : raw

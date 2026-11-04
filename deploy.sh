@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════════
 #  حساب‌یار — اسکریپت استقرار یک‌کلیکی (OPS-03)
 #  git pull → install → migrate → build → restart → health-check
-#  استفاده:  bash /var/www/miladrajabi.com/bot/hesabyar/deploy.sh
+#  استفاده:  bash /var/www/miladrajabi.com/hesabyar/deploy.sh
 # ═══════════════════════════════════════════════════════════════
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"

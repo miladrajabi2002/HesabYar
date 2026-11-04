@@ -21,6 +21,12 @@ import {
   Bell,
   Clock,
   CalendarClock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Smartphone,
+  CheckCircle2,
 } from "lucide-react"
 import {
   startRegistration,
@@ -40,6 +46,8 @@ import { useConfirm } from "@/components/ui/confirm"
 import { useTelegram } from "@/hooks/use-telegram"
 import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/layout/page-header"
+import { SettingsLayout, type SettingsSection } from "@/components/settings/settings-layout"
+import { InstallButton, usePWA } from "@/components/pwa/pwa-provider"
 
 interface Settings {
   botTokenMasked: string | null
@@ -53,11 +61,15 @@ interface Settings {
   morningHour: number
   telegramBackup: boolean
   hasBackupPassword: boolean
+  password: { source: "app" | "env"; changedAt: string | null }
 }
+
+const PASSKEY_LOCAL = "hesabyar:passkey-id"
 
 interface PasskeyItem {
   id: string
   deviceName: string
+  credentialId: string
   createdAt: string
   lastUsedAt: string | null
 }
@@ -86,15 +98,6 @@ function awaitServiceWorkerReady(ms = 6000): Promise<ServiceWorkerRegistration |
   ])
 }
 
-/** نسخهٔ ۷ (P8): گروه‌ها به سبک تنظیمات گوشی — هر ردیف مقدار فعلی را نشان می‌دهد و جزئیات در شیت باز می‌شود */
-const SETTINGS_SECTIONS = [
-  { id: "security", label: "امنیت و ورود" },
-  { id: "notifications", label: "اعلان‌ها" },
-  { id: "telegram", label: "ربات تلگرام" },
-  { id: "backup", label: "پشتیبان‌گیری" },
-  { id: "danger", label: "ناحیهٔ خطر" },
-] as const
-
 export default function SettingsPage() {
   const queryClient = useQueryClient()
   const { data, isLoading, refetch } = useQuery({
@@ -108,9 +111,9 @@ export default function SettingsPage() {
   const [chatId, setChatId] = useState("")
   const [miniAppUrl, setMiniAppUrl] = useState("")
   // کدام شیت جزئیات باز است (نسخهٔ ۷: فرم‌ها در شیت، نه وسط صفحه)
-  const [sheet, setSheet] = useState<SheetKey | null>(null)
+  const [pwOpen, setPwOpen] = useState(false)
+  const { isStandalone } = usePWA()
   const [autoBusy, setAutoBusy] = useState<string | null>(null)
-  const [telegramBackupPw, setTelegramBackupPw] = useState("")
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [wiping, setWiping] = useState(false)
@@ -122,6 +125,26 @@ export default function SettingsPage() {
   const [passkeySupported, setPasskeySupported] = useState<boolean | null>(null)
   const [passkeyBusy, setPasskeyBusy] = useState(false)
   const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null)
+  // شناسهٔ کلید همین مرورگر (بعد از ثبت یا ورود با اثر انگشت) — دکمهٔ «افزودن این دستگاه» دوباره نمی‌آید
+  const [thisDevice, setThisDevice] = useState<string | null>(null)
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      try {
+        setThisDevice(window.localStorage.getItem(PASSKEY_LOCAL))
+      } catch {
+        /* حالت خصوصی */
+      }
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [])
+  const rememberDevice = (id: string) => {
+    try {
+      window.localStorage.setItem(PASSKEY_LOCAL, id)
+    } catch {
+      /* حالت خصوصی */
+    }
+    setThisDevice(id)
+  }
 
   const passkeysQuery = useQuery({
     queryKey: ["passkeys"],
@@ -160,11 +183,16 @@ export default function SettingsPage() {
         credential: attestation,
         deviceName: device || undefined,
       })
+      rememberDevice(attestation.id)
       toast.success(r.message || "کلید با موفقیت ثبت شد")
       setDeviceName("")
       await queryClient.invalidateQueries({ queryKey: ["passkeys"] })
     } catch (err) {
-      if (err instanceof Error && err.name === "NotAllowedError") {
+      if (err instanceof Error && (err.name === "InvalidStateError" || /already registered|previously registered/i.test(err.message))) {
+        // کلید این دستگاه از قبل روی سرور هست (excludeCredentials)
+        rememberDevice("registered")
+        toast.info("این دستگاه از قبل ثبت شده است — با همان اثر انگشت وارد شوید")
+      } else if (err instanceof Error && err.name === "NotAllowedError") {
         toast.info("ثبت بیومتریک لغو شد")
       } else {
         toast.error(err instanceof Error ? err.message : "ثبت کلید ناموفق بود")
@@ -186,6 +214,14 @@ export default function SettingsPage() {
     setDeletingKeyId(k.id)
     try {
       await apiDelete(`/api/passkey/list?id=${encodeURIComponent(k.id)}`)
+      if (k.credentialId === thisDevice) {
+        try {
+          window.localStorage.removeItem(PASSKEY_LOCAL)
+        } catch {
+          /* */
+        }
+        setThisDevice(null)
+      }
       toast.success("کلید حذف شد")
       await queryClient.invalidateQueries({ queryKey: ["passkeys"] })
     } catch (e) {
@@ -320,19 +356,15 @@ export default function SettingsPage() {
   }
 
   // ─── بکاپ رمزدار (SEC-08) ────────────────────────────
+  // رمز فایل فقط برای بازیابی بکاپ‌های قدیمی که با رمز دیگری ساخته شده‌اند
   const [backupPassword, setBackupPassword] = useState("")
   const [backingUp, setBackingUp] = useState(false)
 
   const downloadBackup = async () => {
-    const pw = backupPassword.trim()
-    if (pw && pw.length < 4) {
-      toast.error("رمز بکاپ باید حداقل ۴ کاراکتر باشد")
-      return
-    }
     setBackingUp(true)
     try {
-      // fetch → blob → دانلود؛ رمز در آدرس‌بار و تاریخ مرورگر دیده نمی‌شود
-      const res = await fetch(`/api/backup${pw ? `?password=${encodeURIComponent(pw)}` : ""}`, {
+      // fetch → blob → دانلود؛ فایل با رمز ورود قفل است
+      const res = await fetch("/api/backup", {
         headers: rawAuthHeaders(),
       })
       if (!res.ok) {
@@ -356,7 +388,7 @@ export default function SettingsPage() {
       a.click()
       a.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 5000)
-      toast.success(pw ? "بکاپ رمزگذاری‌شده دانلود شد" : "فایل بکاپ دانلود شد")
+      toast.success("بکاپ دانلود شد — با رمز ورود باز می‌شود")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "دانلود بکاپ ناموفق بود")
     } finally {
@@ -367,7 +399,7 @@ export default function SettingsPage() {
   const restoreBackup = async (file: File) => {
     const fd = new FormData()
     fd.append("file", file)
-    // فایل رمزگذاری‌شده (SEC-08) با همین رمز باز می‌شود
+    // فایل رمزدار خودکار با رمز ورود باز می‌شود؛ این رمز فقط برای فایل‌های قدیمی است
     const pw = backupPassword.trim()
     if (pw) fd.append("password", pw)
     try {
@@ -403,7 +435,6 @@ export default function SettingsPage() {
         miniAppUrl: miniAppUrl || undefined,
       })
       toast.success("تنظیمات ربات ذخیره شد")
-      setSheet(null)
       setToken("")
       await refetch()
     } catch (e) {
@@ -471,450 +502,344 @@ export default function SettingsPage() {
 
   const botReady = data.hasBotToken && data.hasAdminChatId
   const pushValue = isTelegram ? "از ربات تلگرام" : pushCapable === false ? "پشتیبانی نمی‌شود" : null
+  const deviceKey = passkeys?.find((k) => k.credentialId === thisDevice) ?? null
+  const registeredHere = !!deviceKey || thisDevice === "registered"
+  const fullBtn = "h-12 w-full rounded-2xl font-bold"
 
-  return (
-    <div className="mx-auto max-w-4xl lg:grid lg:grid-cols-[13.75rem_minmax(0,1fr)] lg:items-start lg:gap-6">
-      {/* دسکتاپ: فهرست بخش‌ها در ستون کنار */}
-      <nav aria-label="بخش‌های تنظیمات" className="sticky top-20 hidden rounded-3xl border border-border bg-card p-2 lg:block">
-        {SETTINGS_SECTIONS.map((sec, i) => (
-          <a
-            key={sec.id}
-            href={`#${sec.id}`}
-            className={cn(
-              "flex h-[2.375rem] items-center rounded-[10px] px-3 text-sm transition-colors hover:bg-accent",
-              i === 0 ? "bg-secondary font-extrabold text-secondary-foreground" : "font-medium",
-              sec.id === "danger" && "text-destructive"
-            )}
-          >
-            {sec.label}
-          </a>
-        ))}
-      </nav>
-
-      <div className="min-w-0">
-        <PageHeader title="تنظیمات" sub="امنیت، اعلان‌ها، ربات تلگرام و پشتیبان‌گیری" />
-
-        <SettingsGroup id="security" title="امنیت و ورود" first>
-          <Cell
-            icon={<Fingerprint className="size-4" />}
-            label="ورود با اثر انگشت"
-            value={
-              passkeySupported === false
-                ? "پشتیبانی نمی‌شود"
-                : passkeys
-                  ? passkeys.length
-                    ? `${toPersianDigits(passkeys.length)} دستگاه`
-                    : "فعال نیست"
-                  : "…"
-            }
-            onClick={() => setSheet("passkey")}
-          />
-        </SettingsGroup>
-
-        <SettingsGroup id="notifications" title="اعلان‌ها">
-          <Cell
-            icon={<Bell className="size-4" />}
-            label="اعلان روی گوشی"
-            value={pushValue}
-            trailing={
-              pushValue ? undefined : (
-                <Switch
-                  checked={pushOn}
-                  onCheckedChange={(checked: boolean) => (checked ? enablePush() : disablePush())}
-                  disabled={pushBusy || pushCapable === null}
-                  aria-label="اعلان روی گوشی"
-                />
-              )
-            }
-            onClick={pushValue ? undefined : () => setSheet("push")}
-          />
-          <Cell
-            icon={<CalendarClock className="size-4" />}
-            tone="var(--hue-checks)"
-            label="هشدار سررسید چک"
-            value={`${toPersianDigits(data.checkDueDaysBefore)} روز قبل`}
-            onClick={() => setSheet("due")}
-          />
-          <Cell
-            icon={<Clock className="size-4" />}
-            tone="var(--purchase)"
-            label="یادآوری صبحگاهی چک‌ها"
-            value={data.morningReminder ? `ساعت ${toPersianDigits(data.morningHour)}:۰۰` : "خاموش"}
-            onClick={() => setSheet("morning")}
-          />
-        </SettingsGroup>
-
-        <SettingsGroup id="telegram" title="ربات تلگرام">
-          <Cell
-            icon={<Send className="size-4 -scale-x-100" />}
-            tone="#2a8bd0"
-            label="اتصال ربات"
-            trailing={
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption font-bold",
-                  botReady ? "bg-income/10 text-income" : "bg-warning/15 text-warning-ink"
-                )}
-              >
-                {botReady ? <Check className="size-3" /> : null}
-                {botReady ? "وصل است" : data.hasBotToken ? "شناسهٔ چت لازم است" : "وصل نیست"}
-              </span>
-            }
-            onClick={() => setSheet("telegram")}
-          />
-        </SettingsGroup>
-
-        <SettingsGroup id="backup" title="پشتیبان‌گیری">
-          <Cell
-            icon={<DatabaseBackup className="size-4" />}
-            label="بکاپ خودکار رمزدار در تلگرام"
-            value={data.telegramBackup ? "هر شب ۳:۳۰" : "خاموش"}
-            onClick={() => setSheet("tgBackup")}
-          />
-          <Cell icon={<Download className="size-4" />} label="دانلود بکاپ" onClick={() => setSheet("download")} />
-          <Cell icon={<Upload className="size-4" />} label="بازیابی از فایل" onClick={() => setSheet("restore")} />
-        </SettingsGroup>
-
-        <SettingsGroup id="danger" title="ناحیهٔ خطر" danger>
-          <Cell
-            icon={<Trash2 className="size-4" />}
-            tone="var(--destructive)"
-            label="پاک کردن همهٔ داده‌ها"
-            danger
-            onClick={() => setWipeSheet(true)}
-          />
-        </SettingsGroup>
-        <p className="mt-3 px-1 text-caption text-muted-foreground">بکاپ خودکار روزانه روی سرور هم گرفته می‌شود (۷ نسخهٔ آخر نگه داشته می‌شود).</p>
-      </div>
-
-      {/* ───────── شیت: ورود با اثر انگشت ───────── */}
-      <BottomSheet
-        open={sheet === "passkey"}
-        onClose={() => setSheet(null)}
-        title="ورود با اثر انگشت"
-        description="با اثر انگشت یا Face ID بدون رمز وارد شوید"
-        footer={
-          passkeySupported !== false ? (
-            <Button onClick={registerPasskey} disabled={passkeyBusy} className="h-12 w-full rounded-2xl font-bold">
-              {passkeyBusy ? <Loader2 className="size-4 animate-spin" /> : <Fingerprint className="size-4" />}
-              افزودن این دستگاه
-            </Button>
-          ) : undefined
-        }
-      >
-        {passkeySupported !== false ? (
-          <FieldGroup label="نام این دستگاه (اختیاری)">
-            <Input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} placeholder="مثلاً: آیفون شخصی" />
-          </FieldGroup>
-        ) : (
-          <p className="rounded-2xl bg-muted px-4 py-3 text-caption leading-5 text-muted-foreground">
-            مرورگر این دستگاه از ورود بیومتریک (WebAuthn) پشتیبانی نمی‌کند — با کروم، سافاری یا اپ نصب‌شده امتحان کنید.
-          </p>
-        )}
-        <h3 className="mx-1 mb-2 mt-4 text-label font-extrabold text-foreground/80">دستگاه‌های ثبت‌شده</h3>
-        <div className="overflow-hidden rounded-2xl border border-border">
-          {passkeysQuery.isError ? (
-            <p className="px-4 py-5 text-center text-label text-muted-foreground">دریافت فهرست ناموفق بود — دوباره تلاش کنید</p>
-          ) : passkeysQuery.isLoading || !passkeys ? (
-            <Skeleton className="m-3 h-10 rounded-xl" />
-          ) : passkeys.length === 0 ? (
-            <p className="px-4 py-5 text-center text-label text-muted-foreground">هنوز دستگاهی ثبت نشده</p>
-          ) : (
-            <div className="divide-y divide-border">
-              {passkeys.map((k) => (
-                <div key={k.id} className="flex min-h-[3.25rem] items-center gap-3 px-4 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold">{k.deviceName}</p>
-                    <p className="nums text-caption text-muted-foreground">
-                      {k.lastUsedAt
-                        ? `آخرین استفاده: ${formatJalali(new Date(k.lastUsedAt))}`
-                        : `ثبت‌شده: ${formatJalali(new Date(k.createdAt))}`}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removePasskey(k)}
-                    disabled={deletingKeyId === k.id}
-                    aria-label={`حذف ${k.deviceName}`}
-                    className="grid size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                  >
-                    {deletingKeyId === k.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                  </button>
+  const sections: SettingsSection[] = [
+    {
+      id: "security",
+      label: "امنیت و ورود",
+      icon: <ShieldCheck className="size-4" />,
+      description: "اثر انگشت و رمز ورود",
+      items: [
+        {
+          id: "passkey",
+          icon: <Fingerprint className="size-4" />,
+          label: "ورود با اثر انگشت",
+          description: "با اثر انگشت یا Face ID بدون رمز وارد شوید",
+          value: passkeySupported === false ? "پشتیبانی نمی‌شود" : registeredHere ? "این دستگاه فعال است" : passkeys ? (passkeys.length ? `${toPersianDigits(passkeys.length)} دستگاه` : "فعال نیست") : "…",
+          wide: true,
+          content: (
+            <>
+              {registeredHere ? (
+                <div className="flex items-center gap-2.5 rounded-2xl bg-income/10 px-3.5 py-3 text-label font-bold text-income">
+                  <CheckCircle2 className="size-5 shrink-0" />
+                  این دستگاه ثبت شده{deviceKey ? ` (${deviceKey.deviceName})` : ""}؛ دفعهٔ بعد فقط اثر انگشت.
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </BottomSheet>
-
-      {/* ───────── شیت: اعلان روی گوشی ───────── */}
-      <BottomSheet
-        open={sheet === "push"}
-        onClose={() => setSheet(null)}
-        title="اعلان روی گوشی"
-        description={pushOn ? "فعال — اعلان‌ها به همین دستگاه می‌رسد" : "خاموش"}
-        footer={
-          <Button onClick={testPush} disabled={!pushOn || testingPush} variant="outline" className="h-12 w-full rounded-2xl font-bold">
-            {testingPush ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />}
-            ارسال اعلان آزمایشی
-          </Button>
-        }
-      >
-        <div className="overflow-hidden rounded-2xl border border-border">
-          <Cell
-            label="دریافت اعلان روی این دستگاه"
-            trailing={
-              <Switch
-                checked={pushOn}
-                onCheckedChange={(checked: boolean) => (checked ? enablePush() : disablePush())}
-                disabled={pushBusy}
-                aria-label="دریافت اعلان روی این دستگاه"
-              />
-            }
-          />
-        </div>
-        <p className="mt-3 px-1 text-caption leading-5 text-muted-foreground">
-          در iOS ابتدا اپ را به صفحهٔ اصلی اضافه کنید (Share → Add to Home Screen) تا اعلان‌ها فعال شوند.
-        </p>
-      </BottomSheet>
-
-      {/* ───────── شیت: هشدار سررسید چک ───────── */}
-      <BottomSheet
-        open={sheet === "due"}
-        onClose={() => setSheet(null)}
-        title="هشدار سررسید چک"
-        description="چند روز قبل از سررسید، ربات خبر بدهد؟"
-        desktopMode="dialog"
-      >
-        <div className="grid grid-cols-3 gap-2">
-          {[1, 2, 3, 5, 7, 10].map((d) => (
-            <button
-              key={d}
-              type="button"
-              disabled={autoBusy !== null}
-              onClick={async () => {
-                if (await update({ checkDueDaysBefore: d }, `هشدار ${toPersianDigits(d)} روز قبل از سررسید`)) setSheet(null)
-              }}
-              className={cn(
-                "h-12 rounded-2xl border text-sm font-bold transition-colors",
-                data.checkDueDaysBefore === d
-                  ? "border-primary bg-secondary text-secondary-foreground"
-                  : "border-border bg-card hover:bg-accent"
+              ) : passkeySupported !== false ? (
+                <FieldGroup label="نام این دستگاه (اختیاری)">
+                  <Input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} placeholder="مثلاً: آیفون شخصی" />
+                </FieldGroup>
+              ) : (
+                <p className="rounded-2xl bg-muted px-4 py-3 text-caption leading-5 text-muted-foreground">
+                  مرورگر این دستگاه از ورود بیومتریک (WebAuthn) پشتیبانی نمی‌کند — با کروم، سافاری یا اپ نصب‌شده امتحان کنید.
+                </p>
               )}
-            >
-              {toPersianDigits(d)} روز قبل
-            </button>
-          ))}
-        </div>
-        <p className="mt-3 px-1 text-caption leading-5 text-muted-foreground">
-          چک سررسیدشده هم (تا وقتی پاس یا برگشت نخورده) هر ساعت یک‌بار پیگیری و خبر داده می‌شود.
-        </p>
-      </BottomSheet>
-
-      {/* ───────── شیت: یادآوری صبحگاهی ───────── */}
-      <BottomSheet
-        open={sheet === "morning"}
-        onClose={() => setSheet(null)}
-        title="یادآوری صبحگاهی"
-        description="هر صبح فهرست چک‌های امروز و سررسیدگذشته با دکمهٔ «پاس شد» و «برگشت خورد» در تلگرام"
-        footer={
-          <Button
-            onClick={() => runTelegram("morning")}
-            disabled={!botReady || autoBusy !== null}
-            variant="outline"
-            className="h-12 w-full rounded-2xl font-bold"
-          >
-            {autoBusy === "morning" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
-            همین حالا بفرست
-          </Button>
-        }
-      >
-        <div className="overflow-hidden rounded-2xl border border-border">
-          <Cell
-            label="یادآوری روشن باشد"
-            trailing={
-              <Switch
-                checked={data.morningReminder}
-                disabled={autoBusy !== null}
-                onCheckedChange={(v) => update({ morningReminder: v }, v ? "یادآوری صبحگاهی روشن شد" : "یادآوری خاموش شد")}
-                aria-label="یادآوری روشن باشد"
-              />
-            }
-          />
-        </div>
-        {data.morningReminder && (
-          <>
-            <h3 className="mx-1 mb-2 mt-4 text-label font-extrabold text-foreground/80">ساعت ارسال</h3>
-            <div className="grid grid-cols-6 gap-1.5">
-              {MORNING_HOURS.map((h) => (
+              <h3 className="mx-1 mb-2 mt-4 text-label font-extrabold text-foreground/80">دستگاه‌های ثبت‌شده</h3>
+              <div className="overflow-hidden rounded-2xl border border-border">
+                {passkeysQuery.isError ? (
+                  <p className="px-4 py-5 text-center text-label text-muted-foreground">دریافت فهرست ناموفق بود — دوباره تلاش کنید</p>
+                ) : passkeysQuery.isLoading || !passkeys ? (
+                  <Skeleton className="m-3 h-10 rounded-xl" />
+                ) : passkeys.length === 0 ? (
+                  <p className="px-4 py-5 text-center text-label text-muted-foreground">هنوز دستگاهی ثبت نشده</p>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {passkeys.map((k) => (
+                      <div key={k.id} className="flex min-h-[3.25rem] items-center gap-3 px-4 py-2">
+                        <Smartphone className="size-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="flex items-center gap-1.5 truncate text-sm font-bold">
+                            {k.deviceName}
+                            {k.credentialId === thisDevice && <span className="rounded-full bg-income/12 px-1.5 text-micro font-extrabold text-income">همین دستگاه</span>}
+                          </p>
+                          <p className="nums text-caption text-muted-foreground">
+                            {k.lastUsedAt ? `آخرین استفاده: ${formatJalali(new Date(k.lastUsedAt))}` : `ثبت‌شده: ${formatJalali(new Date(k.createdAt))}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePasskey(k)}
+                          disabled={deletingKeyId === k.id}
+                          aria-label={`حذف ${k.deviceName}`}
+                          className="grid size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                        >
+                          {deletingKeyId === k.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          ),
+          footer:
+            passkeySupported !== false && !registeredHere ? (
+              <Button onClick={registerPasskey} disabled={passkeyBusy} className={fullBtn}>
+                {passkeyBusy ? <Loader2 className="size-4 animate-spin" /> : <Fingerprint className="size-4" />}
+                افزودن این دستگاه
+              </Button>
+            ) : undefined,
+        },
+        {
+          id: "password",
+          icon: <KeyRound className="size-4" />,
+          tone: "var(--purchase)",
+          label: "رمز ورود و بکاپ",
+          value: data.password.source === "app" ? "تغییر داده شده" : "رمز اولیه",
+          onClick: () => setPwOpen(true),
+        },
+      ],
+    },
+    {
+      id: "notifications",
+      label: "اعلان‌ها",
+      icon: <Bell className="size-4" />,
+      tone: "var(--purchase)",
+      description: "اعلان گوشی، سررسید چک و یادآوری صبح",
+      items: [
+        {
+          id: "push",
+          icon: <Bell className="size-4" />,
+          label: "اعلان روی گوشی",
+          description: pushOn ? "فعال — اعلان‌ها به همین دستگاه می‌رسد" : "در iOS ابتدا اپ را به صفحهٔ اصلی اضافه کنید (Share → Add to Home Screen)",
+          value: pushValue,
+          trailing: pushValue ? undefined : (
+            <Switch checked={pushOn} onCheckedChange={(checked: boolean) => (checked ? enablePush() : disablePush())} disabled={pushBusy || pushCapable === null} aria-label="اعلان روی گوشی" />
+          ),
+          content: pushValue ? undefined : (
+            <p className="text-caption leading-6 text-muted-foreground">سررسید چک‌ها، کارهای امروز و پیگیری‌ها به‌صورت نوتیفیکیشن روی همین دستگاه می‌آیند.</p>
+          ),
+          footer: pushValue ? undefined : (
+            <Button onClick={testPush} disabled={!pushOn || testingPush} variant="outline" className={fullBtn}>
+              {testingPush ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />}
+              ارسال اعلان آزمایشی
+            </Button>
+          ),
+        },
+        {
+          id: "due",
+          icon: <CalendarClock className="size-4" />,
+          tone: "var(--hue-checks)",
+          label: "هشدار سررسید چک",
+          description: "چند روز قبل از سررسید خبر بدهد؟ چک سررسیدشده هم تا پاس یا برگشت پیگیری می‌شود.",
+          value: `${toPersianDigits(data.checkDueDaysBefore)} روز قبل`,
+          content: (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {[1, 2, 3, 5, 7, 10].map((d) => (
                 <button
-                  key={h}
+                  key={d}
                   type="button"
                   disabled={autoBusy !== null}
-                  onClick={() => update({ morningHour: h }, `یادآوری ساعت ${toPersianDigits(h)} صبح`)}
+                  onClick={() => update({ checkDueDaysBefore: d }, `هشدار ${toPersianDigits(d)} روز قبل از سررسید`)}
                   className={cn(
-                    "nums h-11 rounded-xl border text-sm font-bold transition-colors",
-                    data.morningHour === h ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:bg-accent"
+                    "h-11 rounded-2xl border text-sm font-bold transition-colors",
+                    data.checkDueDaysBefore === d ? "border-primary bg-secondary text-secondary-foreground" : "border-border bg-card hover:bg-accent"
                   )}
                 >
-                  {toPersianDigits(h)}
+                  {toPersianDigits(d)} روز
                 </button>
               ))}
             </div>
-          </>
-        )}
-        {!botReady && <p className="mt-3 px-1 text-caption font-bold text-warning-ink">اول ربات تلگرام را وصل کنید.</p>}
-      </BottomSheet>
-
-      {/* ───────── شیت: ربات تلگرام ───────── */}
-      <BottomSheet
-        open={sheet === "telegram"}
-        onClose={() => setSheet(null)}
-        title="اتصال ربات تلگرام"
-        description="برای ثبت سریع از تلگرام، یادآوری‌ها و بکاپ خودکار"
-        footer={
-          <div className="grid gap-2">
-            <Button onClick={save} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              ذخیره
-            </Button>
-            <Button
-              onClick={testTelegram}
-              disabled={testing || !botReady}
-              variant="ghost"
-              className="h-10 w-full rounded-2xl text-label font-bold text-primary"
-            >
-              {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
-              ارسال پیام آزمایشی
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-3">
-          <FieldGroup
-            label="توکن ربات"
-            hint={data.hasBotToken ? `فعال (${data.botTokenMasked}) — از ${data.botTokenSource === "db" ? "دیتابیس" : "env"}` : undefined}
-          >
-            <Input
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder={data.hasBotToken ? "برای تغییر، توکن جدید را وارد کنید" : "123456:ABC-DEF…"}
-              dir="ltr"
-              className="font-mono text-sm"
+          ),
+        },
+        {
+          id: "morning",
+          icon: <Clock className="size-4" />,
+          tone: "var(--purchase)",
+          label: "یادآوری صبحگاهی چک‌ها",
+          description: "هر صبح چک‌های امروز و سررسیدگذشته با دکمهٔ «پاس شد» و «برگشت خورد» در تلگرام",
+          value: data.morningReminder ? `ساعت ${toPersianDigits(data.morningHour)}:۰۰` : "خاموش",
+          trailing: (
+            <Switch
+              checked={data.morningReminder}
+              disabled={autoBusy !== null}
+              onCheckedChange={(v) => update({ morningReminder: v }, v ? "یادآوری صبحگاهی روشن شد" : "یادآوری خاموش شد")}
+              aria-label="یادآوری صبحگاهی"
             />
-          </FieldGroup>
-          <FieldGroup label="شناسهٔ چت ادمین (Chat ID)">
-            <Input value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="مثلاً ۱۲۵۳۹۳۹۸۲۸" dir="ltr" className="nums font-mono" />
-          </FieldGroup>
-          <FieldGroup label="آدرس مینی‌اپ" hint="دکمهٔ «باز کردن حساب‌یار» داخل ربات">
-            <Input value={miniAppUrl} onChange={(e) => setMiniAppUrl(e.target.value)} placeholder="https://hesabyar.miladrajabi.com" dir="ltr" />
-          </FieldGroup>
-        </div>
-      </BottomSheet>
-
-      {/* ───────── شیت: بکاپ خودکار تلگرام ───────── */}
-      <BottomSheet
-        open={sheet === "tgBackup"}
-        onClose={() => setSheet(null)}
-        title="بکاپ خودکار در تلگرام"
-        description="هر شب ساعت ۳:۳۰ یک نسخهٔ رمزگذاری‌شده (AES-256) از کل داده‌ها"
-        footer={
-          <Button
-            onClick={() => runTelegram("backup")}
-            disabled={!botReady || !data.hasBackupPassword || autoBusy !== null}
-            variant="outline"
-            className="h-12 w-full rounded-2xl font-bold"
-          >
-            {autoBusy === "backup" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
-            ارسال بکاپ همین حالا
-          </Button>
-        }
-      >
-        <div className="overflow-hidden rounded-2xl border border-border">
-          <Cell
-            label="بکاپ خودکار روشن باشد"
-            trailing={
-              <Switch
-                checked={data.telegramBackup}
-                disabled={autoBusy !== null || (!data.hasBackupPassword && telegramBackupPw.length < 6)}
-                onCheckedChange={(v) =>
-                  update(
-                    { telegramBackup: v, ...(telegramBackupPw.length >= 6 ? { backupPassword: telegramBackupPw } : {}) },
-                    v ? "بکاپ خودکار تلگرام روشن شد" : "بکاپ تلگرام خاموش شد"
-                  ).then(() => setTelegramBackupPw(""))
-                }
-                aria-label="بکاپ خودکار روشن باشد"
-              />
-            }
-          />
-        </div>
-        <FieldGroup
-          className="mt-4"
-          label="رمز بکاپ"
-          hint={data.hasBackupPassword ? "تنظیم شده — برای تغییر، رمز جدید بزنید" : "حداقل ۶ کاراکتر"}
-        >
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              value={telegramBackupPw}
-              onChange={(e) => setTelegramBackupPw(e.target.value)}
-              placeholder={data.hasBackupPassword ? "••••••••" : "یک رمز قوی که فراموش نکنید"}
-              dir="ltr"
-              className="flex-1"
-              autoComplete="new-password"
-            />
-            {telegramBackupPw.length >= 6 && (
-              <Button
-                onClick={() => update({ backupPassword: telegramBackupPw }, "رمز بکاپ ذخیره شد").then(() => setTelegramBackupPw(""))}
-                disabled={autoBusy !== null}
-                className="h-12 rounded-2xl px-4 font-bold"
-              >
+          ),
+          content: (
+            <>
+              {data.morningReminder ? (
+                <div className="grid grid-cols-6 gap-1.5">
+                  {MORNING_HOURS.map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      disabled={autoBusy !== null}
+                      onClick={() => update({ morningHour: h }, `یادآوری ساعت ${toPersianDigits(h)} صبح`)}
+                      className={cn("nums h-11 rounded-xl border text-sm font-bold transition-colors", data.morningHour === h ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:bg-accent")}
+                    >
+                      {toPersianDigits(h)}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-caption text-muted-foreground">با سوییچ بالا روشنش کنید تا ساعت ارسال را انتخاب کنید.</p>
+              )}
+              {!botReady && <p className="mt-3 px-1 text-caption font-bold text-warning-ink">اول ربات تلگرام را وصل کنید.</p>}
+            </>
+          ),
+          footer: (
+            <Button onClick={() => runTelegram("morning")} disabled={!botReady || autoBusy !== null} variant="outline" className={fullBtn}>
+              {autoBusy === "morning" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
+              همین حالا بفرست
+            </Button>
+          ),
+        },
+      ],
+    },
+    {
+      id: "telegram",
+      label: "ربات تلگرام",
+      icon: <Send className="size-4 -scale-x-100" />,
+      tone: "#2a8bd0",
+      description: "ثبت سریع از تلگرام، یادآوری‌ها و بکاپ خودکار",
+      items: [
+        {
+          id: "bot",
+          icon: <Send className="size-4 -scale-x-100" />,
+          tone: "#2a8bd0",
+          label: "اتصال ربات",
+          wide: true,
+          value: botReady ? "وصل است" : data.hasBotToken ? "شناسهٔ چت لازم است" : "وصل نیست",
+          content: (
+            <div className="grid gap-3 lg:grid-cols-2">
+              <FieldGroup label="توکن ربات" hint={data.hasBotToken ? `فعال (${data.botTokenMasked}) — از ${data.botTokenSource === "db" ? "دیتابیس" : "env"}` : undefined} className="lg:col-span-2">
+                <Input value={token} onChange={(e) => setToken(e.target.value)} placeholder={data.hasBotToken ? "برای تغییر، توکن جدید را وارد کنید" : "123456:ABC-DEF…"} dir="ltr" className="font-mono text-sm" />
+              </FieldGroup>
+              <FieldGroup label="شناسهٔ چت ادمین (Chat ID)">
+                <Input value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="مثلاً ۱۲۵۳۹۳۹۸۲۸" dir="ltr" className="nums font-mono" />
+              </FieldGroup>
+              <FieldGroup label="آدرس مینی‌اپ" hint="دکمهٔ «باز کردن حساب‌یار» داخل ربات">
+                <Input value={miniAppUrl} onChange={(e) => setMiniAppUrl(e.target.value)} placeholder="https://hesabyar.miladrajabi.com" dir="ltr" />
+              </FieldGroup>
+            </div>
+          ),
+          footer: (
+            <div className="grid gap-2">
+              <Button onClick={testTelegram} disabled={testing || !botReady} variant="ghost" className="h-10 w-full rounded-2xl text-label font-bold text-primary">
+                {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
+                ارسال پیام آزمایشی
+              </Button>
+              <Button onClick={save} disabled={saving} className={fullBtn}>
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
                 ذخیره
               </Button>
-            )}
-          </div>
-        </FieldGroup>
-        <p className="mt-2 px-1 text-caption font-bold text-warning-ink">رمز را جایی امن نگه دارید؛ بدون آن بکاپ قابل بازیابی نیست.</p>
-      </BottomSheet>
-
-      {/* ───────── شیت: دانلود / بازیابی بکاپ ───────── */}
-      <BottomSheet
-        open={sheet === "download" || sheet === "restore"}
-        onClose={() => setSheet(null)}
-        title={sheet === "restore" ? "بازیابی از فایل" : "دانلود بکاپ"}
-        description={
-          sheet === "restore"
-            ? "داده‌های فعلی با محتوای فایل جایگزین می‌شود"
-            : "یک نسخه از همهٔ داده‌ها روی همین دستگاه ذخیره می‌شود"
-        }
-        footer={
-          sheet === "restore" ? (
-            <Button onClick={() => fileRef.current?.click()} className="h-12 w-full rounded-2xl font-bold">
+            </div>
+          ),
+        },
+      ],
+    },
+    {
+      id: "backup",
+      label: "پشتیبان‌گیری و نصب",
+      icon: <DatabaseBackup className="size-4" />,
+      tone: "#64748b",
+      description: "بکاپ رمزدار، بازیابی و نصب روی صفحهٔ اصلی",
+      items: [
+        {
+          id: "tgBackup",
+          icon: <DatabaseBackup className="size-4" />,
+          label: "بکاپ خودکار رمزدار در تلگرام",
+          description: "هر شب ساعت ۳:۳۰ یک نسخهٔ رمزگذاری‌شده (AES-256) با رمز ورود",
+          value: data.telegramBackup ? "هر شب ۳:۳۰" : "خاموش",
+          trailing: (
+            <Switch
+              checked={data.telegramBackup}
+              disabled={autoBusy !== null}
+              onCheckedChange={(v) => update({ telegramBackup: v }, v ? "بکاپ خودکار تلگرام روشن شد" : "بکاپ تلگرام خاموش شد")}
+              aria-label="بکاپ خودکار تلگرام"
+            />
+          ),
+          content: (
+            <p className="flex items-start gap-2 rounded-2xl bg-muted/60 px-3.5 py-3 text-caption leading-6 text-muted-foreground">
+              <KeyRound className="mt-1 size-4 shrink-0" />
+              فایل‌ها با <b className="text-foreground">رمز ورود</b> قفل می‌شوند؛ رمز جدا لازم نیست.
+            </p>
+          ),
+          footer: (
+            <Button onClick={() => runTelegram("backup")} disabled={!botReady || autoBusy !== null} variant="outline" className={fullBtn}>
+              {autoBusy === "backup" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
+              ارسال بکاپ همین حالا
+            </Button>
+          ),
+        },
+        {
+          id: "download",
+          icon: <Download className="size-4" />,
+          label: "دانلود بکاپ",
+          description: "یک نسخه از همهٔ داده‌ها، قفل با رمز ورود",
+          content: (
+            <p className="flex items-start gap-2 rounded-2xl bg-muted/60 px-3.5 py-3 text-label leading-6 text-muted-foreground">
+              <KeyRound className="mt-1 size-4 shrink-0" />
+              فایل با AES-256 و <b className="text-foreground">رمز ورود</b> شما قفل می‌شود و بدون آن باز نمی‌شود.
+            </p>
+          ),
+          footer: (
+            <Button onClick={downloadBackup} disabled={backingUp} className={fullBtn}>
+              {backingUp ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              دانلود بکاپ رمزدار
+            </Button>
+          ),
+        },
+        {
+          id: "restore",
+          icon: <Upload className="size-4" />,
+          label: "بازیابی از فایل",
+          description: "داده‌های فعلی با محتوای فایل جایگزین می‌شود",
+          content: (
+            <FieldGroup label="رمز فایل قدیمی (اختیاری)" hint="فایل‌های تازه خودکار با رمز ورود باز می‌شوند؛ فقط اگر بکاپ با رمز دیگری ساخته شده، آن را بزنید">
+              <Input type="password" value={backupPassword} onChange={(e) => setBackupPassword(e.target.value)} placeholder="خالی بگذارید" dir="ltr" autoComplete="off" />
+            </FieldGroup>
+          ),
+          footer: (
+            <Button onClick={() => fileRef.current?.click()} variant="outline" className={fullBtn}>
               <Upload className="size-4" />
               انتخاب فایل بکاپ
             </Button>
+          ),
+        },
+        {
+          id: "install",
+          icon: <Smartphone className="size-4" />,
+          tone: isStandalone ? "var(--income)" : "#64748b",
+          label: "نصب روی صفحهٔ اصلی",
+          description: "تمام‌صفحه، سریع‌تر و با اعلان",
+          value: isTelegram ? "داخل تلگرام" : isStandalone ? "نصب‌شده ✓" : "نصب نشده",
+          hidden: isTelegram,
+          content: isStandalone ? (
+            <div className="flex items-center gap-2.5 rounded-2xl bg-income/10 px-3.5 py-3 text-label font-bold text-income">
+              <CheckCircle2 className="size-5" /> همین الان از اپ نصب‌شده باز کرده‌اید.
+            </div>
           ) : (
-            <Button onClick={downloadBackup} disabled={backingUp} className="h-12 w-full rounded-2xl font-bold">
-              {backingUp ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-              {backupPassword.trim() ? "دانلود بکاپ رمزدار" : "دانلود بکاپ"}
-            </Button>
-          )
-        }
-      >
-        <FieldGroup
-          label={sheet === "restore" ? "رمز فایل (اگر رمزدار است)" : "رمز فایل (اختیاری)"}
-          hint={sheet === "restore" ? undefined : "با رمز، فایل با AES-256 رمزگذاری می‌شود و بدون آن باز نمی‌شود"}
-        >
-          <Input
-            type="password"
-            value={backupPassword}
-            onChange={(e) => setBackupPassword(e.target.value)}
-            placeholder={sheet === "restore" ? "فقط برای فایل .enc" : "رمز اختیاری"}
-            dir="ltr"
-            autoComplete="new-password"
-          />
-        </FieldGroup>
-      </BottomSheet>
+            <div className="space-y-3 text-caption leading-6 text-muted-foreground">
+              <p>در آیفون: سافاری ← Share ← Add to Home Screen. در اندروید و دسکتاپ: «Install app» از منوی مرورگر یا دکمهٔ زیر.</p>
+              <InstallButton />
+            </div>
+          ),
+        },
+      ],
+    },
+    {
+      id: "danger",
+      label: "ناحیهٔ خطر",
+      danger: true,
+      icon: <Trash2 className="size-4" />,
+      description: "پاک‌سازی برگشت‌ناپذیر",
+      items: [{ id: "wipe", icon: <Trash2 className="size-4" />, label: "پاک کردن همهٔ داده‌ها", danger: true, onClick: () => setWipeSheet(true) }],
+    },
+  ]
+
+  return (
+    <>
+      <SettingsLayout
+        sections={sections}
+        header={<PageHeader title="تنظیمات" sub="امنیت، اعلان‌ها، ربات تلگرام و پشتیبان‌گیری" />}
+        mobileFooter={<p className="mt-3 px-1 text-caption text-muted-foreground">بکاپ خودکار روزانه روی سرور هم گرفته می‌شود (۷ نسخهٔ آخر نگه داشته می‌شود).</p>}
+        asideFooter={<p className="px-2 text-caption leading-5 text-muted-foreground">بکاپ خودکار روزانه روی سرور هم گرفته می‌شود (۷ نسخهٔ آخر).</p>}
+      />
       <input
         ref={fileRef}
         type="file"
@@ -925,6 +850,8 @@ export default function SettingsPage() {
           if (f) restoreBackup(f)
         }}
       />
+
+      <PasswordSheet open={pwOpen} onClose={() => setPwOpen(false)} onDone={() => queryClient.invalidateQueries({ queryKey: ["settings"] })} />
 
       {/* شیت تأیید پاک‌سازی — پیامد را صریح می‌گوید */}
       <BottomSheet
@@ -950,13 +877,12 @@ export default function SettingsPage() {
           <li className="text-muted-foreground">تنظیمات، کلیدهای ورود و توکن ربات باقی می‌مانند.</li>
         </ul>
       </BottomSheet>
-    </div>
+    </>
   )
 }
 
 // ───────────────────────── اجزای فهرست تنظیمات ─────────────────────────
 
-type SheetKey = "passkey" | "push" | "due" | "morning" | "telegram" | "tgBackup" | "download" | "restore"
 
 const MORNING_HOURS = [6, 7, 8, 9, 10, 11]
 
@@ -1063,5 +989,79 @@ function FieldGroup({
       {children}
       {hint && <p className="mt-1.5 text-caption leading-5 text-muted-foreground">{hint}</p>}
     </div>
+  )
+}
+
+/** تغییر رمز: همین رمز، رمز ورود و رمز همهٔ فایل‌های بکاپ است */
+function PasswordSheet({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState({ current: "", next: "", repeat: "" })
+  const [show, setShow] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const close = () => {
+    setF({ current: "", next: "", repeat: "" })
+    onClose()
+  }
+  const strength = Math.min(4, [f.next.length >= 8, f.next.length >= 12, /[0-9]/.test(f.next) && /[a-zA-Z]/.test(f.next), /[^a-zA-Z0-9]/.test(f.next)].filter(Boolean).length)
+  const mismatch = !!f.repeat && f.repeat !== f.next
+  const save = async () => {
+    if (f.next.length < 8) return toast.error("رمز تازه حداقل ۸ کاراکتر باشد")
+    if (f.next !== f.repeat) return toast.error("تکرار رمز یکی نیست")
+    setBusy(true)
+    try {
+      await apiPost("/api/settings/password", { current: f.current, next: f.next })
+      toast.success("رمز عوض شد — ورود و بکاپ‌ها از این به بعد با رمز تازه است")
+      onDone()
+      close()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "رمز عوض نشد")
+    } finally {
+      setBusy(false)
+    }
+  }
+  const field = (key: "current" | "next" | "repeat", label: string, auto: string) => (
+    <FieldGroup label={label}>
+      <Input
+        type={show ? "text" : "password"}
+        value={f[key]}
+        onChange={(e) => setF((s) => ({ ...s, [key]: e.target.value }))}
+        autoComplete={auto}
+        dir="ltr"
+        aria-invalid={key === "repeat" && mismatch ? true : undefined}
+      />
+    </FieldGroup>
+  )
+  return (
+    <BottomSheet
+      open={open}
+      onClose={close}
+      title="رمز ورود و بکاپ"
+      description="یک رمز برای ورود و قفل همهٔ فایل‌های بکاپ (دانلود و تلگرام)"
+      desktopMode="dialog"
+      footer={
+        <Button onClick={save} disabled={busy || !f.current || !f.next || mismatch} className="h-12 w-full rounded-2xl font-bold">
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+          ذخیرهٔ رمز تازه
+        </Button>
+      }
+    >
+      <form className="space-y-3" onSubmit={(e) => (e.preventDefault(), void save())}>
+        <input type="text" autoComplete="username" className="hidden" readOnly value="" />
+        {field("current", "رمز فعلی", "current-password")}
+        {field("next", "رمز تازه", "new-password")}
+        <div className="flex items-center gap-1 px-1" aria-hidden>
+          {[0, 1, 2, 3].map((i) => (
+            <span key={i} className={cn("h-1 flex-1 rounded-full transition-colors", i < strength ? (strength >= 3 ? "bg-income" : strength === 2 ? "bg-warning" : "bg-destructive") : "bg-muted")} />
+          ))}
+        </div>
+        {field("repeat", "تکرار رمز تازه", "new-password")}
+        {mismatch && <p className="px-1 text-caption font-bold text-destructive">تکرار رمز با رمز تازه یکی نیست</p>}
+        <button type="button" onClick={() => setShow((v) => !v)} className="flex items-center gap-1.5 px-1 text-label font-bold text-muted-foreground hover:text-foreground">
+          {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />} {show ? "پنهان کردن رمز" : "نمایش رمز"}
+        </button>
+        <p className="rounded-2xl bg-muted/60 px-3.5 py-3 text-caption leading-6 text-muted-foreground">
+          بکاپ‌هایی که از این به بعد ساخته می‌شوند با رمز تازه قفل می‌شوند. فایل‌های قدیمی‌تر را موقع بازیابی با رمز قبلی‌شان باز کنید.
+        </p>
+      </form>
+    </BottomSheet>
   )
 }

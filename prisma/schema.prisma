@@ -213,7 +213,10 @@ model Setting {
   morningHour       Int     @default(8) // ساعت تهران (۵ تا ۱۲)
   // بکاپ خودکار رمزدار (AES-256-GCM) به تلگرام — رمز فقط در دیتابیس سرور می‌ماند
   telegramBackup    Boolean @default(false)
+  /// رمز بکاپ قدیمی (پیش از یکی شدن با رمز ورود) — فقط برای باز کردن فایل‌های قبلی
   backupPassword    String?
+  /// رمز ورود و بکاپ که از تنظیمات عوض شده: JSON {hash, salt, sealed, changedAt} — خالی یعنی APP_PASSWORD
+  accountPassword   String?
 }
 
 // ───────────────────────── Passkey (ورود بیومتریک Face ID / Touch ID) ─────────────────────────

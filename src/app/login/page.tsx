@@ -20,8 +20,8 @@ import { apiGet, apiPost } from "@/lib/api-client"
 import { formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
 import { useTelegram } from "@/hooks/use-telegram"
 import { cn } from "@/lib/utils"
+import { FingerprintButton, SUCCESS_MS, type ScanState } from "@/components/auth/fingerprint-button"
 
-type ScanState = "idle" | "scanning" | "success" | "error"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -34,6 +34,7 @@ export default function LoginPage() {
   const [scanMsg, setScanMsg] = useState<string | null>(null)
   const [passkeyAvailable, setPasskeyAvailable] = useState<boolean | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const { haptic } = useTelegram()
   const reduceMotion = useReducedMotion()
 
@@ -93,8 +94,17 @@ export default function LoginPage() {
       }
       const assertion = await startAuthentication({ optionsJSON: opts.options as never })
       await apiPost("/api/passkey/login", { credential: assertion })
+      try {
+        // تنظیمات از روی همین می‌فهمد این دستگاه کلید دارد
+        localStorage.setItem("hesabyar:passkey-id", assertion.id)
+      } catch {
+        /* حالت خصوصی */
+      }
       setScan("success")
-      setTimeout(enter, reduceMotion ? 0 : 650)
+      if (reduceMotion) return enter()
+      haptic.success()
+      setTimeout(() => setLeaving(true), SUCCESS_MS - 220)
+      setTimeout(() => router.replace("/"), SUCCESS_MS + 80)
     } catch (err) {
       setScan("error")
       haptic.error()
@@ -113,8 +123,8 @@ export default function LoginPage() {
 
       <motion.div
         initial={reduceMotion ? false : { opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        animate={leaving ? { opacity: 0, y: -6, scale: 0.97, filter: "blur(6px)" } : { opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+        transition={{ duration: leaving ? 0.3 : 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="relative w-full max-w-sm sm:max-w-[25rem] sm:rounded-[1.75rem] sm:border sm:border-border sm:bg-card/90 sm:px-8 sm:py-9 sm:shadow-float sm:backdrop-blur"
       >
         <div className="mb-7 flex flex-col items-center gap-3">
@@ -273,136 +283,6 @@ export default function LoginPage() {
         <p className="nums mt-7 text-center text-caption text-muted-foreground">{formatJalaliWithWeekday(nowTehran())}</p>
       </motion.div>
     </div>
-  )
-}
-
-// ───────────────────────── دکمهٔ بزرگ اثر انگشت ─────────────────────────
-
-const FP_PATHS = [
-  "M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4",
-  "M14 13.12c0 2.38 0 6.38-1 8.88",
-  "M17.29 21.02c.12-.6.43-2.3.5-3.02",
-  "M2 12a10 10 0 0 1 18-6",
-  "M2 16h.01",
-  "M21.8 16c.2-2 .131-5.354 0-6",
-  "M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2",
-  "M8.65 22c.21-.66.45-1.32.57-2",
-  "M9 6.8a6 6 0 0 1 9 5.2v2",
-]
-
-function FingerprintButton({ state, onPress }: { state: ScanState; onPress: () => void }) {
-  const reduce = useReducedMotion()
-  const color =
-    state === "error" ? "var(--destructive)" : state === "success" ? "var(--income)" : "var(--primary)"
-  return (
-    <motion.button
-      type="button"
-      onClick={onPress}
-      aria-label="ورود با اثر انگشت یا چهره"
-      whileTap={{ scale: 0.93 }}
-      animate={state === "error" && !reduce ? { x: [0, -8, 8, -5, 5, 0] } : { x: 0 }}
-      transition={{ duration: 0.45 }}
-      style={{ ["--fp" as string]: color }}
-      className="relative grid size-32 place-items-center rounded-full outline-none focus-visible:ring-4 focus-visible:ring-ring/30"
-    >
-      {/* حلقهٔ ثابت دور دکمه؛ هالهٔ تپنده فقط هنگام اسکن (حرکت کمتر و معنادارتر) */}
-      <span
-        aria-hidden
-        className="absolute -inset-3 rounded-full border"
-        style={{ borderColor: "color-mix(in srgb, var(--fp) 14%, transparent)" }}
-      />
-      {!reduce &&
-        state === "scanning" &&
-        [0, 1].map((i) => (
-          <motion.span
-            key={i}
-            className="absolute inset-0 rounded-full border-2"
-            style={{ borderColor: "color-mix(in srgb, var(--fp) 35%, transparent)" }}
-            animate={{ scale: [1, 1.35], opacity: [0.7, 0] }}
-            transition={{
-              duration: 1.1,
-              repeat: Infinity,
-              delay: i * 0.55,
-              ease: "easeOut",
-            }}
-          />
-        ))}
-      {/* دیسک */}
-      <span
-        className="absolute inset-2 rounded-full transition-colors duration-500"
-        style={{
-          background:
-            "radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--fp) 22%, var(--card)), color-mix(in srgb, var(--fp) 8%, var(--card)) 70%)",
-          boxShadow:
-            "0 18px 40px -12px color-mix(in srgb, var(--fp) 55%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 0 0 1px color-mix(in srgb, var(--fp) 25%, transparent)",
-        }}
-      />
-      {/* اثر انگشت */}
-      <svg
-        viewBox="0 0 24 24"
-        className="relative size-16 overflow-visible"
-        fill="none"
-        stroke="var(--fp)"
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-      >
-        {/* لایهٔ کم‌رنگ زمینه */}
-        <g opacity={0.22}>
-          {FP_PATHS.map((d) => (
-            <path key={d} d={d} />
-          ))}
-        </g>
-        {/* لایهٔ اصلی که «کشیده» می‌شود */}
-        {FP_PATHS.map((d, i) => (
-          <motion.path
-            key={d}
-            d={d}
-            initial={reduce ? false : { pathLength: 0 }}
-            animate={
-              state === "scanning" && !reduce
-                ? { pathLength: [0.15, 1, 0.15] }
-                : { pathLength: 1 }
-            }
-            transition={
-              state === "scanning"
-                ? { duration: 1.4, repeat: Infinity, delay: i * 0.06, ease: "easeInOut" }
-                : { duration: 0.9, delay: 0.25 + i * 0.07, ease: [0.65, 0, 0.35, 1] }
-            }
-          />
-        ))}
-        {/* خط اسکن */}
-        {state === "scanning" && !reduce && (
-          <motion.line
-            x1={1}
-            x2={23}
-            stroke="var(--fp)"
-            strokeWidth={1.2}
-            opacity={0.9}
-            initial={{ y1: 2, y2: 2 }}
-            animate={{ y1: [2, 22, 2], y2: [2, 22, 2] }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-          />
-        )}
-      </svg>
-      {/* تیک موفقیت */}
-      <AnimatePresence>
-        {state === "success" && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-            transition={{ type: "spring", stiffness: 500, damping: 18 }}
-            className="absolute bottom-3 end-3 grid size-11 place-items-center rounded-full bg-income text-white shadow-lg ring-4 ring-background"
-          >
-            <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-              <motion.path d="M5 12.5l4.5 4.5L19 7.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.35, delay: 0.1 }} />
-            </svg>
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </motion.button>
   )
 }
 

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { fail, parseBody } from "@/lib/api-helpers"
 import { loginSchema } from "@/lib/validation"
-import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SEC, verifyCredentials } from "@/lib/auth"
+import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE_SEC } from "@/lib/auth"
+import { verifyLogin } from "@/lib/account-password"
 import { clientIp, rateLimit } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await parseBody(req, loginSchema)
   if (error) return error
 
-  if (!verifyCredentials(data.username, data.password)) {
+  if (!(await verifyLogin(data.username, data.password))) {
     return fail("نام کاربری یا رمز عبور اشتباه است", 401)
   }
 

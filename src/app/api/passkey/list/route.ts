@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         deviceName: true,
+        credentialId: true,
         createdAt: true,
         lastUsedAt: true,
       },

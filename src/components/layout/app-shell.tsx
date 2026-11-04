@@ -12,7 +12,7 @@
 import { useEffect, ReactNode, useState, useRef, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { apiGet } from "@/lib/api-client"
@@ -24,7 +24,8 @@ import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { GlobalSearch } from "@/components/search/global-search"
 import { AlertsSheet, type AlertsData } from "@/components/layout/alerts-sheet"
 import { BrandLogo } from "@/components/ui/brand-logo"
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, Store } from "lucide-react"
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, RefreshCw, Store } from "lucide-react"
+import { PullToRefresh } from "@/components/ui/pull-to-refresh"
 import {
   IconApps,
   IconBell,
@@ -88,6 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const { isTelegram, haptic } = useTelegram()
+  const queryClient = useQueryClient()
   const { moreSheetOpen, setMoreSheetOpen, pageSub } = useUIStore()
   const [searchOpen, setSearchOpen] = useState(false)
   const [alertsOpen, setAlertsOpen] = useState(false)
@@ -240,7 +242,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             isFormRoute ? "pb-32" : "pb-40"
           )}
         >
-          {children}
+          {/* داخل تلگرام کشیدن به پایین مینی‌اپ را می‌بندد؛ آنجا خاموش است */}
+          <PullToRefresh
+            disabled={isTelegram}
+            onRefresh={() => queryClient.refetchQueries({ type: "active" })}
+            haptic={(k) => (k === "success" ? haptic.success() : haptic.medium())}
+            topOffset={ownHeader ? "calc(env(safe-area-inset-top, 0px) + 1rem)" : "calc(env(safe-area-inset-top, 0px) + 5.25rem)"}
+            icon={<RefreshCw className="size-[1.1rem]" strokeWidth={2.4} />}
+          >
+            {children}
+          </PullToRefresh>
         </main>
       </div>
 

@@ -33,20 +33,33 @@ function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(ba, bb)
 }
 
-/** بررسی اعتبار ورود (مقاوم به حملات زمانی) — SEC-05: بدون مقادیر پیش‌فرض */
-export function verifyCredentials(username: string, password: string): boolean {
+/** نام کاربری ورود (از .env) — مقاوم به حملات زمانی؛ SEC-05: بدون مقدار پیش‌فرض در پروداکشن */
+export function verifyUsername(username: string): boolean {
   const expectedUser = process.env.APP_USERNAME
-  const expectedPass = process.env.APP_PASSWORD
-  // در پروداکشن بدون اعتبار env، ورود به‌کل رد می‌شود
-  if (!expectedUser || !expectedPass) {
+  if (!expectedUser) {
     if (isProduction()) {
-      console.error("[SEC-05] APP_USERNAME/APP_PASSWORD تنظیم نشده — ورود رد شد")
+      console.error("[SEC-05] APP_USERNAME تنظیم نشده — ورود رد شد")
       return false
     }
-    return safeEqual(username, "admin") && safeEqual(password, "admin1234")
+    return safeEqual(username, "admin")
   }
-  return safeEqual(username, expectedUser) && safeEqual(password, expectedPass)
+  return safeEqual(username, expectedUser)
 }
+
+/** رمز اولیهٔ .env — فقط تا وقتی که از تنظیمات رمز تازه‌ای گذاشته نشده (lib/account-password) */
+export function verifyEnvPassword(password: string): boolean {
+  const expectedPass = process.env.APP_PASSWORD
+  if (!expectedPass) {
+    if (isProduction()) {
+      console.error("[SEC-05] APP_PASSWORD تنظیم نشده — ورود رد شد")
+      return false
+    }
+    return safeEqual(password, "admin1234")
+  }
+  return safeEqual(password, expectedPass)
+}
+
+export { safeEqual }
 
 export function createSessionToken(): string {
   const payload = Buffer.from(
