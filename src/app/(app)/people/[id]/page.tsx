@@ -55,6 +55,7 @@ import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useTelegram } from "@/hooks/use-telegram"
 import { useConfirm } from "@/components/ui/confirm"
+import { useDirty } from "@/hooks/use-dirty"
 
 interface PersonDetail {
   person: {
@@ -212,6 +213,8 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
   const [openingKind, setOpeningKind] = useState<"none" | "receivable" | "payable">("none")
   const [openingAmount, setOpeningAmount] = useState(0)
   const [savingEdit, setSavingEdit] = useState(false)
+  // openEdit مقدارها و باز شدن شیت را با هم ست می‌کند، پس همان لحظهٔ باز شدن نقطهٔ شروع است
+  const editDirty = useDirty({ name, phone, company, shopAddress, role, openingKind, openingAmount }, editSheet)
 
   // شیت تسویه
   const [settleSheet, setSettleSheet] = useState(false)
@@ -924,7 +927,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         title="ویرایش شخص"
         size="tall"
         footer={
-          <Button onClick={saveEdit} disabled={savingEdit} className="h-12 w-full rounded-2xl font-bold">
+          <Button onClick={saveEdit} disabled={savingEdit || !editDirty} className="h-12 w-full rounded-2xl font-bold">
             {savingEdit ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
             ذخیره تغییرات
           </Button>

@@ -723,7 +723,7 @@ export default function SettingsPage() {
                 {testing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4 -scale-x-100" />}
                 ارسال پیام آزمایشی
               </Button>
-              <Button onClick={save} disabled={saving} className={fullBtn}>
+              <Button onClick={save} disabled={saving || (!token.trim() && chatId === (data.adminChatId ?? "") && miniAppUrl === (data.miniAppUrl ?? ""))} className={fullBtn}>
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
                 ذخیره
               </Button>

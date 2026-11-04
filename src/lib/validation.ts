@@ -249,6 +249,15 @@ export const settleSchema = z
     path: ["accountId"],
   })
 
+/** PATCH /api/settlements/[id] — ویرایش دریافت/پرداخت ثبت‌شده (جهت و روش ثابت می‌ماند) */
+export const settleUpdateSchema = z.object({
+  amount: positiveAmount,
+  date: jalaliDaySchema,
+  /** فقط برای نقدی */
+  accountId: z.string().optional().nullable(),
+  note: optionalText(300),
+})
+
 // ───────────────────────── تغییر وضعیت / ثبت چک ─────────────────────────
 
 export const checkStatusSchema = z.object({

@@ -94,8 +94,8 @@ export function deferDelete(options: {
     options
       .commit()
       .then(async () => {
+        // ردیف پنهان می‌ماند: اگر این‌جا آشکارش کنیم، تا رسیدن داده‌ی تازه یک لحظه از کش برمی‌گردد و دوباره می‌رود
         await options.onCommitted?.()
-        setPendingDelete(options.id, false)
       })
       .catch((e: unknown) => {
         setPendingDelete(options.id, false)

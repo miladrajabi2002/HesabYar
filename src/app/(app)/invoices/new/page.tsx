@@ -623,7 +623,8 @@ function NewInvoicePageInner() {
   useTelegramMainButton({
     visible: !lockedChecks,
     text: editId ? "ذخیره تغییرات" : "ثبت فاکتور",
-    enabled: !!person && items.length > 0 && !saving && !hasErrors,
+    // ویرایش بدون تغییر: دکمه خاموش است
+    enabled: !!person && items.length > 0 && !saving && !hasErrors && (!editId || editDirty),
     loading: saving,
     color: type === "SALE" ? "#0a7d57" : "#4450c8",
     onClick: () => submitRef.current(),
@@ -1097,7 +1098,7 @@ function NewInvoicePageInner() {
         </dl>
         <Button
           onClick={submit}
-          disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors}
+          disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors || (!!editId && !editDirty)}
           className={cn(
             "mt-5 h-[3.25rem] w-full rounded-2xl text-body font-bold",
             type === "SALE"
@@ -1137,7 +1138,7 @@ function NewInvoicePageInner() {
           </div>
           <Button
             onClick={submit}
-            disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors}
+            disabled={saving || !person || items.length === 0 || lockedChecks || hasErrors || (!!editId && !editDirty)}
             className={cn(
               "h-[3.25rem] rounded-2xl px-7 text-body font-bold",
               type === "SALE"

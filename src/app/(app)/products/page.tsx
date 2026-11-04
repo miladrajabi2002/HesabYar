@@ -42,6 +42,7 @@ import { SearchField } from "@/components/ui/search-field"
 import { usePageSub } from "@/components/layout/page-header"
 import { PriceHistoryChart, type PricePoint } from "@/components/charts/price-history-chart"
 import { ProductFields } from "@/components/products/product-fields"
+import { useDirty } from "@/hooks/use-dirty"
 
 interface Product {
   id: string
@@ -122,6 +123,7 @@ function ProductForm({
     editing?.initialStockCostPrice ?? 0
   )
   const [saving, setSaving] = useState(false)
+  const dirty = useDirty({ name, brand, code, unit, initialStock, initialStockCost }, editing?.id ?? null)
 
   /* ── عکس کالا (ADV-05) — اختیاری؛ در کالا جدید بعد از ذخیره پیوست می‌شود ── */
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -273,7 +275,7 @@ function ProductForm({
       title={editing ? "ویرایش کالا" : "کالای جدید"}
       size="tall"
       footer={
-        <Button onClick={submit} disabled={saving} className="h-12 w-full rounded-2xl font-bold">
+        <Button onClick={submit} disabled={saving || (!!editing && !dirty)} className="h-12 w-full rounded-2xl font-bold">
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           {editing ? "ذخیرهٔ تغییرات" : "ذخیرهٔ کالا"}
         </Button>
