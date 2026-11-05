@@ -102,7 +102,6 @@ export function PullToRefresh({
         active.current = true
         set("pulling")
       }
-      if (e.cancelable) e.preventDefault()
       const v = rubber(Math.max(0, dy - 6))
       pull.set(v)
       const armed = v >= THRESHOLD
@@ -139,7 +138,10 @@ export function PullToRefresh({
     }
 
     window.addEventListener("touchstart", onStart, { passive: true })
-    window.addEventListener("touchmove", onMove, { passive: false })
+    // passive: لیسنر غیرپسیو روی window هر اسکرولِ لمسیِ کل اپ را منتظر جاوااسکریپت نگه می‌داشت
+    // (موقع عوض کردن تب یا باز شدن شیت که رشتهٔ اصلی شلوغ است، اسکرول «گیر» می‌کرد).
+    // preventDefault لازم نیست: بالای صفحه overscroll-behavior خاموش است و کشیدن به پایین اسکرولی ندارد.
+    window.addEventListener("touchmove", onMove, { passive: true })
     window.addEventListener("touchend", onEnd)
     window.addEventListener("touchcancel", onEnd)
     return () => {

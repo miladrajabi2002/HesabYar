@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { TelegramProvider } from "@/hooks/use-telegram"
 import { ConfirmProvider } from "@/components/ui/confirm"
 import { PWAProvider } from "@/components/pwa/pwa-provider"
+import { useAppResume } from "@/hooks/use-app-resume"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -22,6 +23,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       })
   )
+
+  // بازگشت به اپ بعد از مدتی دوری → همهٔ داده‌ها تازه می‌شوند (hooks/use-app-resume.ts)
+  useAppResume(queryClient)
 
   // موبایل: با باز شدن کیبورد، فیلد فوکوس‌شده در دید می‌ماند
   // (داخل باتم‌شیت‌ها فیلدهای پایینی پشت کیبورد پنهان می‌شدند)

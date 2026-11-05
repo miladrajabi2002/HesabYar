@@ -1,28 +1,9 @@
-"use client"
-
 /**
- * انتقال صفحات (MO-07) — هر ناوبری، محتوای صفحه با یک حرکت نرم
- * fade + slide ظاهر می‌شود. template.tsx در هر تغییر مسیر دوباره mount
- * می‌شود؛ پس این انیمیشن دقیقاً روی «رفتن به صفحه بعد» اجرا می‌شود.
+ * انتقال صفحات (MO-07) — هر ناوبری، محتوای صفحه با یک fade + slide کوتاه ظاهر می‌شود.
+ * template.tsx در هر تغییر مسیر دوباره mount می‌شود؛ پس انیمیشن دقیقاً روی «رفتن به صفحه بعد» اجرا می‌شود.
+ * انیمیشن CSS است (نه framer-motion): transform/opacity با keyframes روی compositor اجرا می‌شود و
+ * وقتی رشتهٔ اصلی مشغول رندر صفحهٔ تازه است، فریم نمی‌اندازد. reduced-motion در globals.css خاموشش می‌کند.
  */
-import { motion, useReducedMotion } from "framer-motion"
-
 export default function AppTemplate({ children }: { children: React.ReactNode }) {
-  const reduceMotion = useReducedMotion()
-
-  if (reduceMotion) {
-    return <div className="contents">{children}</div>
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-      className="contents"
-      style={{ display: "flow-root" }}
-    >
-      {children}
-    </motion.div>
-  )
+  return <div className="hy-page-enter">{children}</div>
 }

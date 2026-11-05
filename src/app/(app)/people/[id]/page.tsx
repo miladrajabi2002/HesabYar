@@ -41,6 +41,7 @@ import {
 } from "@/lib/jalali"
 import { BANKS, getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
+import { SettlementSheet } from "@/components/settlements/settlement-sheet"
 import { PersonFields } from "@/components/people/person-fields"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { AmountInput } from "@/components/ui/amount-input"
@@ -219,6 +220,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
 
   // شیت تسویه
   const [settleSheet, setSettleSheet] = useState(false)
+  const [settlementId, setSettlementId] = useState<string | null>(null)
   const [direction, setDirection] = useState<"RECEIVE" | "PAY">("RECEIVE")
   const [method, setMethod] = useState<"CASH" | "CHECK">("CASH")
   const [amount, setAmount] = useState(0)
@@ -808,9 +810,11 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         </div>
         <div className="space-y-1.5">
           {data.settlements.map((s) => (
-            <div
+            <button
               key={s.id}
-              className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2 text-xs"
+              type="button"
+              onClick={() => setSettlementId(s.id)}
+              className="flex w-full items-center justify-between rounded-xl bg-muted/50 px-3 py-2.5 text-start text-xs transition-colors hover:bg-muted active:bg-accent"
             >
               <div>
                 <span className={cn("font-bold", s.direction === "RECEIVE" ? "text-income" : "text-purchase")}>
@@ -821,7 +825,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                 </span>
               </div>
               <span className="nums font-extrabold">{formatToman(s.amount, false)}</span>
-            </div>
+            </button>
           ))}
           {data.settlements.length === 0 && (
             <p className="py-4 text-center text-xs text-muted-foreground">تسویه‌ای ثبت نشده</p>
@@ -951,6 +955,9 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
             setRole={setRole}
           />
       </BottomSheet>
+
+      {/* ویرایش/حذف یک دریافت یا پرداخت از تاریخچه */}
+      <SettlementSheet settlementId={settlementId} onClose={() => setSettlementId(null)} />
 
       {/* ───────── شیت تسویه ───────── */}
       <BottomSheet

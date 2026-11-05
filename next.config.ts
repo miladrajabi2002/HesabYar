@@ -34,6 +34,27 @@ const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
 ]
 
+/**
+ * کش مرورگر برای فایل‌های عمومی ثابت پوشهٔ public (آیکون، لوگوی بانک‌ها، فونت، مانیفست)
+ * پیش‌فرض Next برای public «max-age=0» است و هر بار باز شدن اپ همه را دوباره از سرور می‌پرسید.
+ * /_next/static خودش immutable یک‌ساله است. sw.js همیشه no-cache می‌ماند تا نسخهٔ تازه دیر نرسد.
+ * اگر فایلی را با همان نام عوض کردید، مثل آیکون‌ها ?v= آدرسش را بالا ببرید.
+ */
+const WEEK = "public, max-age=604800, stale-while-revalidate=86400"
+const MONTH = "public, max-age=2592000, stale-while-revalidate=86400"
+const staticCache = [
+  { source: "/fonts/:path*", headers: [{ key: "Cache-Control", value: MONTH }] },
+  { source: "/icons/:path*", headers: [{ key: "Cache-Control", value: WEEK }] },
+  { source: "/banks/:path*", headers: [{ key: "Cache-Control", value: WEEK }] },
+  { source: "/brand/:path*", headers: [{ key: "Cache-Control", value: WEEK }] },
+  {
+    source: "/:file(favicon\\.ico|logo\\.svg|robots\\.txt|apple-touch-icon\\.png|apple-touch-icon-precomposed\\.png)",
+    headers: [{ key: "Cache-Control", value: WEEK }],
+  },
+  { source: "/manifest.webmanifest", headers: [{ key: "Cache-Control", value: "public, max-age=86400" }] },
+  { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }, { key: "Service-Worker-Allowed", value: "/" }] },
+]
+
 const nextConfig: NextConfig = {
   // نسخهٔ آزمایشی کنار پروداکشن خروجی بیلدش را جدا نگه می‌دارد تا .next اصلی دست نخورد
   distDir: process.env.NEXT_DIST_DIR || ".next",
@@ -47,6 +68,7 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
+      ...staticCache,
     ]
   },
 }

@@ -319,7 +319,6 @@ export function SwipeRow({
         if (openRow && openRow !== handle) openRow.close()
       }
       if (mode !== "horizontal") return
-      if (event.cancelable) event.preventDefault()
 
       const now = performance.now()
       velocity = ((touch.clientX - lastX) / Math.max(1, now - lastT)) * 1000
@@ -385,7 +384,9 @@ export function SwipeRow({
     }
 
     root.addEventListener("touchstart", onTouchStart, { passive: true })
-    root.addEventListener("touchmove", onTouchMove, { passive: false })
+    // passive: لایهٔ ردیف touch-pan-y است، پس حرکت افقی را مرورگر اسکرول نمی‌کند و preventDefault لازم نیست؛
+    // لیسنر غیرپسیو اسکرول عمودی هر لمسی را که روی ردیف شروع می‌شد منتظر رشتهٔ اصلی نگه می‌داشت
+    root.addEventListener("touchmove", onTouchMove, { passive: true })
     root.addEventListener("touchend", onTouchEnd)
     root.addEventListener("touchcancel", onTouchEnd)
     root.addEventListener("click", onClickCapture, true)
@@ -464,7 +465,7 @@ export function SwipeRow({
   if (!enabled) return <div className={className}>{children}</div>
 
   return (
-    <div ref={rootRef} className={cn("relative isolate overflow-hidden", className)}>
+    <div ref={rootRef} className={cn("relative isolate touch-pan-y overflow-hidden", className)}>
       {(["leading", "trailing"] as const).map((side) => {
         const actions = side === "leading" ? leading : trailing
         if (!actions.length) return null

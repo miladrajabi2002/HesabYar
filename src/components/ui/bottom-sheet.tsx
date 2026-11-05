@@ -31,13 +31,34 @@ function subscribeDesktop(cb: () => void) {
 }
 const getDesktop = () => window.matchMedia(DESKTOP_QUERY).matches
 
+/**
+ * ورود/خروج باتم‌شیت با رشتهٔ transform (نه y) روی یک قاب جدا: framer مقدار transform را با WAAPI
+ * روی compositor اجرا می‌کند، پس وقتی محتوای شیت همان لحظه mount می‌شود و رشتهٔ اصلی شلوغ است،
+ * فریم‌های اول فنر نمی‌افتند (حس «گیر کردن» موقع باز شدن). درگ دستگیره روی خود پنل (y) می‌ماند.
+ */
 const sheetVariants = {
-  hidden: { y: "100%" },
+  hidden: { transform: "translateY(100%)" },
   visible: {
-    y: 0,
+    transform: "translateY(0%)",
     transition: { type: "spring" as const, stiffness: 420, damping: 38, mass: 0.85 },
   },
-  exit: { y: "100%", transition: { duration: 0.2, ease: [0.4, 0, 1, 1] as const } },
+  exit: { transform: "translateY(100%)", transition: { duration: 0.2, ease: [0.4, 0, 1, 1] as const } },
+}
+
+/** قاب لغزندهٔ باتم‌شیت موبایل؛ در دسکتاپ/کاهش حرکت فقط خود پنل رندر می‌شود */
+function SlideFrame({ slide, full, children }: { slide: boolean; full: boolean; children: ReactNode }) {
+  if (!slide) return <>{children}</>
+  return (
+    <motion.div
+      className={cn("absolute inset-x-0 bottom-0", full && "top-0")}
+      variants={sheetVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+    >
+      {children}
+    </motion.div>
+  )
 }
 
 const dialogVariants = {
@@ -124,7 +145,7 @@ export function BottomSheet({
       document.activeElement instanceof HTMLElement ? document.activeElement : null
     // قفل اسکرول با شمارش مرجع: با دو شیت تودرتو، فقط بسته‌شدن دومی قفل را آزاد می‌کند
     const releaseScrollLock = acquireBodyScrollLock()
-    const raf = window.requestAnimationFrame(() => closeRef.current?.focus())
+    const raf = window.requestAnimationFrame(() => closeRef.current?.focus({ preventScroll: true }))
 
     function onKeyDown(event: KeyboardEvent) {
       const modals = Array.from(
@@ -172,6 +193,7 @@ export function BottomSheet({
   const asDrawer = isDesktop && desktopMode === "drawer"
   const rtl = document.documentElement.dir === "rtl"
   const hiddenDesktop = isDesktop && desktopMode === "hidden"
+  const slide = !asDialog && !asDrawer && !reduceMotion
   if (hiddenDesktop) return null
 
   const maxHeight = asDrawer
@@ -181,28 +203,25 @@ export function BottomSheet({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div
-          className={cn(
-            "fixed inset-0 z-[100]",
-            asDialog && "grid place-items-center p-6"
-          )}
-          initial={false}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.16, ease: "easeOut" }}
-        >
+        // پس‌زمینه و پنل هر کدام انیمیشن خودشان را دارند؛ AnimatePresence تا پایان خروج هر دو صبر می‌کند
+        <motion.div className={cn("fixed inset-0 z-[100]", asDialog && "grid place-items-center p-6")}>
           {/* لایه پس‌زمینه */}
           <motion.button
             type="button"
             tabIndex={-1}
             aria-label="بستن"
             onClick={() => onCloseRef.current()}
+            // تیرگی نرم ظاهر/محو می‌شود (قبلاً یک‌باره می‌پرید و فقط پنل حرکت داشت)
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: reduceMotion ? 0 : 0.2, ease: "easeOut" } }}
+            exit={{ opacity: 0, transition: { duration: reduceMotion ? 0 : 0.18, ease: "easeIn" } }}
             // بدون backdrop-filter: در وب‌اپ iOS بلور هنگام محو شدن با opacity والد هماهنگ نمی‌شد
             // و تکه‌ای تار روی هدر می‌ماند — فقط تیرگی ساده
             className={cn("absolute inset-0 cursor-default", asDrawer ? "bg-[rgb(15_26_23/0.34)]" : "bg-[rgb(15_26_23/0.45)]")}
           />
 
           {/* پنل — MO-04: در موبایل با کشیدن دستگیره به پایین بسته می‌شود */}
+          <SlideFrame slide={slide} full={size === "full"}>
           <motion.div
             ref={panelRef}
             role="dialog"
@@ -217,20 +236,13 @@ export function BottomSheet({
             dragElastic={{ top: 0, bottom: 0.6 }}
             dragMomentum={false}
             onDragEnd={onDragEnd}
-            variants={
-              asDrawer
-                ? drawerVariants(rtl)
-                : asDialog
-                  ? dialogVariants
-                  : reduceMotion
-                    ? undefined
-                    : sheetVariants
-            }
-            initial={asDialog || asDrawer ? "hidden" : reduceMotion ? { opacity: 0 } : "hidden"}
-            animate={asDialog || asDrawer ? "visible" : reduceMotion ? { opacity: 1 } : "visible"}
-            exit={asDialog || asDrawer ? "exit" : reduceMotion ? { opacity: 0 } : "exit"}
+            variants={asDrawer ? drawerVariants(rtl) : asDialog ? dialogVariants : undefined}
+            initial={asDialog || asDrawer ? "hidden" : slide ? undefined : { opacity: 0 }}
+            animate={asDialog || asDrawer ? "visible" : slide ? undefined : { opacity: 1 }}
+            exit={asDialog || asDrawer ? "exit" : slide ? undefined : { opacity: 0 }}
             className={cn(
-              "absolute flex flex-col overflow-hidden border border-black/10 bg-card text-card-foreground shadow-[0_16px_50px_-8px_rgba(0,0,0,0.28)] outline-none",
+              slide ? "relative" : "absolute",
+              "flex flex-col overflow-hidden border border-black/10 bg-card text-card-foreground shadow-[0_16px_50px_-8px_rgba(0,0,0,0.28)] outline-none",
               asDrawer
                 ? cn(
                     "inset-y-3 end-3 rounded-3xl",
@@ -317,6 +329,7 @@ export function BottomSheet({
               </div>
             )}
           </motion.div>
+          </SlideFrame>
         </motion.div>
       )}
     </AnimatePresence>,

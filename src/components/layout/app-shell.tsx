@@ -18,6 +18,7 @@ import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { apiGet } from "@/lib/api-client"
 import { useTelegram } from "@/hooks/use-telegram"
+import { onAppResume } from "@/hooks/use-app-resume"
 import { useUIStore } from "@/lib/ui-store"
 import { formatJalali, formatJalaliWithWeekday, nowTehran } from "@/lib/jalali"
 import { toPersianDigits } from "@/lib/money"
@@ -105,6 +106,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   )
   const reduceMotion = useReducedMotion()
   const showSidebar = !isTelegram
+  // اپ از پس‌زمینه برگشت (شاید فردای آن روز): تاریخ هدر دوباره ساخته شود
+  const [, setResumeTick] = useState(0)
+  useEffect(() => onAppResume(() => setResumeTick((n) => n + 1)), [])
   const now = nowTehran()
   const today = formatJalaliWithWeekday(now)
 
@@ -284,7 +288,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <motion.nav
         aria-label="منوی اصلی"
         initial={false}
-        animate={{ y: navHidden ? "100%" : 0 }}
+        // transform (نه y): framer آن را با WAAPI روی compositor اجرا می‌کند، نه هر فریم روی رشتهٔ اصلی
+        animate={{ transform: navHidden ? "translateY(100%)" : "translateY(0%)" }}
         transition={{ type: "spring", stiffness: 420, damping: 38 }}
         className="hy-nav fixed inset-x-0 bottom-0 z-40 [padding-bottom:max(0.5rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden"
       >
@@ -306,6 +311,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               transition={{ type: "spring", stiffness: 520, damping: 26 }}
               className="hy-fab absolute -top-5 grid size-14 place-items-center rounded-2xl text-primary-foreground"
             >
+              <span aria-hidden className="hy-fab-ring" />
               <FabBurst burst={fabBurst} />
               <IconPlus className="relative size-6" strokeWidth={2.6} />
             </motion.button>

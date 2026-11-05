@@ -36,6 +36,8 @@ import { PageHeader } from "@/components/layout/page-header"
 import { formatJalaliShort } from "@/lib/jalali"
 import { useConfirm } from "@/components/ui/confirm"
 import { useDirty } from "@/hooks/use-dirty"
+import { SettlementSheet } from "@/components/settlements/settlement-sheet"
+import { TxSheet } from "@/components/accounts/tx-sheet"
 
 interface Account {
   id: string
@@ -52,8 +54,11 @@ interface Account {
     type: string
     description: string
     date: string
+    refId: string | null
   }[]
 }
+
+type AccountTx = Account["recent"][number]
 
 /** شمارهٔ کارت/شبا پوشیده: «۶۱۰۴ ۳۳۷۵ •••• ۸۸۲۱» */
 function maskNumber(raw: string | null): string | null {
@@ -129,10 +134,14 @@ function BankCardFace({ account: a, onClick }: { account: Account; onClick?: () 
 }
 
 /** ردیف گردش حساب — در «گردش اخیر» صفحه و کشوی جزئیات */
-function TxRow({ t, sub }: { t: Account["recent"][number]; sub: string }) {
+function TxRow({ t, sub, onClick }: { t: AccountTx; sub: string; onClick?: () => void }) {
   const isIn = t.direction === "IN"
   return (
-    <div className="flex min-h-[3.75rem] items-center gap-3 px-4 py-2.5">
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-h-[3.75rem] w-full items-center gap-3 px-4 py-2.5 text-start transition-colors hover:bg-accent/50 active:bg-accent"
+    >
       <span
         className={cn(
           "grid size-10 shrink-0 place-items-center rounded-xl",
@@ -149,7 +158,7 @@ function TxRow({ t, sub }: { t: Account["recent"][number]; sub: string }) {
         {isIn ? "+" : "−"}
         {formatToman(t.amount, false)}
       </span>
-    </div>
+    </button>
   )
 }
 
@@ -427,6 +436,9 @@ export default function AccountsPage() {
     }
   }
 
+  const [txOpen, setTxOpen] = useState<(AccountTx & { accountName: string }) | null>(null)
+  const [settlementId, setSettlementId] = useState<string | null>(null)
+
   const [deleting, setDeleting] = useState(false)
   const remove = async (a: Account) => {
     const yes = await confirm({
@@ -520,6 +532,7 @@ export default function AccountsPage() {
                     key={t.id}
                     t={t}
                     sub={`${t.accountName} | ${TX_LABEL[t.type] ?? t.type} | ${formatJalaliShort(new Date(t.date))}`}
+                    onClick={() => setTxOpen(t)}
                   />
                 ))}
               </div>
@@ -613,6 +626,7 @@ export default function AccountsPage() {
                         key={t.id}
                         t={t}
                         sub={`${TX_LABEL[t.type] ?? t.type} | ${formatJalaliShort(new Date(t.date))}`}
+                        onClick={() => setTxOpen({ ...t, accountName: actionFor.name })}
                       />
                     ))}
                   </div>
@@ -638,6 +652,21 @@ export default function AccountsPage() {
           }}
         />
       )}
+
+      {/* جزئیات یک گردش: تسویه نقدی → ویرایش/حذف تسویه · انتقال → حذف · فاکتور/چک → لینک به مبدأ */}
+      <TxSheet
+        tx={txOpen}
+        onClose={() => setTxOpen(null)}
+        onOpenSettlement={(sid) => {
+          setTxOpen(null)
+          setSettlementId(sid)
+        }}
+        onDeleted={async () => {
+          setTxOpen(null)
+          await queryClient.invalidateQueries()
+        }}
+      />
+      <SettlementSheet settlementId={settlementId} onClose={() => setSettlementId(null)} />
 
       {/* شیت انتقال */}
       <BottomSheet

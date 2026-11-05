@@ -44,6 +44,7 @@ import { useConfirm } from "@/components/ui/confirm"
 import { deferDelete } from "@/components/ui/undo-toast"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { SettlementSheet } from "@/components/settlements/settlement-sheet"
 import { itemsGrossProfit } from "@/lib/finance-math"
 
 interface Invoice {
@@ -164,6 +165,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   })
 
   const [settleSheet, setSettleSheet] = useState(false)
+  const [settlementId, setSettlementId] = useState<string | null>(null)
   const [settleAmount, setSettleAmount] = useState(0)
   const [settleMethod, setSettleMethod] = useState<"CASH" | "CHECK">("CASH")
   const [settleAccount, setSettleAccount] = useState<Account | null>(null)
@@ -430,6 +432,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     color: string
     muted?: boolean
     badge?: { text: string; cls: string }
+    /** شناسهٔ تسویه — ردیف قابل لمس برای ویرایش/حذف */
+    settlementId?: string
   }[] = [
     ...(inv.paidCash > 0
       ? [
@@ -469,6 +473,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       amount: st.amount,
       icon: <HandCoins className="size-4" />,
       color: "var(--purchase)",
+      settlementId: st.id,
     })),
   ]
 
@@ -654,7 +659,24 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               ) : (
                 <div className="divide-y divide-border/60">
                   {timeline.map((t) => (
-                    <div key={t.key} className={cn("flex items-center gap-3 px-4 py-3", t.muted && "opacity-55")}>
+                    <div
+                      key={t.key}
+                      {...(t.settlementId
+                        ? {
+                            role: "button" as const,
+                            tabIndex: 0,
+                            onClick: () => setSettlementId(t.settlementId!),
+                            onKeyDown: (e: React.KeyboardEvent) => {
+                              if (e.key === "Enter" || e.key === " ") setSettlementId(t.settlementId!)
+                            },
+                          }
+                        : {})}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3",
+                        t.muted && "opacity-55",
+                        t.settlementId && "cursor-pointer transition-colors hover:bg-accent/50 active:bg-accent"
+                      )}
+                    >
                       <span
                         style={{ ["--tile" as string]: t.color }}
                         className="grid size-9 shrink-0 place-items-center rounded-xl bg-[color:color-mix(in_srgb,var(--tile)_12%,transparent)] text-[color:var(--tile)]"
@@ -990,6 +1012,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           )}
         </DialogContent>
       </Dialog>
+      <SettlementSheet settlementId={settlementId} onClose={() => setSettlementId(null)} />
     </>
   )
 }

@@ -51,9 +51,9 @@ public/banks/               # اسپریت لوگوی بانک‌ها
 instrumentation.ts          # راه‌انداز زمان‌بند و ربات
 
 # داده‌های زنده (دیتابیس، پیوست‌ها، بکاپ‌ها) خارج از ریپو:
-/var/lib/hesabyar/hesabyar.db      # دیتابیس SQLite
-/var/lib/hesabyar/uploads/         # پیوست چک‌ها و اسناد
-/var/lib/hesabyar/backups/         # بکاپ خودکار روزانه (۷ نسخه)
+/var/www/miladrajabi.com/hesabyar/data/hesabyar.db      # دیتابیس SQLite
+/var/www/miladrajabi.com/hesabyar/data/uploads/         # پیوست چک‌ها و اسناد
+/var/www/miladrajabi.com/hesabyar/data/backups/         # بکاپ خودکار روزانه (۷ نسخه)
 ```
 
 ## 🚀 راه‌اندازی روی سرور
@@ -77,8 +77,8 @@ pm2 save
 ### فایل `.env`
 
 ```env
-DATABASE_URL="file:/var/lib/hesabyar/hesabyar.db"
-DATA_DIR="/var/lib/hesabyar"
+DATABASE_URL="file:/var/www/miladrajabi.com/hesabyar/data/hesabyar.db"
+DATA_DIR="/var/www/miladrajabi.com/hesabyar/data"
 APP_USERNAME="milad"
 APP_PASSWORD="رمز-قوی-انتخاب-کنید"
 SESSION_SECRET="یک-رشته-تصادفی-طولانی"
@@ -101,7 +101,7 @@ pm2 restart hesabyar        # ری‌استارت بعد از تغییرات
 pm2 monit                   # مانیتور منابع
 
 # بکاپ دستی دیتابیس (مسیر دادهٔ جدید)
-sqlite3 /var/lib/hesabyar/hesabyar.db ".backup /tmp/backup.db"
+sqlite3 /var/www/miladrajabi.com/hesabyar/data/hesabyar.db ".backup /tmp/backup.db"
 
 # بازیابی: از داخل خود اپ (تنظیمات ← بکاپ ← بازیابی فایل) — توصیه می‌شود
 ```
