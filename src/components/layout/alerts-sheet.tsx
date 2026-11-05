@@ -16,6 +16,7 @@ import { BadgeAlert, ChevronLeft, PackageMinus, ReceiptText, TriangleAlert, X, t
 import { cn } from "@/lib/utils"
 import { apiPost } from "@/lib/api-client"
 import { formatJalaliShort } from "@/lib/jalali"
+import { dueLabel } from "@/lib/format"
 import { formatToman, toPersianDigits } from "@/lib/money"
 import { formatUnit } from "@/lib/units"
 import { getBank } from "@/lib/banks"
@@ -246,9 +247,7 @@ function describe(item: AlertItem): {
         `سررسید ${formatJalaliShort(new Date(item.dueDate))}`,
       ],
       amount: item.amount,
-      badge: overdue
-        ? { text: `${toPersianDigits(-item.daysLeft)} روز گذشته`, tone: "danger" }
-        : { text: "امروز", tone: "warning" },
+      badge: { text: dueLabel(new Date(item.dueDate)), tone: overdue ? "danger" : "warning" },
       note: item.isRegistered
         ? received
           ? "اگر وصول شده «پاس شد» و اگر برگشت خورده «برگشت» بزنید."

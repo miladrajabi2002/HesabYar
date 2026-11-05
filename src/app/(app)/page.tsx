@@ -17,7 +17,8 @@ import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { DashboardSkeleton } from "@/components/ui/page-skeletons"
 import { ErrorState } from "@/components/ui/error-state"
-import { BalanceAvatar, formatOpenDays } from "@/components/ui/role-avatar"
+import { BalanceAvatar } from "@/components/ui/role-avatar"
+import { dueLabel, formatOpenDays, greeting } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/layout/page-header"
 import { InvoiceTypeMark } from "@/components/ui/type-mark"
@@ -221,7 +222,7 @@ function EmptyLine({ children }: { children: React.ReactNode }) {
   return <p className="px-4 pb-5 pt-3 text-center text-label text-muted-foreground">{children}</p>
 }
 
-function DueChip({ daysLeft }: { daysLeft: number }) {
+function DueChip({ daysLeft, label }: { daysLeft: number; label: string }) {
   return (
     <span
       className={cn(
@@ -233,11 +234,7 @@ function DueChip({ daysLeft }: { daysLeft: number }) {
             : "bg-muted text-muted-foreground"
       )}
     >
-      {daysLeft < 0
-        ? `${toPersianDigits(Math.abs(daysLeft))} روز گذشته`
-        : daysLeft === 0
-          ? "امروز"
-          : `${toPersianDigits(daysLeft)} روز دیگر`}
+      {label}
     </span>
   )
 }
@@ -290,7 +287,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="داشبورد" sub={`${formatJalaliWithWeekday(now)} | خوش آمدید`} className="!mb-0" />
+      <PageHeader title="داشبورد" sub={`${formatJalaliWithWeekday(now)} | ${greeting(now)}`} className="!mb-0" />
       <div className="grid items-start gap-4 lg:grid-cols-[1.15fr_1fr]">
         {/* ───────── کارت قهرمان + میانبرها ───────── */}
         <div>
@@ -543,7 +540,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="shrink-0 text-end">
                       <div className="nums text-sm font-extrabold">{formatTomanCompact(c.amount)}</div>
-                      <DueChip daysLeft={c.daysLeft} />
+                      <DueChip daysLeft={c.daysLeft} label={dueLabel(new Date(c.dueDate), now)} />
                     </div>
                   </Row>
                 ))}

@@ -13,6 +13,7 @@ import { db } from "@/lib/db"
 import { changeCheckStatus } from "@/lib/checks"
 import { formatToman, toPersianDigits } from "@/lib/money"
 import { diffJalaliDays, endOfJalaliDay, formatJalaliWithWeekday, jalaliDayKey, TEHRAN_OFFSET_MS } from "@/lib/jalali"
+import { dueLabel, greeting } from "@/lib/format"
 import { getBank } from "@/lib/banks"
 import { resolveTelegramConfig } from "./config"
 import { alreadySent, telegramApi } from "./alerts"
@@ -43,8 +44,7 @@ async function loadDueChecks() {
 /** متن کارت یک چک */
 function checkCardText(c: CheckRow, footer?: string): string {
   const bank = getBank(c.bankKey)
-  const diff = diffJalaliDays(new Date(), c.dueDate)
-  const when = diff === 0 ? "امروز" : `${toPersianDigits(Math.abs(diff))} روز گذشته`
+  const when = dueLabel(c.dueDate)
   const dir = c.direction === "RECEIVED" ? "📥 دریافتی از" : "📤 صادره به"
   return (
     `${dir} <b>${esc(c.person.name)}</b>\n` +
@@ -96,7 +96,7 @@ export async function sendMorningReminder(opts: { force?: boolean } = {}): Promi
   const overdue = checks.filter((c) => diffJalaliDays(new Date(), c.dueDate) < 0)
   const sum = (arr: CheckRow[], dir: string) => arr.filter((c) => c.direction === dir).reduce((s, c) => s + c.amount, 0)
 
-  let header = `☀️ <b>صبح بخیر!</b>\n${formatJalaliWithWeekday(new Date())}\n\n`
+  let header = `☀️ <b>${greeting()}!</b>\n${formatJalaliWithWeekday(new Date())}\n\n`
   if (checks.length === 0) {
     header += "امروز هیچ چکی سررسید ندارد ✨\nروز خوبی داشته باشید."
   } else {

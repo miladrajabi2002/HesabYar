@@ -43,8 +43,9 @@ import { Input } from "@/components/ui/input"
 import { useConfirm } from "@/components/ui/confirm"
 import { CheckDirectionBadge } from "@/components/ui/check-direction-badge"
 import { cn } from "@/lib/utils"
+import { dueLabel } from "@/lib/format"
 import { PageHeader } from "@/components/layout/page-header"
-import { Segmented } from "@/components/ui/segmented"
+import { Select } from "@/components/ui/select"
 import { SwipeRow } from "@/components/ui/swipe-row"
 
 interface Check {
@@ -484,29 +485,34 @@ function ChecksPageInner() {
         </div>
       )}
 
-      {/* فیلترها */}
-      <div className="mb-4 space-y-2">
-        <Segmented
+      {/* فیلترها — انتخاب‌گر یکدست: دسکتاپ dropdown، موبایل شیت با تیک گزینهٔ فعلی */}
+      <div className="mb-4 flex gap-2">
+        <Select
+          size="sm"
           value={status}
           onChange={setStatus}
+          title="وضعیت چک"
+          aria-label="وضعیت"
+          className="max-w-none flex-1 sm:max-w-52"
           options={[
-            { key: "PENDING", label: "در جریان", tone: "var(--hue-checks)" },
-            { key: "CASHED", label: "پاس‌شده", tone: "var(--income)" },
-            { key: "BOUNCED", label: "برگشتی", tone: "var(--destructive)" },
-            { key: "ALL", label: "همه" },
+            { value: "PENDING", label: "در جریان" },
+            { value: "CASHED", label: "پاس‌شده" },
+            { value: "BOUNCED", label: "برگشتی" },
+            { value: "ALL", label: "همه" },
           ]}
-          className="sm:max-w-xl"
         />
-        <Segmented
+        <Select
           size="sm"
           value={direction}
           onChange={setDirection}
+          title="جهت چک"
+          aria-label="جهت"
+          className="max-w-none flex-1 sm:max-w-60"
           options={[
-            { key: "ALL", label: "دریافتی و صادره" },
-            { key: "RECEIVED", label: "دریافتی", tone: "var(--sale)" },
-            { key: "ISSUED", label: "صادره", tone: "var(--purchase)" },
+            { value: "ALL", label: "دریافتی و صادره" },
+            { value: "RECEIVED", label: "دریافتی" },
+            { value: "ISSUED", label: "صادره" },
           ]}
-          className="sm:max-w-md"
         />
       </div>
 
@@ -650,11 +656,7 @@ function ChecksPageInner() {
                             ) : c.status === "PENDING" ? (
                               <>
                                 <Clock3 className="size-3" />
-                                {overdue
-                                  ? `${toPersianDigits(Math.abs(daysLeft))} روز گذشته`
-                                  : daysLeft === 0
-                                    ? "امروز"
-                                    : `${toPersianDigits(daysLeft)} روز دیگر`}
+                                {dueLabel(new Date(c.dueDate), today)}
                               </>
                             ) : (
                               STATUS_LABEL[c.status]
@@ -737,7 +739,7 @@ function ChecksPageInner() {
                       d < 0 ? "bg-destructive/10 text-destructive" : d === 0 ? "bg-warning/15 text-warning-ink" : "bg-muted text-muted-foreground"
                     )}
                   >
-                    {d < 0 ? `${toPersianDigits(-d)} روز گذشته` : d === 0 ? "امروز" : `${toPersianDigits(d)} روز دیگر`}
+                    {dueLabel(new Date(actionSheet.dueDate), today)}
                   </span>
                 )
               })()}

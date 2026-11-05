@@ -6,8 +6,8 @@
  *  SUPPLIER (فروشنده) → بنفش، نشان مغازه (سایبان + ویترین)
  *  BOTH (هر دو)       → کاشی دورنگ مورب (آبی/بنفش) + نشان فلش دوطرفه
  */
-import { toPersianDigits } from "@/lib/money"
 import { cn } from "@/lib/utils"
+import { formatOpenDays } from "@/lib/format"
 
 const ROLE_TONE: Record<string, string> = {
   CUSTOMER: "var(--role-customer)",
@@ -123,13 +123,6 @@ export function RoleBadge({ role, className }: { role?: string | null; className
 
 /** نسیهٔ بازِ بیش از این تعداد روز معوق است — همان آستانهٔ بنر فاکتورها (lib/finance OVERDUE_DAYS) */
 const OVERDUE_DAYS = 30
-
-/** برچسب کوتاه قدمت مانده: «امروز» / «۱۲ روز» / «۲ ماه» */
-export function formatOpenDays(days: number): string {
-  if (days <= 0) return "امروز"
-  if (days < 60) return `${toPersianDigits(days)} روز`
-  return `${toPersianDigits(Math.floor(days / 30))} ماه`
-}
 
 /**
  * آواتار تراز (نسخهٔ ۸) — بدون حلقه و بدون حرف: یک نگاه = «این کیست و حسابش چطور است»

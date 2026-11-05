@@ -19,7 +19,6 @@ import {
   Download,
   ChevronDown,
   Loader2,
-  UserRound,
   Pencil,
   Trash2,
   AlertTriangle,
@@ -30,7 +29,7 @@ import { invoiceProfit } from "@/lib/finance-math"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { formatJalaliShort, formatJalaliWithWeekday, jalaliDayKey, nowTehran } from "@/lib/jalali"
 import { formatUnit } from "@/lib/units"
-import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
+import { Select } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { ListSkeleton } from "@/components/ui/page-skeletons"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -38,7 +37,6 @@ import { ErrorState } from "@/components/ui/error-state"
 import { useTelegram } from "@/hooks/use-telegram"
 import { deferDelete } from "@/components/ui/undo-toast"
 import { useUIStore } from "@/lib/ui-store"
-import { Segmented, FilterChip } from "@/components/ui/segmented"
 import { SearchField } from "@/components/ui/search-field"
 import { SwipeRow } from "@/components/ui/swipe-row"
 import { InvoiceTypeMark, InvoiceTypePill } from "@/components/ui/type-mark"
@@ -81,7 +79,6 @@ function InvoicesPageInner() {
   const pendingDeletes = useUIStore((s) => s.pendingDeletes)
   const [type, setType] = useState<"ALL" | "SALE" | "PURCHASE">("ALL")
   const [personId, setPersonId] = useState<string | null>(searchParams.get("person"))
-  const [personName, setPersonName] = useState<string | null>(null)
   const qParam = searchParams.get("q") ?? ""
   const [q, setQ] = useState(qParam)
   // «همه در صفحهٔ خودش» از جستجوی سراسری: ?q= تازه فیلد را پر می‌کند
@@ -90,7 +87,6 @@ function InvoicesPageInner() {
     setLastQParam(qParam)
     setQ(qParam)
   }
-  const [personSheet, setPersonSheet] = useState(false)
   // IMP-01: جستجوی debounce شده سمت سرور + صفحه‌بندی
   const [debouncedQ, setDebouncedQ] = useState(qParam.trim())
   const [page, setPage] = useState(1)
@@ -125,7 +121,6 @@ function InvoicesPageInner() {
   const { data: peopleData } = useQuery({
     queryKey: ["people", "all"],
     queryFn: () => apiGet<{ people: { id: string; name: string }[] }>("/api/people"),
-    enabled: personSheet,
   })
 
   // X1: فاکتوری که حذفش منتظر پایان فرصت «بازگردانی» است پنهان می‌ماند
@@ -196,7 +191,6 @@ function InvoicesPageInner() {
     setQ("")
     setType("ALL")
     setPersonId(null)
-    setPersonName(null)
     setOverdueOnly(false)
     setPage(1)
   }
@@ -255,7 +249,7 @@ function InvoicesPageInner() {
         </div>
       </div>
 
-      {/* فیلترها — قرص لغزان نوع + جستجو + چیپ‌ها (معوق، شخص) */}
+      {/* فیلترها — جستجو + انتخاب‌گرهای یکدست (نوع، شخص) + چیپ‌ها (معوق، اکسل) */}
       <div className="mb-3 space-y-2.5">
         <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
           <SearchField
@@ -266,26 +260,42 @@ function InvoicesPageInner() {
             hotkey
             className="lg:flex-1"
           />
-          <Segmented
-            value={type}
-            onChange={(k) => {
-              haptic.tap()
-              setType(k)
-              setPage(1)
-            }}
-            options={[
-              { key: "ALL", label: "همه" },
-              { key: "SALE", label: "فروش", tone: "var(--sale)", icon: <span className="size-1.5 rounded-full bg-[color:var(--sale)]" /> },
-              {
-                key: "PURCHASE",
-                label: "خرید",
-                tone: "var(--purchase)",
-                icon: <span className="size-1.5 rounded-full bg-[color:var(--purchase)]" />,
-              },
-            ]}
-            className="lg:w-72 lg:shrink-0"
-          />
           <div className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0 lg:shrink-0 lg:overflow-visible lg:[&_button]:h-11">
+            <Select
+              size="sm"
+              value={type}
+              onChange={(k) => {
+                setType(k)
+                setPage(1)
+              }}
+              title="نوع فاکتور"
+              aria-label="نوع فاکتور"
+              className="shrink-0"
+              options={[
+                { value: "ALL", label: "همه" },
+                { value: "SALE", label: "فروش", icon: <span className="size-1.5 rounded-full bg-[color:var(--sale)]" /> },
+                {
+                  value: "PURCHASE",
+                  label: "خرید",
+                  icon: <span className="size-1.5 rounded-full bg-[color:var(--purchase)]" />,
+                },
+              ]}
+            />
+            <Select
+              size="sm"
+              value={personId ?? ""}
+              onChange={(v) => {
+                setPersonId(v || null)
+                setPage(1)
+              }}
+              title="فیلتر بر اساس شخص"
+              aria-label="شخص"
+              className="w-44 shrink-0"
+              options={[
+                { value: "", label: "همهٔ اشخاص" },
+                ...(peopleData?.people ?? []).map((p) => ({ value: p.id, label: p.name })),
+              ]}
+            />
             {(overdueCount > 0 || overdueOnly) && (
               <button
                 type="button"
@@ -315,17 +325,6 @@ function InvoicesPageInner() {
                 {overdueOnly && <X className="size-3.5" />}
               </button>
             )}
-            <FilterChip
-              active={!!personId}
-              label={personId ? (personName ?? "شخص") : "همهٔ اشخاص"}
-              icon={<UserRound className="size-4" />}
-              onClick={() => setPersonSheet(true)}
-              onClear={() => {
-                setPersonId(null)
-                setPersonName(null)
-                setPage(1)
-              }}
-            />
             <button
               type="button"
               onClick={() => downloadCsv("invoices")}
@@ -569,39 +568,6 @@ function InvoicesPageInner() {
           )}
         </>
       )}
-
-      {/* شیت فیلتر شخص */}
-      <BottomSheet
-        open={personSheet}
-        onClose={() => setPersonSheet(false)}
-        title="فیلتر بر اساس شخص"
-        size="tall"
-      >
-        <div className="space-y-2">
-          <SheetOption
-            title="همه اشخاص"
-            onClick={() => {
-              setPersonId(null)
-              setPersonName(null)
-              setPersonSheet(false)
-              setPage(1)
-            }}
-          />
-          {(peopleData?.people ?? []).map((p) => (
-            <SheetOption
-              key={p.id}
-              title={p.name}
-              selected={personId === p.id}
-              onClick={() => {
-                setPersonId(p.id)
-                setPersonName(p.name)
-                setPersonSheet(false)
-                setPage(1)
-              }}
-            />
-          ))}
-        </div>
-      </BottomSheet>
     </div>
   )
 }

@@ -5,8 +5,9 @@
  */
 import { db } from "@/lib/db"
 import { resolveTelegramConfig } from "./config"
-import { formatToman } from "@/lib/money"
+import { formatToman, toPersianDigits } from "@/lib/money"
 import { formatJalali, diffJalaliDays, nowTehran } from "@/lib/jalali"
+import { dueLabel } from "@/lib/format"
 import { getBank } from "@/lib/banks"
 import { sendPushToAll } from "@/lib/web-push"
 
@@ -103,7 +104,7 @@ export async function checkDueAlerts(): Promise<{ sent: number }> {
     if (diff >= 0 && diff <= daysBefore) {
       const key = `CHECK_DUE:${check.id}:advance`
       if (!(await alreadySent(key))) {
-        const when = diff === 0 ? "امروز" : diff === 1 ? "فردا" : `${diff} روز دیگر`
+        const when = dueLabel(check.dueDate)
         const ok = await sendTelegramAlert(
           `⏰ <b>سررسید چک ${when} است</b>\n\n` +
             `بانک: ${bank.name}\n` +
@@ -136,12 +137,12 @@ export async function checkDueAlerts(): Promise<{ sent: number }> {
             `نوع: چک ${dirText} «${check.person.name}»\n` +
             `مبلغ: ${formatToman(check.amount)}\n` +
             `سررسید: ${formatJalali(check.dueDate)}\n` +
-            `${Math.abs(diff)} روز از سررسید گذشته است. پیگیری کنید.`,
+            `${toPersianDigits(Math.abs(diff))} روز از سررسید گذشته است. پیگیری کنید.`,
           key
         )
         const push = await sendPushToAll({
           title: "🚨 سررسید چک گذشته است",
-          body: `چک ${dirText} «${check.person.name}» — ${Math.abs(diff)} روز گذشته — ${formatToman(check.amount)}`,
+          body: `چک ${dirText} «${check.person.name}» — ${dueLabel(check.dueDate)} — ${formatToman(check.amount)}`,
           tag: key,
           url: "/checks",
         }).catch(() => ({ sent: 0, removed: 0 }))

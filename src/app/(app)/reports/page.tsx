@@ -6,7 +6,6 @@
  */
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronDown } from "lucide-react"
 import { apiGet } from "@/lib/api-client"
 import { formatTomanCompact, formatTomanParts, toPersianDigits } from "@/lib/money"
 import { formatUnit } from "@/lib/units"
@@ -18,6 +17,7 @@ import {
 } from "@/lib/jalali"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Select } from "@/components/ui/select"
 import { PageHeader } from "@/components/layout/page-header"
 import { TrendChart, CollectionDonut, type Collection } from "@/components/charts/finance-charts"
 
@@ -68,7 +68,6 @@ export default function ReportsPage() {
   const thisMonth = monthKeyOf(now)
   const [period, setPeriod] = useState<"day" | "week" | "month" | "custom">("month")
   const [monthKey, setMonthKey] = useState(thisMonth)
-  const months = [...prevMonthKeys(thisMonth, 5), thisMonth]
 
   const query =
     period === "custom"
@@ -99,68 +98,41 @@ export default function ReportsPage() {
   const prevLabel =
     period === "day" ? "دیروز" : period === "week" ? "هفتهٔ قبل" : JALALI_MONTHS[(shownJm + 10) % 12]
   const isMonth = period === "month" || period === "custom"
-  const [monthsOpen, setMonthsOpen] = useState(false)
 
   return (
     <div>
       <PageHeader title="گزارش‌ها" sub={`${label} | مقایسه با ${prevLabel}`} />
 
-      {/* انتخاب دوره — چیپ‌ها؛ چیپ ماه با فلش، فهرست ماه‌ها را باز می‌کند */}
-      <div className="mb-2 flex gap-1.5 overflow-x-auto no-scrollbar">
-        {(
-          [
-            ["day", "امروز"],
-            ["week", "این هفته"],
-          ] as const
-        ).map(([key, l]) => (
-          <Chip
-            key={key}
-            on={period === key}
-            onClick={() => {
-              setPeriod(key)
-              setMonthsOpen(false)
-            }}
-          >
-            {l}
-          </Chip>
-        ))}
-        <Chip
-          on={isMonth}
-          onClick={() => {
-            if (!isMonth) setPeriod(monthKey === thisMonth ? "month" : "custom")
-            else setMonthsOpen((v) => !v)
+      {/* انتخاب دوره — انتخاب‌گر یکدست: امروز/این هفته + شش ماه اخیر؛ دسکتاپ dropdown، موبایل شیت */}
+      <div className="mb-2">
+        <Select
+          size="sm"
+          value={period === "day" || period === "week" ? period : monthKey}
+          onChange={(v) => {
+            if (v === "day" || v === "week") {
+              setPeriod(v)
+            } else {
+              setMonthKey(v)
+              setPeriod(v === thisMonth ? "month" : "custom")
+            }
           }}
-          aria-expanded={monthsOpen}
-        >
-          {`${JALALI_MONTHS[shownJm - 1]} ${toPersianDigits(parseMonthKey(shownMonth).jy)}`}
-          <ChevronDown className={cn("size-3.5 transition-transform", monthsOpen && "rotate-180")} />
-        </Chip>
+          title="دورهٔ گزارش"
+          aria-label="دورهٔ گزارش"
+          className="max-w-none sm:max-w-60"
+          options={[
+            { value: "day", label: "امروز" },
+            { value: "week", label: "این هفته" },
+            ...[thisMonth, ...prevMonthKeys(thisMonth, 5).reverse()].map((m) => {
+              const { jy, jm } = parseMonthKey(m)
+              return {
+                value: m,
+                label: `${JALALI_MONTHS[jm - 1]} ${toPersianDigits(jy)}`,
+                hint: m === thisMonth ? "این ماه" : undefined,
+              }
+            }),
+          ]}
+        />
       </div>
-      {monthsOpen && (
-        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          {months.map((m) => {
-            const { jy, jm } = parseMonthKey(m)
-            const active = isMonth && shownMonth === m
-            return (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMonthKey(m)
-                  setPeriod(m === thisMonth ? "month" : "custom")
-                  setMonthsOpen(false)
-                }}
-                className={cn(
-                  "h-8 shrink-0 rounded-[10px] border px-3 text-label font-semibold transition-colors",
-                  active ? "border-primary bg-secondary text-secondary-foreground" : "border-border bg-card text-foreground/75 hover:bg-accent"
-                )}
-              >
-                {JALALI_MONTHS[jm - 1]} {toPersianDigits(jy)}
-              </button>
-            )
-          })}
-        </div>
-      )}
 
       {isLoading || !data ? (
         <div className="mt-3 grid gap-4 lg:grid-cols-2">
@@ -328,26 +300,6 @@ function Money({ v }: { v: number }) {
       {value}
       {unit && <span className="ms-1 text-caption font-semibold tracking-normal text-muted-foreground">{unit}</span>}
     </>
-  )
-}
-
-function Chip({
-  on,
-  children,
-  ...props
-}: { on: boolean; children: React.ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      {...props}
-      className={cn(
-        "flex h-8 shrink-0 items-center gap-1 rounded-[10px] border px-3 text-label font-semibold transition-colors",
-        on ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground/80 hover:bg-accent"
-      )}
-    >
-      {children}
-    </button>
   )
 }
 

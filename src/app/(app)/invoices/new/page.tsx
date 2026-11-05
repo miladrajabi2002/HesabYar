@@ -61,6 +61,7 @@ import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
 import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
 import { jalaliDayKey } from "@/lib/jalali"
+import { relativeTime } from "@/lib/format"
 import { normalizeDigits } from "@/lib/digits"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { PersonFields } from "@/components/people/person-fields"
@@ -2555,16 +2556,6 @@ interface SavedDraft {
   checks: DraftCheck[]
   note: string
   savedAt: number
-}
-
-function relativeTime(ts: number): string {
-  const sec = Math.max(0, Math.round((Date.now() - ts) / 1000))
-  if (sec < 45) return "همین الان"
-  const min = Math.round(sec / 60)
-  if (min < 60) return `${toPersianDigits(min)} دقیقه پیش`
-  const h = Math.round(min / 60)
-  if (h < 24) return `${toPersianDigits(h)} ساعت پیش`
-  return `${toPersianDigits(Math.round(h / 24))} روز پیش`
 }
 
 /** بنر «پیش‌نویس نیمه‌کاره داری» — کاربر تصمیم می‌گیرد ادامه بدهد یا از نو شروع کند */

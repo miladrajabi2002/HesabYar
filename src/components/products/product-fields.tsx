@@ -3,7 +3,7 @@
 /**
  * فیلدهای فرم کالا (نسخهٔ ۷) — هم‌الگوی فرم شخص؛ مشترک بین «کالای جدید/ویرایش» (کالاها)
  * و «کالای جدید» داخل شیت افزودن قلم فاکتور.
- *  • «اطلاعات اصلی»: نام + واحد شمارش (چیپ)
+ *  • «اطلاعات اصلی»: نام + واحد شمارش (انتخاب‌گر یکدست)
  *  • «جزئیات بیشتر»: برند، کد و عکس — ردیف «افزودن ›» تا لمس نشده
  *  • «موجودی از قبل» (فقط صفحهٔ کالاها): تعداد و قیمت خرید هر واحد
  */
@@ -11,6 +11,7 @@ import { useState } from "react"
 import { ImagePlus, Loader2, X } from "lucide-react"
 import { AmountInput } from "@/components/ui/amount-input"
 import { AddRow, Group, GroupTitle, InlineField, bareInput } from "@/components/ui/form-group"
+import { Select } from "@/components/ui/select"
 import { PRODUCT_UNITS, formatUnit } from "@/lib/units"
 import { toPersianDigits } from "@/lib/money"
 import { cn } from "@/lib/utils"
@@ -79,25 +80,15 @@ export function ProductFields({
           </InlineField>
           <div className="px-3.5 pb-3 pt-2.5">
             <span className="text-caption font-bold text-foreground/70">واحد شمارش</span>
-            <div className="no-scrollbar -mx-3.5 mt-2 flex gap-1.5 overflow-x-auto px-3.5">
-              {PRODUCT_UNITS.map((u) => {
-                const on = unit === u
-                return (
-                  <button
-                    key={u}
-                    type="button"
-                    onClick={() => setUnit(u)}
-                    aria-pressed={on}
-                    className={cn(
-                      "h-9 shrink-0 rounded-xl px-3.5 text-label font-bold transition-colors",
-                      on ? "bg-foreground text-background" : "bg-muted text-foreground/75 hover:bg-accent"
-                    )}
-                  >
-                    {formatUnit(u)}
-                  </button>
-                )
-              })}
-            </div>
+            <Select
+              size="sm"
+              value={unit}
+              onChange={setUnit}
+              title="واحد شمارش"
+              aria-label="واحد شمارش"
+              className="mt-2 h-11 w-full max-w-none"
+              options={PRODUCT_UNITS.map((u) => ({ value: u, label: formatUnit(u) }))}
+            />
           </div>
         </Group>
       </section>
