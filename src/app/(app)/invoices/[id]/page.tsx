@@ -37,7 +37,7 @@ import { getBank } from "@/lib/banks"
 import { BankLogo } from "@/components/ui/bank-logo"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { AmountInput } from "@/components/ui/amount-input"
-import { JalaliDateField, todayKey } from "@/components/ui/jalali-date-picker"
+import { CheckDueField } from "@/components/ui/check-due-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -927,26 +927,19 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   </label>
                   <AmountInput value={checkAmount} onChange={setCheckAmount} showWords={false} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-label font-bold text-foreground/80">
-                      سریال
-                    </label>
-                    <Input
-                      value={checkSerial}
-                      onChange={(e) => setCheckSerial(e.target.value)}
-                      inputMode="numeric"
-                      dir="ltr"
-                      className="nums text-end"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-label font-bold text-foreground/80">
-                      سررسید *
-                    </label>
-                    <JalaliDateField value={checkDue} onChange={setCheckDue} />
-                  </div>
+                <div>
+                  <label className="mb-1.5 block text-label font-bold text-foreground/80">
+                    سریال
+                  </label>
+                  <Input
+                    value={checkSerial}
+                    onChange={(e) => setCheckSerial(e.target.value)}
+                    inputMode="numeric"
+                    dir="ltr"
+                    className="nums text-end"
+                  />
                 </div>
+                <CheckDueField value={checkDue} onChange={setCheckDue} />
                 <p className="rounded-xl bg-primary/5 px-3 py-2 text-caption text-muted-foreground">
                   چک تا سررسید «در جریان» می‌ماند و ربات تلگرام قبل از سررسید یادآوری می‌کند. با پاس
                   شدن، گردش بانکی ثبت می‌شود.

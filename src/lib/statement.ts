@@ -38,6 +38,8 @@ export interface StatementRow {
   credit: number
   balance: number
   kind: "opening" | "invoice" | "payment" | "settlement" | "carry"
+  /** رکورد منبع ردیف — برای باز کردن فاکتور/تسویه از دفتر داخل اپ */
+  ref?: { type: "invoice" | "settlement"; id: string }
 }
 
 export function buildStatement(input: {
@@ -73,6 +75,7 @@ export function buildStatement(input: {
       debit: sale ? inv.total : 0,
       credit: sale ? 0 : inv.total,
       kind: "invoice",
+      ref: { type: "invoice", id: inv.id },
     })
     const paidAtInvoice = Math.min(inv.total, inv.paidCash + inv.paidChecks)
     if (paidAtInvoice > 0) {
@@ -84,6 +87,7 @@ export function buildStatement(input: {
         debit: sale ? 0 : paidAtInvoice,
         credit: sale ? paidAtInvoice : 0,
         kind: "payment",
+        ref: { type: "invoice", id: inv.id },
       })
     }
   }
@@ -99,6 +103,7 @@ export function buildStatement(input: {
       debit: receive ? 0 : st.amount,
       credit: receive ? st.amount : 0,
       kind: "settlement",
+      ref: { type: "settlement", id: st.id },
     })
   }
 

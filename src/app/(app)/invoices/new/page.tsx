@@ -59,7 +59,7 @@ import {
 } from "lucide-react"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { postAttachmentForm, useAttachmentUrls } from "@/lib/attachment-client"
-import { formatToman, formatTomanCompact, toPersianDigits } from "@/lib/money"
+import { formatToman, formatTomanCompact, toLatinDigits, toPersianDigits } from "@/lib/money"
 import { jalaliDayKey } from "@/lib/jalali"
 import { relativeTime } from "@/lib/format"
 import { normalizeDigits } from "@/lib/digits"
@@ -73,6 +73,7 @@ import { Sparkline } from "@/components/charts/finance-charts"
 import { AmountInput } from "@/components/ui/amount-input"
 import { NumberInput } from "@/components/ui/number-input"
 import { JalaliDateField, todayKey } from "@/components/ui/jalali-date-picker"
+import { CheckDueField } from "@/components/ui/check-due-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { BANKS, getBank } from "@/lib/banks"
@@ -1236,6 +1237,7 @@ function NewInvoicePageInner() {
         existingChecksTotal={checkTotal}
         invoiceType={type}
         initialAmount={checkPrefill}
+        prevCheck={checks[checks.length - 1]}
       />
     </div>
   )
@@ -2213,10 +2215,13 @@ function QuickCheckSheet({
   existingChecksTotal,
   invoiceType,
   initialAmount = 0,
+  prevCheck,
 }: {
   open: boolean
   onClose: () => void
   onAdd: (c: DraftCheck) => void
+  /** آخرین چک افزوده‌شده — چک‌های اقساطی: همان بانک، سریال بعدی، سررسید ماه بعد */
+  prevCheck?: DraftCheck
   /** مبلغ نهایی فاکتور */
   invoiceTotal: number
   /** نقدی پرداخت‌شده تا الان */
@@ -2236,6 +2241,14 @@ function QuickCheckSheet({
   const [serial, setSerial] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [bankSheet, setBankSheet] = useState(false)
+  // چک بعدی از همان دسته‌چک: بانک قبلی و سریال بعدی پیشنهاد می‌شود
+  useEffect(() => {
+    if (!open || !prevCheck) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- پیش‌پر کردن با هر بار باز شدن
+    setBankKey(prevCheck.bankKey)
+    const digits = toLatinDigits(prevCheck.serial || "").trim()
+    if (/^\d{1,15}$/.test(digits)) setSerial(String(Number(digits) + 1).padStart(digits.length, "0"))
+  }, [open, prevCheck])
 
   /* ثبت چک */
   const [isRegistered, setIsRegistered] = useState(false)
@@ -2369,27 +2382,20 @@ function QuickCheckSheet({
             <span className="text-caption text-muted-foreground">تغییر</span>
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              شماره سریال
-            </label>
-            <Input
-              value={serial}
-              onChange={(e) => setSerial(e.target.value)}
-              inputMode="numeric"
-              dir="ltr"
-              placeholder="مثلاً ۸۸۴۵۱۲"
-              className="nums text-end"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-label font-bold text-foreground/80">
-              سررسید *
-            </label>
-            <JalaliDateField value={dueDate} onChange={setDueDate} />
-          </div>
+        <div>
+          <label className="mb-1.5 block text-label font-bold text-foreground/80">
+            شماره سریال
+          </label>
+          <Input
+            value={serial}
+            onChange={(e) => setSerial(e.target.value)}
+            inputMode="numeric"
+            dir="ltr"
+            placeholder="مثلاً ۸۸۴۵۱۲"
+            className="nums text-end"
+          />
         </div>
+        <CheckDueField value={dueDate} onChange={setDueDate} prevDue={prevCheck?.dueDate} />
 
         {/* ── ثبت چک ── */}
         <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">

@@ -46,7 +46,22 @@ import { SettlementSheet } from "@/components/settlements/settlement-sheet"
 import { PersonFields } from "@/components/people/person-fields"
 import { BottomSheet, SheetOption } from "@/components/ui/bottom-sheet"
 import { AmountInput } from "@/components/ui/amount-input"
-import { JalaliDateField } from "@/components/ui/jalali-date-picker"
+import { CheckDueField } from "@/components/ui/check-due-field"
+import {
+  PersonChecks,
+  PersonInvoices,
+  PersonLedger,
+  PersonOverview,
+  PersonProducts,
+  type LedgerRow,
+  type MonthPoint,
+  type PersonCheck,
+  type PersonInvoice,
+  type PersonSettlement,
+  type PersonStats,
+  type ProductRow,
+} from "@/components/people/person-sections"
+import { Segmented } from "@/components/ui/segmented"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -74,33 +89,16 @@ interface PersonDetail {
   balance: number
   /** روزهای باز ماندن مانده (حلقهٔ آواتار) */
   openDays: number | null
-  invoices: {
-    id: string
-    number: number
-    type: string
-    date: string
-    total: number
-    credit: number
-    status: string
-  }[]
-  checks: {
-    id: string
-    serial: string
-    amount: number
-    bankKey: string
-    dueDate: string
-    status: string
-    direction: string
-  }[]
-  settlements: {
-    id: string
-    direction: string
-    method: string
-    amount: number
-    date: string
-    note: string | null
-  }[]
+  invoices: PersonInvoice[]
+  checks: PersonCheck[]
+  settlements: PersonSettlement[]
+  ledger: LedgerRow[]
+  stats: PersonStats
+  monthly: MonthPoint[]
+  products: { sold: ProductRow[]; bought: ProductRow[] }
 }
+
+type ProfileTab = "overview" | "ledger" | "invoices" | "checks" | "products"
 
 interface Account {
   id: string
@@ -204,6 +202,13 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
     queryKey: ["person", id],
     queryFn: () => apiGet<PersonDetail>(`/api/people/${id}`),
   })
+
+  const [tab, setTab] = useState<ProfileTab>("overview")
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const switchTab = (t: ProfileTab) => {
+    setTab(t)
+    tabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   // شیت ویرایش
   const [editSheet, setEditSheet] = useState(false)
@@ -319,22 +324,10 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
 
   const p = data.person
   const balance = data.balance
-  // آمار کارت شخص: فروش/خرید کل، چک‌های در جریان و گردش ۶ ماه اخیر (برای مینی‌ترند)
-  const totalSales = data.invoices.filter((i) => i.type === "SALE").reduce((a, i) => a + i.total, 0)
-  const totalPurchases = data.invoices.filter((i) => i.type === "PURCHASE").reduce((a, i) => a + i.total, 0)
-  const pendingChecks = data.checks.filter((c) => c.status === "PENDING")
-  const monthlyVolume = (() => {
-    const base = jalaliOf(nowTehran())
-    const idx = (y: number, m: number) => y * 12 + (m - 1)
-    const cur = idx(base.jy, base.jm)
-    const sums = Array.from({ length: 6 }, () => 0)
-    for (const inv of data.invoices) {
-      const d = jalaliOf(new Date(inv.date))
-      const k = cur - idx(d.jy, d.jm)
-      if (k >= 0 && k < 6) sums[5 - k] += inv.total
-    }
-    return sums
-  })()
+  // آمار کارت شخص از گزارش سرور (کل تاریخچه، نه فقط فهرست صفحه) + گردش ۶ ماه اخیر برای مینی‌ترند
+  const st = data.stats
+  const monthlyVolume = data.monthly.slice(-6).map((m) => m.sales + m.purchases)
+  const pendingCount = st.checks.pendingReceived.count + st.checks.pendingIssued.count
 
   const openEdit = () => {
     setName(p.name)
@@ -598,6 +591,12 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           </div>
         )}
 
+        {p.note && (
+          <p className="mt-3 whitespace-pre-line rounded-xl bg-muted/40 px-3 py-2 text-caption leading-5 text-muted-foreground">
+            {p.note}
+          </p>
+        )}
+
         {/* تراز */}
         <div
           className={cn(
@@ -649,9 +648,9 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
         {/* آمار سریع */}
         <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
           {[
-            { label: "فروش به او", value: formatTomanCompact(totalSales), tone: "var(--sale)" },
-            { label: "خرید از او", value: formatTomanCompact(totalPurchases), tone: "var(--purchase)" },
-            { label: "چک در جریان", value: `${toPersianDigits(pendingChecks.length)} فقره`, tone: "var(--hue-checks)" },
+            { label: "فروش به او", value: formatTomanCompact(st.salesTotal), tone: "var(--sale)" },
+            { label: "خرید از او", value: formatTomanCompact(st.purchaseTotal), tone: "var(--purchase)" },
+            { label: "چک در جریان", value: `${toPersianDigits(pendingCount)} فقره`, tone: "var(--hue-checks)" },
           ].map((st) => (
             <div key={st.label} className="rounded-xl bg-muted/50 px-1 py-2">
               <div className="truncate text-caption text-muted-foreground">{st.label}</div>
@@ -716,122 +715,30 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
 
 
       <div className="min-w-0 space-y-4">
-      {/* فاکتورها */}
-      <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-1 flex items-center gap-2 text-body font-extrabold">
-          فاکتورها <span className="nums text-caption font-semibold text-muted-foreground">{toPersianDigits(data.invoices.length)}</span>
-        </div>
-        <div className="divide-y divide-border/60">
-          {data.invoices.map((inv) => (
-            <Link
-              key={inv.id}
-              href={`/invoices/${inv.id}`}
-              className="-mx-1 flex items-center gap-3 rounded-xl px-1 py-2.5 transition-colors hover:bg-accent/50"
-            >
-              <InvoiceTypeMark type={inv.type} size={38} />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-bold">
-                  {inv.type === "SALE" ? "فروش" : "خرید"} #{toPersianDigits(inv.number)}
-                </div>
-                <div className="nums text-caption text-muted-foreground">
-                  {formatJalaliShort(new Date(inv.date))}
-                </div>
-              </div>
-              <div className="shrink-0 text-end">
-                <div className="nums text-sm font-extrabold">{formatToman(inv.total, false)}</div>
-                {inv.credit > 0 && (
-                  <div className="nums text-caption font-bold text-warning-ink">
-                    مانده {formatTomanCompact(inv.credit)}
-                  </div>
-                )}
-              </div>
-            </Link>
-          ))}
-          {data.invoices.length === 0 && (
-            <p className="py-4 text-center text-xs text-muted-foreground">فاکتوری ثبت نشده</p>
-          )}
-        </div>
+      {/* تب‌های پروفایل: خلاصه و گزارش، دفتر حساب، فاکتورها، چک‌ها، کالاها */}
+      <div ref={tabsRef} className="no-scrollbar -mx-4 scroll-mt-4 overflow-x-auto px-4 lg:mx-0 lg:px-0">
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          className="min-w-max"
+          options={[
+            { key: "overview", label: "خلاصه" },
+            { key: "ledger", label: "دفتر حساب" },
+            { key: "invoices", label: "فاکتورها", count: data.invoices.length },
+            { key: "checks", label: "چک‌ها", count: pendingCount, tone: "var(--hue-checks)" },
+            { key: "products", label: "کالاها" },
+          ]}
+        />
       </div>
 
-      {/* چک‌ها — فقط وقتی دارد */}
-      {data.checks.length > 0 && (
-      <>
-      <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-1 flex items-center gap-2 text-body font-extrabold">
-          چک‌ها <span className="nums text-caption font-semibold text-muted-foreground">{toPersianDigits(data.checks.length)}</span>
-        </div>
-        <div className="divide-y divide-border/60">
-          {data.checks.map((c) => (
-            <Link
-              key={c.id}
-              href="/checks"
-              className="-mx-1 flex items-center gap-2.5 rounded-xl px-1 py-2.5 transition-colors hover:bg-accent/50"
-            >
-              <BankLogo bankKey={c.bankKey} size={34} />
-              <div className="min-w-0 flex-1">
-                <div className="nums text-xs font-bold">{formatToman(c.amount, false)}</div>
-                <div className="nums text-caption text-muted-foreground">
-                  {getBank(c.bankKey).name} • سررسید {formatJalaliShort(new Date(c.dueDate))}
-                </div>
-              </div>
-              <CheckDirectionBadge direction={c.direction} size="sm" />
-              <span
-                className={cn(
-                  "shrink-0 rounded-md px-1.5 py-px text-caption font-bold",
-                  c.status === "CASHED"
-                    ? "bg-income/10 text-income"
-                    : c.status === "PENDING"
-                      ? "bg-warning/15 text-warning-ink"
-                      : "bg-destructive/10 text-destructive"
-                )}
-              >
-                {c.status === "CASHED" ? "پاس ✓" : c.status === "PENDING" ? "در جریان" : c.status === "BOUNCED" ? "برگشت خورده" : "لغو"}
-              </span>
-            </Link>
-          ))}
-          {data.checks.length === 0 && (
-            <p className="py-4 text-center text-xs text-muted-foreground">چکی ثبت نشده</p>
-          )}
-        </div>
-      </div>
-      </>
-      )}
-
-      {/* تسویه‌ها — فقط وقتی دارد */}
-      {data.settlements.length > 0 && (
-      <>
-      <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-bold">
-          <CheckCheck className="size-4 text-primary" />
-          تاریخچه تسویه‌ها
-        </div>
-        <div className="space-y-1.5">
-          {data.settlements.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setSettlementId(s.id)}
-              className="flex w-full items-center justify-between rounded-xl bg-muted/50 px-3 py-2.5 text-start text-xs transition-colors hover:bg-muted active:bg-accent"
-            >
-              <div>
-                <span className={cn("font-bold", s.direction === "RECEIVE" ? "text-income" : "text-purchase")}>
-                  {s.direction === "RECEIVE" ? "دریافت" : "پرداخت"} {s.method === "CASH" ? "نقدی" : "چکی"}
-                </span>
-                <span className="nums ms-2 text-caption text-muted-foreground">
-                  {formatJalaliShort(new Date(s.date))}
-                </span>
-              </div>
-              <span className="nums font-extrabold">{formatToman(s.amount, false)}</span>
-            </button>
-          ))}
-          {data.settlements.length === 0 && (
-            <p className="py-4 text-center text-xs text-muted-foreground">تسویه‌ای ثبت نشده</p>
-          )}
-        </div>
-      </div>
-      </>
-      )}
-
+      {tab === "overview" && (
+        <PersonOverview
+          stats={st}
+          monthly={data.monthly}
+          invoices={data.invoices}
+          checks={data.checks}
+          onOpenTab={switchTab}
+        >
       {/* تصاویر شخص (ADV-04) */}
       <section className="rounded-3xl border border-border/70 bg-card p-4 shadow-card sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -918,6 +825,18 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
           tabIndex={-1}
         />
       </section>
+        </PersonOverview>
+      )}
+      {tab === "ledger" && (
+        <PersonLedger
+          ledger={data.ledger}
+          onOpenSettlement={setSettlementId}
+          onStatement={() => setStatementSheet(true)}
+        />
+      )}
+      {tab === "invoices" && <PersonInvoices invoices={data.invoices} />}
+      {tab === "checks" && <PersonChecks checks={data.checks} />}
+      {tab === "products" && <PersonProducts products={data.products} />}
 
       </div>
       </div>
@@ -1048,23 +967,17 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
                   <span className="text-caption text-muted-foreground">تغییر</span>
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1.5 block text-label font-bold text-foreground/80">سریال</label>
-                  <input
-                    value={checkSerial}
-                    onChange={(e) => setCheckSerial(e.target.value)}
-                    dir="ltr"
-                    className="field nums text-end"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-label font-bold text-foreground/80">
-                    سررسید *
-                  </label>
-                  <JalaliDateField value={checkDue} onChange={setCheckDue} />
-                </div>
+              <div>
+                <label className="mb-1.5 block text-label font-bold text-foreground/80">سریال</label>
+                <input
+                  value={checkSerial}
+                  onChange={(e) => setCheckSerial(e.target.value)}
+                  inputMode="numeric"
+                  dir="ltr"
+                  className="field nums text-end"
+                />
               </div>
+              <CheckDueField value={checkDue} onChange={setCheckDue} />
 
               {/* ثبت چک */}
               <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
