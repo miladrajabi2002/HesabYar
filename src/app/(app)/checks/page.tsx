@@ -7,6 +7,7 @@
  * + ثبت چک به نام (نسخهٔ ۳): چک ثبت‌نشده پاس/برگشت/لغو نمی‌شود
  *   دریافتی → به نام ما • صادره → به نام مشتری (نام + کد ملی)
  */
+import { ListSkeleton } from "@/components/ui/page-skeletons"
 import { Suspense, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -518,9 +519,7 @@ function ChecksPageInner() {
 
       {/* لیست */}
       {isLoading ? (
-        <div className="flex min-h-[30vh] items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
+        <ListSkeleton rows={5} groups={2} />
       ) : checks.length === 0 ? (
         <EmptyState
           icon={CheckSquare2}

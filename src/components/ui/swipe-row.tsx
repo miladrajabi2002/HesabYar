@@ -49,10 +49,23 @@ const COMMIT = { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const }
 /** مکث کوتاه روی رنگ پرشده پیش از برگشت، تا اجرا شدن دیده شود */
 const COMMIT_HOLD = 180
 const HINT_PEEK = 56
-/** سینی تا این اندازه زیر ردیف ادامه دارد تا گوشه‌های گرد ردیف هیچ‌وقت شکاف نشان ندهند */
-const RAIL_TUCK = 28
 /** ردیف حذف‌شده‌ای که بعد از این مدت هنوز در فهرست است برمی‌گردد تا جای خالی نماند */
 const REMOVE_FALLBACK = 5000
+/** پنجرهٔ نمونه‌های آخر حرکت برای سرعت رها کردن؛ یک نمونهٔ تنها پر از نویز است */
+const VELOCITY_WINDOW = 100
+/** انگشت این‌قدر پیش از برداشتن ثابت مانده بود؟ پس پرتاب نیست */
+const VELOCITY_STALE = 80
+const MAX_VELOCITY = 4000
+
+/**
+ * مقاومت کشسانی (به سبک iOS): هرچه بیشتر از حد بکشی سفت‌تر می‌شود ولی هیچ‌وقت یک‌باره نمی‌ایستد.
+ * `stiffness` شیب اولیه است و `limit` بیشترین جابه‌جایی اضافه.
+ */
+function rubber(over: number, limit: number, stiffness = 0.55) {
+  return (1 - 1 / ((over * stiffness) / limit + 1)) * limit
+}
+
+type Side = "leading" | "trailing"
 
 const TONE: Record<NonNullable<SwipeAction["tone"]>, string> = {
   danger: "bg-destructive text-destructive-foreground",
@@ -131,7 +144,14 @@ export function SwipeRow({
   const x = useMotionValue(0)
   const [rtl, setRtl] = useState(false)
   const [openSide, setOpenSide] = useState<"leading" | "trailing" | null>(null)
-  const [armed, setArmed] = useState<"leading" | "trailing" | null>(null)
+  const [armed, setArmedState] = useState<Side | null>(null)
+  // touchmove در هر فریم صدایش می‌زند؛ فقط وقتی واقعاً عوض شد React رندر کند
+  const armedRef = useRef<Side | null>(null)
+  const setArmed = (value: Side | null) => {
+    if (armedRef.current === value) return
+    armedRef.current = value
+    setArmedState(value)
+  }
   const [busy, setBusy] = useState(false)
   /** سمتی که اکشنش همین الان اجرا شد، تا آیکونش هنگام برگشت ردیف تپش بزند */
   const [confirmed, setConfirmed] = useState<"leading" | "trailing" | null>(null)
@@ -154,9 +174,9 @@ export function SwipeRow({
   // شناسهٔ ثابت برای ثبت ردیف باز، که بستن و جاانداختن ردیف را هم خودش دارد.
   const [handle] = useState(() => {
     const row = {
-      settle(target: number, side: "leading" | "trailing" | null) {
+      settle(target: number, side: Side | null, velocity = 0) {
         setOpenSide(side)
-        animate(x, target, stateRef.current.reduceMotion ? { duration: 0 } : SNAP)
+        animate(x, target, stateRef.current.reduceMotion ? { duration: 0 } : { ...SNAP, velocity })
         if (side) {
           // حرکت را خودشان پیدا کردند؛ اشاره دیگر لازم نیست.
           markLearned()
@@ -166,9 +186,9 @@ export function SwipeRow({
           openRow = null
         }
       },
-      close() {
+      close(velocity = 0) {
         setArmed(null)
-        row.settle(0, null)
+        row.settle(0, null, velocity)
       },
     }
     return row
@@ -280,14 +300,23 @@ export function SwipeRow({
     const root = rootRef.current
     if (!enabled || !root) return
 
-    let start: { x: number; y: number; offset: number; t: number } | null = null
+    let start: { x: number; y: number; offset: number; width: number } | null = null
     let mode: "pending" | "horizontal" | "vertical" = "pending"
-    let lastX = 0
-    let lastT = 0
-    let velocity = 0
+    /** چند نمونهٔ آخر حرکت، برای سرعتی که با یک رویداد پرت به‌هم نریزد */
+    let samples: { x: number; t: number }[] = []
     let suppressClick = false
 
-    const railWidth = (side: "leading" | "trailing") => actionsFor(side).length * ACTION_WIDTH
+    const railWidth = (side: Side) => actionsFor(side).length * ACTION_WIDTH
+
+    const releaseVelocity = () => {
+      const now = performance.now()
+      const last = samples[samples.length - 1]
+      if (!last || now - last.t > VELOCITY_STALE) return 0
+      const first = samples.find((s) => last.t - s.t <= VELOCITY_WINDOW) ?? last
+      if (first === last) return 0
+      const v = ((last.x - first.x) / Math.max(1, last.t - first.t)) * 1000
+      return Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, v))
+    }
 
     const onTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1 || stateRef.current.busy) return
@@ -295,11 +324,10 @@ export function SwipeRow({
       if (touch.clientX < EDGE_GUARD || touch.clientX > window.innerWidth - EDGE_GUARD) return
       // ردیف را وسط حرکت (فنر یا اشاره) بگیر، نه اینکه با آن بجنگی.
       x.stop()
-      start = { x: touch.clientX, y: touch.clientY, offset: x.get(), t: performance.now() }
+      // عرض یک بار خوانده می‌شود؛ خواندنش در هر touchmove می‌توانست layout را وسط حرکت به‌زور حساب کند
+      start = { x: touch.clientX, y: touch.clientY, offset: x.get(), width: root.offsetWidth }
       mode = "pending"
-      lastX = touch.clientX
-      lastT = start.t
-      velocity = 0
+      samples = [{ x: touch.clientX, t: performance.now() }]
     }
 
     const onTouchMove = (event: TouchEvent) => {
@@ -321,40 +349,42 @@ export function SwipeRow({
       if (mode !== "horizontal") return
 
       const now = performance.now()
-      velocity = ((touch.clientX - lastX) / Math.max(1, now - lastT)) * 1000
-      lastX = touch.clientX
-      lastT = now
+      samples.push({ x: touch.clientX, t: now })
+      if (samples.length > 8) samples.shift()
 
       let next = start.offset + dx
       const side = sideForX(next)
-      const width = root.offsetWidth
+      const { width } = start
       if (!side || actionsFor(side).length === 0) {
-        next = Math.sign(next) * Math.min(16, Math.abs(next) * 0.15)
-      } else if (Math.abs(next) > width * 0.92) {
-        next = Math.sign(next) * width * 0.92
+        // سمتی که اکشن ندارد: کمی کش می‌آید و نرم مقاومت می‌کند، نه اینکه در ۱۶px قفل شود
+        next = Math.sign(next) * rubber(Math.abs(next), 20, 0.15)
+      } else {
+        const limit = width * 0.92
+        if (Math.abs(next) > limit) next = Math.sign(next) * (limit + rubber(Math.abs(next) - limit, width * 0.08))
       }
       x.set(next)
 
       const nextArmed = side && actionsFor(side).length > 0 && Math.abs(next) > width * FULL_SWIPE ? side : null
-      setArmed((current) => {
-        if (current !== nextArmed && nextArmed) tick()
-        return nextArmed
-      })
+      if (nextArmed !== armedRef.current) {
+        if (nextArmed) tick()
+        setArmed(nextArmed)
+      }
     }
 
     const onTouchEnd = () => {
       if (!start) return
       const wasHorizontal = mode === "horizontal"
+      const { width } = start
       start = null
       if (!wasHorizontal) return
       suppressClick = true
       window.setTimeout(() => { suppressClick = false }, 400)
 
+      const velocity = releaseVelocity()
       const offset = x.get()
       const side = sideForX(offset)
-      const width = root.offsetWidth
       if (!side || actionsFor(side).length === 0) {
-        handle.close()
+        handle.close(velocity)
         return
       }
       const first = actionsFor(side)[0]
@@ -366,9 +396,9 @@ export function SwipeRow({
       const towardOpen = Math.sign(velocity) === Math.sign(offset)
       if (Math.abs(offset) > rail / 2 || (towardOpen && Math.abs(velocity) > OPEN_VELOCITY)) {
         setArmed(null)
-        settle(signFor(side) * rail, side)
+        settle(signFor(side) * rail, side, velocity)
       } else {
-        handle.close()
+        handle.close(velocity)
       }
     }
 
@@ -484,8 +514,10 @@ export function SwipeRow({
           />
         )
       })}
-      {/* لایهٔ ردیف باید مات باشد: پس‌زمینهٔ نیمه‌شفاف ردیف (حالت لمس، کارت تازه) وگرنه رنگ سینی زیرش را نشان می‌دهد. */}
-      <motion.div style={{ x }} className="relative z-10 touch-pan-y bg-card">
+      {/* لایهٔ ردیف باید مات باشد: پس‌زمینهٔ نیمه‌شفاف ردیف (حالت لمس، کارت تازه) وگرنه رنگ سینی زیرش را نشان می‌دهد.
+          گردی را از ریشه ارث می‌برد: کارت گرد (یادداشت) وگرنه روی یک مستطیل سفید می‌نشست و گوشه‌های سفید بین
+          کارت و دکمهٔ اکشن دیده می‌شد؛ حالا رنگ سینی پشت گوشه‌ها می‌آید و دکمه به لبهٔ گرد کارت می‌چسبد. */}
+      <motion.div style={{ x }} className="relative z-10 touch-pan-y rounded-[inherit] bg-card">
         {children}
       </motion.div>
     </div>
@@ -502,7 +534,7 @@ function Rail({
   confirmed,
   onRun,
 }: {
-  side: "leading" | "trailing"
+  side: Side
   actions: SwipeAction[]
   x: MotionValue<number>
   rtl: boolean
@@ -515,65 +547,117 @@ function Rail({
   // فقط وقتی ردیف به سمت این سینی می‌رود دیده می‌شود.
   const onLeft = (side === "trailing") === rtl
   const opacity = useTransform(x, (value) => ((onLeft ? value > 0 : value < 0) ? 1 : 0))
-  const width = useTransform(x, (value) => Math.max(actions.length * ACTION_WIDTH, Math.abs(value)) + RAIL_TUCK)
+  // ۰ → ۱ وقتی کشیدن مسلح شد و دکمهٔ اول همهٔ سینی را می‌گیرد
+  const fill = useMotionValue(armed ? 1 : 0)
+  useEffect(() => {
+    const controls = animate(fill, armed ? 1 : 0, reduceMotion ? { duration: 0 } : SNAP)
+    return () => controls.stop()
+  }, [armed, fill, reduceMotion])
   const first = actions[0]
-  // نوار زیر ردیف به اکشنِ نزدیک‌تر به ردیف می‌چسبد.
+  // رنگ زمینه زیر گوشه‌های گرد ردیف: اکشنِ نزدیک‌تر به ردیف
   const edge = armed ? first : actions[actions.length - 1]
 
-  // چیدمان فیزیکی (dir="ltr") تا اکشن اول همیشه کنار لبهٔ صفحه باشد. بعد از عرض خود سینی، دکمه‌ها با
-  // کشیدن پهن می‌شوند تا پشت ردیف شکافی باز نشود؛ در حالت مسلح دکمهٔ اول همه را می‌گیرد. سینی به اندازهٔ
-  // RAIL_TUCK زیر ردیف ادامه دارد (با رنگ اکشن لبه) تا گوشه‌های گرد ردیف روی رنگ بنشینند نه صفحه.
+  // سینی تمام‌عرض است و فقط opacity دارد؛ دکمه‌ها با transform از لبهٔ صفحه بیرون می‌آیند (پایین‌تر).
+  // پیش‌تر عرض سینی و flex دکمه‌ها در هر فریم عوض می‌شد که یعنی layout و paint در هر فریم کشیدن.
   return (
     <motion.div
       aria-hidden={!open}
       dir="ltr"
-      style={{ opacity, width, [onLeft ? "paddingRight" : "paddingLeft"]: RAIL_TUCK }}
-      className={cn(
-        "absolute inset-y-0 flex",
-        onLeft ? "left-0 flex-row" : "right-0 flex-row-reverse",
-        edge && TONE[edge.tone ?? "neutral"],
-      )}
+      style={{ opacity }}
+      className={cn("absolute inset-0 overflow-hidden", edge && TONE[edge.tone ?? "neutral"])}
     >
-      {actions.map((action, index) => {
-        const Icon = action.icon
-        const flex = armed ? (index === 0 ? "1 1 0px" : "0 0 0px") : `1 1 ${ACTION_WIDTH}px`
-        return (
-          <button
-            key={action.key}
-            type="button"
-            data-swipe-action=""
-            tabIndex={open ? 0 : -1}
-            onClick={(event) => {
-              event.stopPropagation()
-              onRun(action)
-            }}
-            className={cn(
-              "flex h-full min-w-0 overflow-hidden transition-[flex] duration-200 ease-out",
-              // برچسب هنگام پهن شدن دکمه کنار لبهٔ ردیف می‌ماند.
-              onLeft ? "justify-end" : "justify-start",
-              TONE[action.tone ?? "neutral"],
-            )}
-            style={{ flex }}
-          >
-            <span
-              dir="auto"
-              className="flex h-full shrink-0 flex-col items-center justify-center gap-1 px-2 text-caption font-bold"
-              style={{ width: ACTION_WIDTH }}
-            >
-              {/* وقتی رها کردن اجرایش می‌کند کمی بزرگ می‌شود؛ بعد از اجرا تپش می‌زند. */}
-              <motion.span
-                className="flex"
-                animate={{ scale: index > 0 || reduceMotion ? 1 : confirmed ? [1, 1.32, 1] : armed ? 1.18 : 1 }}
-                transition={confirmed ? { duration: 0.36, times: [0, 0.4, 1], ease: [0.32, 0.72, 0, 1] } : SNAP}
-              >
-                <Icon className="size-5" aria-hidden="true" />
-              </motion.span>
-              <span className="max-w-full truncate">{action.label}</span>
-            </span>
-          </button>
-        )
-      })}
+      {actions.map((action, index) => (
+        <RailButton
+          key={action.key}
+          action={action}
+          index={index}
+          count={actions.length}
+          x={x}
+          fill={fill}
+          onLeft={onLeft}
+          open={open}
+          armed={armed}
+          confirmed={confirmed}
+          reduceMotion={!!reduceMotion}
+          onRun={onRun}
+        />
+      ))}
       {armed && first && <span className="sr-only">{first.label}</span>}
     </motion.div>
+  )
+}
+
+/**
+ * هر دکمه یک لایهٔ پهن است که بیرون از لبهٔ صفحه نشسته و با translateX تا «لبهٔ دور» خودش جلو می‌آید.
+ * دکمهٔ اول بالاتر از بقیه است؛ پس هر دکمه فقط از لبهٔ دکمهٔ قبلی تا لبهٔ خودش دیده می‌شود. با کشیدن
+ * بیشتر از عرض سینی سهم همه به یک اندازه بزرگ می‌شود و در حالت مسلح دکمهٔ اول تا ردیف جلو می‌آید و
+ * بقیه را می‌پوشاند. همه‌اش transform است و روی compositor می‌ماند.
+ */
+function RailButton({
+  action,
+  index,
+  count,
+  x,
+  fill,
+  onLeft,
+  open,
+  armed,
+  confirmed,
+  reduceMotion,
+  onRun,
+}: {
+  action: SwipeAction
+  index: number
+  count: number
+  x: MotionValue<number>
+  fill: MotionValue<number>
+  onLeft: boolean
+  open: boolean
+  armed: boolean
+  confirmed: boolean
+  reduceMotion: boolean
+  onRun: (action: SwipeAction) => void
+}) {
+  const offset = useTransform([x, fill], ([value, progress]: number[]) => {
+    const reach = Math.max(count * ACTION_WIDTH, Math.abs(value))
+    const slot = reach / count
+    const far = index === 0 ? slot + (reach - slot) * progress : slot * (index + 1)
+    return onLeft ? far : -far
+  })
+  const Icon = action.icon
+  return (
+    <motion.button
+      type="button"
+      data-swipe-action=""
+      tabIndex={open ? 0 : -1}
+      onClick={(event) => {
+        event.stopPropagation()
+        onRun(action)
+      }}
+      style={{ x: offset, zIndex: count - index }}
+      className={cn(
+        // ۱۵۰٪: کشش کشسانی ممکن است ردیف را کمی بیش از عرض ببرد؛ لبهٔ صفحه نباید بی‌رنگ بماند
+        "absolute inset-y-0 flex w-[150%]",
+        // برچسب کنار لبهٔ ردیف می‌ماند.
+        onLeft ? "right-full justify-end" : "left-full justify-start",
+        TONE[action.tone ?? "neutral"],
+      )}
+    >
+      <span
+        dir="auto"
+        className="flex h-full shrink-0 flex-col items-center justify-center gap-1 px-2 text-caption font-bold"
+        style={{ width: ACTION_WIDTH }}
+      >
+        {/* وقتی رها کردن اجرایش می‌کند کمی بزرگ می‌شود؛ بعد از اجرا تپش می‌زند. */}
+        <motion.span
+          className="flex"
+          animate={{ scale: index > 0 || reduceMotion ? 1 : confirmed ? [1, 1.32, 1] : armed ? 1.18 : 1 }}
+          transition={confirmed ? { duration: 0.36, times: [0, 0.4, 1], ease: [0.32, 0.72, 0, 1] } : SNAP}
+        >
+          <Icon className="size-5" aria-hidden="true" />
+        </motion.span>
+        <span className="max-w-full truncate">{action.label}</span>
+      </span>
+    </motion.button>
   )
 }

@@ -124,7 +124,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const todoCount = alerts?.unreadCount ?? 0
   const hasAlerts = (alerts?.totalCount ?? 0) > 0
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href))
+  // تب لمس‌شده همان لحظه فعال دیده می‌شود؛ pathname تا بار شدن صفحهٔ تازه عوض نمی‌شود و نشانگر دیر می‌پرید
+  const [navPending, setNavPending] = useState<{ href: string; from: string } | null>(null)
+  const navPath = navPending && navPending.from === pathname ? navPending.href : pathname
+  const onNavigate = (href: string) => setNavPending({ href, from: pathname })
+  const isActive = (href: string) => (href === "/" ? navPath === "/" : navPath.startsWith(href))
   const isFormRoute = FORM_ROUTES.some((r) => pathname.startsWith(r))
   // صفحات فرم و جزئیات سربرگ اختصاصی خودشان را دارند (بازگشت + عنوان + اقدام‌ها) — هدر عمومی موبایل پنهان است
   const ownHeader = isFormRoute || /^\/invoices\/(?!new)[^/]+/.test(pathname) || /^\/people\/[^/]+/.test(pathname)
@@ -132,6 +136,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const moreActive = MORE_ITEMS.some((m) => isActive(m.href)) || moreSheetOpen
   // وقتی شیت «بیشتر» باز است خط فعال روی «بیشتر» می‌رود (دو خط هم‌زمان نداریم)
   const tabActive = (href: string) => !moreSheetOpen && isActive(href)
+  /** ستون نشانگر نوار پایین: ۰ خانه، ۱ فاکتورها، ۲ دکمهٔ وسط، ۳ تقویم، ۴ بیشتر */
+  const navIndex = moreActive ? 4 : tabActive("/") ? 0 : tabActive("/invoices") ? 1 : tabActive("/calendar") ? 3 : -1
   const [fabBurst, setFabBurst] = useState(0)
 
   // شیت «بیشتر»: صفحهٔ پشت کمی عقب می‌رود؛ مبدأ کوچک شدن وسطِ همان بخشی از صفحه است که دیده می‌شود
@@ -161,6 +167,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const go = (href: string) => {
     haptic.tap()
+    onNavigate(href)
     router.push(href)
   }
 
@@ -183,6 +190,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={item.href}
                 item={item}
                 active={isActive(item.href)}
+                onNavigate={onNavigate}
                 count={item.href === "/checks" ? dueCount : 0}
               />
             ))}
@@ -293,9 +301,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         transition={{ type: "spring", stiffness: 420, damping: 38 }}
         className="hy-nav fixed inset-x-0 bottom-0 z-40 [padding-bottom:max(0.5rem,calc(env(safe-area-inset-bottom)+var(--tg-safe-bottom,0px)))] lg:hidden"
       >
-        <div className="mx-auto grid h-[3.75rem] max-w-md grid-cols-5 px-1">
-          <BottomNavItem href="/" label="خانه" active={tabActive("/")} />
-          <BottomNavItem href="/invoices" label="فاکتورها" active={tabActive("/invoices")} />
+        <div className="relative mx-auto grid h-[3.75rem] max-w-md grid-cols-5 px-1">
+          <NavIndicator index={navIndex} />
+          <BottomNavItem href="/" label="خانه" active={tabActive("/")} onNavigate={onNavigate} />
+          <BottomNavItem href="/invoices" label="فاکتورها" active={tabActive("/invoices")} onNavigate={onNavigate} />
 
           {/* دکمهٔ + مرکزی — برجسته و کمی بالاتر از نوار، با حلقهٔ چرخان دائمی (globals.css → .hy-fab) */}
           <div className="relative flex h-full items-center justify-center">
@@ -317,7 +326,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </motion.button>
           </div>
 
-          <BottomNavItem href="/calendar" label="تقویم" active={tabActive("/calendar")} />
+          <BottomNavItem href="/calendar" label="تقویم" active={tabActive("/calendar")} onNavigate={onNavigate} />
           <NavButton
             label="بیشتر"
             active={moreActive}
@@ -513,11 +522,14 @@ function HeaderButton({
   )
 }
 
-function SidebarItem({ item, active, count }: { item: NavItem; active: boolean; count: number }) {
+function SidebarItem({ item, active, count, onNavigate }: { item: NavItem; active: boolean; count: number; onNavigate: (href: string) => void }) {
   const { icon: Icon } = SECTION_META[item.href]
   return (
     <Link
       href={item.href}
+      onClick={(e) => {
+        if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) onNavigate(item.href)
+      }}
       className={cn(
         "group relative flex h-10 items-center gap-2.5 rounded-xl px-3 text-sm transition-colors",
         active ? "font-extrabold text-secondary-foreground" : "font-medium text-foreground/75 hover:bg-sidebar-accent hover:text-foreground"
@@ -559,15 +571,23 @@ function FabBurst({ burst }: { burst: number }) {
   )
 }
 
-/** نشانگر فعال نوار پایین — خط رنگ اصلی روی لبهٔ بالای تب که بین آیتم‌ها لیز می‌خورد */
-function NavIndicator() {
+/**
+ * نشانگر فعال نوار پایین — خط رنگ اصلی روی لبهٔ بالای تب که بین ستون‌ها لیز می‌خورد.
+ * یک عنصر برای کل نوار با transform CSS (نه layoutId framer): انیمیشن layout روی رشتهٔ اصلی بود و
+ * درست هم‌زمان با mount صفحهٔ تازه اجرا می‌شد، پس همان لحظه گیر می‌کرد. ستون‌ها هم‌عرض‌اند (grid-cols-5).
+ */
+function NavIndicator({ index }: { index: number }) {
   return (
-    <span aria-hidden className="pointer-events-none absolute inset-x-0 -top-px flex justify-center">
-      <motion.span
-        layoutId="bottom-nav-line"
-        className="block h-[3px] w-7 rounded-b-full bg-primary"
-        transition={{ type: "spring", stiffness: 520, damping: 40 }}
-      />
+    <span aria-hidden className="pointer-events-none absolute inset-x-1 -top-px h-[3px]">
+      <span
+        style={{ ["--i" as string]: Math.max(0, index) }}
+        className={cn(
+          "block h-full w-1/5 translate-x-[calc(var(--i)*100%)] transition-[translate,opacity] duration-[380ms] ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform motion-reduce:transition-none rtl:-translate-x-[calc(var(--i)*100%)]",
+          index < 0 && "opacity-0"
+        )}
+      >
+        <span className="mx-auto block h-full w-7 rounded-b-full bg-primary" />
+      </span>
     </span>
   )
 }
@@ -575,7 +595,6 @@ function NavIndicator() {
 function NavContent({ active, icon, label }: { active: boolean; icon: ReactNode; label: string }) {
   return (
     <>
-      {active && <NavIndicator />}
       <span className="relative grid h-7 w-12 place-items-center">
         <span className={cn("relative z-10 transition-colors duration-200", active ? "text-primary" : "text-muted-foreground")}>
           {icon}
@@ -593,13 +612,16 @@ function NavContent({ active, icon, label }: { active: boolean; icon: ReactNode;
   )
 }
 
-function BottomNavItem({ href, label, active }: { href: SectionHref; label: string; active: boolean }) {
+function BottomNavItem({ href, label, active, onNavigate }: { href: SectionHref; label: string; active: boolean; onNavigate: (href: string) => void }) {
   const { icon: Icon } = SECTION_META[href]
   const { haptic } = useTelegram()
   return (
     <Link
       href={href}
-      onClick={() => haptic.tap()}
+      onClick={() => {
+        haptic.tap()
+        onNavigate(href)
+      }}
       aria-current={active ? "page" : undefined}
       className="group relative flex h-full flex-col items-center justify-center gap-1 active:scale-95"
     >

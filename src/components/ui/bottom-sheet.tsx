@@ -32,17 +32,24 @@ function subscribeDesktop(cb: () => void) {
 const getDesktop = () => window.matchMedia(DESKTOP_QUERY).matches
 
 /**
+ * منحنی باتم‌شیت iOS (همان vaul): شروع تند و نشستن بلند و نرم. cubic-bezier عمداً به‌جای فنر:
+ * فنر framer روی WAAPI فقط با `linear()` روی compositor می‌ماند و جایی که مرورگر آن را ندارد (iOS
+ * قدیمی‌تر) به حلقهٔ JS روی رشتهٔ اصلی برمی‌گشت؛ یعنی دقیقاً وقتی محتوای شیت mount می‌شد فریم‌های
+ * اول می‌افتاد. cubic-bezier همه‌جا بومی است.
+ */
+const SHEET_EASE = [0.32, 0.72, 0, 1] as const
+const SHEET_IN = 0.5
+const SHEET_OUT = 0.3
+
+/**
  * ورود/خروج باتم‌شیت با رشتهٔ transform (نه y) روی یک قاب جدا: framer مقدار transform را با WAAPI
- * روی compositor اجرا می‌کند، پس وقتی محتوای شیت همان لحظه mount می‌شود و رشتهٔ اصلی شلوغ است،
- * فریم‌های اول فنر نمی‌افتند (حس «گیر کردن» موقع باز شدن). درگ دستگیره روی خود پنل (y) می‌ماند.
+ * روی compositor اجرا می‌کند، پس وقتی محتوای شیت همان لحظه mount می‌شود و رشتهٔ اصلی شلوغ است
+ * انیمیشن ادامه می‌دهد. درگ دستگیره روی خود پنل (y) می‌ماند.
  */
 const sheetVariants = {
-  hidden: { transform: "translateY(100%)" },
-  visible: {
-    transform: "translateY(0%)",
-    transition: { type: "spring" as const, stiffness: 420, damping: 38, mass: 0.85 },
-  },
-  exit: { transform: "translateY(100%)", transition: { duration: 0.2, ease: [0.4, 0, 1, 1] as const } },
+  hidden: { transform: "translate3d(0, 100%, 0)" },
+  visible: { transform: "translate3d(0, 0%, 0)", transition: { duration: SHEET_IN, ease: SHEET_EASE } },
+  exit: { transform: "translate3d(0, 100%, 0)", transition: { duration: SHEET_OUT, ease: SHEET_EASE } },
 }
 
 /** قاب لغزندهٔ باتم‌شیت موبایل؛ در دسکتاپ/کاهش حرکت فقط خود پنل رندر می‌شود */
@@ -50,7 +57,8 @@ function SlideFrame({ slide, full, children }: { slide: boolean; full: boolean; 
   if (!slide) return <>{children}</>
   return (
     <motion.div
-      className={cn("absolute inset-x-0 bottom-0", full && "top-0")}
+      // لایهٔ جدا از همان اول: شروع انیمیشن منتظر ساختن لایه نمی‌ماند
+      className={cn("absolute inset-x-0 bottom-0 will-change-transform", full && "top-0")}
       variants={sheetVariants}
       initial="hidden"
       animate="visible"
@@ -61,23 +69,24 @@ function SlideFrame({ slide, full, children }: { slide: boolean; full: boolean; 
   )
 }
 
+// دیالوگ و کشوی دسکتاپ هم با رشتهٔ transform (نه x/y/scale) تا روی compositor بمانند
 const dialogVariants = {
-  hidden: { opacity: 0, scale: 0.97, y: 10 },
-  visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] as const } },
-  exit: { opacity: 0, scale: 0.985, y: 6, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] as const } },
+  hidden: { opacity: 0, transform: "translate3d(0, 10px, 0) scale(0.97)" },
+  visible: { opacity: 1, transform: "translate3d(0, 0px, 0) scale(1)", transition: { duration: 0.24, ease: [0.16, 1, 0.3, 1] as const } },
+  exit: { opacity: 0, transform: "translate3d(0, 6px, 0) scale(0.985)", transition: { duration: 0.15, ease: [0.4, 0, 1, 1] as const } },
 }
 
 const drawerVariants = (rtl: boolean) => ({
-  hidden: { x: rtl ? "-104%" : "104%", opacity: 0.6 },
+  hidden: { transform: `translate3d(${rtl ? "-104%" : "104%"}, 0, 0)`, opacity: 0.6 },
   visible: {
-    x: 0,
+    transform: "translate3d(0%, 0, 0)",
     opacity: 1,
-    transition: { duration: 0.34, ease: [0.16, 1, 0.3, 1] as const },
+    transition: { duration: 0.42, ease: SHEET_EASE },
   },
   exit: {
-    x: rtl ? "-104%" : "104%",
+    transform: `translate3d(${rtl ? "-104%" : "104%"}, 0, 0)`,
     opacity: 0.6,
-    transition: { duration: 0.22, ease: [0.4, 0, 1, 1] as const },
+    transition: { duration: 0.24, ease: SHEET_EASE },
   },
 })
 
@@ -152,6 +161,8 @@ export function BottomSheet({
         document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')
       )
       if (modals.at(-1) !== panelRef.current) return
+      // فهرست شناور Select (دسکتاپ) روی شیت باز است — Esc فقط همان را می‌بندد
+      if (document.querySelector('[data-slot="select-popup"]')) return
       if (event.key === "Escape") {
         event.preventDefault()
         onCloseRef.current()
@@ -213,8 +224,9 @@ export function BottomSheet({
             onClick={() => onCloseRef.current()}
             // تیرگی نرم ظاهر/محو می‌شود (قبلاً یک‌باره می‌پرید و فقط پنل حرکت داشت)
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { duration: reduceMotion ? 0 : 0.2, ease: "easeOut" } }}
-            exit={{ opacity: 0, transition: { duration: reduceMotion ? 0 : 0.18, ease: "easeIn" } }}
+            // هم‌گام با پنل: تیرگی با همان منحنی و تقریباً همان مدت می‌آید و می‌رود
+            animate={{ opacity: 1, transition: { duration: reduceMotion ? 0 : SHEET_IN * 0.8, ease: SHEET_EASE } }}
+            exit={{ opacity: 0, transition: { duration: reduceMotion ? 0 : SHEET_OUT, ease: SHEET_EASE } }}
             // بدون backdrop-filter: در وب‌اپ iOS بلور هنگام محو شدن با opacity والد هماهنگ نمی‌شد
             // و تکه‌ای تار روی هدر می‌ماند — فقط تیرگی ساده
             className={cn("absolute inset-0 cursor-default", asDrawer ? "bg-[rgb(15_26_23/0.34)]" : "bg-[rgb(15_26_23/0.45)]")}
@@ -235,6 +247,8 @@ export function BottomSheet({
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.6 }}
             dragMomentum={false}
+            // برگشت بعد از کشیدن کوتاه: فنر سفت و بدون لرزش
+            dragTransition={{ bounceStiffness: 600, bounceDamping: 46 }}
             onDragEnd={onDragEnd}
             variants={asDrawer ? drawerVariants(rtl) : asDialog ? dialogVariants : undefined}
             initial={asDialog || asDrawer ? "hidden" : slide ? undefined : { opacity: 0 }}
@@ -259,13 +273,18 @@ export function BottomSheet({
           >
             {/* دستگیره + هدر — دستگیره واقعاً قابل کشیدن است (MO-04) */}
             {!hideHeader && (
-              <div className={cn("relative shrink-0 bg-card px-5 pb-2 pt-1.5", (asDialog || asDrawer) && "pt-5")}>
+              <div
+                // کل سربرگ (نه فقط دستگیرهٔ باریک) شیت را می‌کشد؛ دکمه‌ها لمس عادی خودشان را دارند
+                onPointerDown={(e) => {
+                  if (asDialog || asDrawer || reduceMotion) return
+                  if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return
+                  dragControls.start(e)
+                }}
+                className={cn("relative shrink-0 bg-card px-5 pb-2 pt-1.5", (asDialog || asDrawer) ? "pt-5" : "touch-none")}
+              >
                 {/* نسخهٔ ۷: دستگیرهٔ دیدنی، عنوان بزرگ‌تر، دکمهٔ بستن گرد و کم‌رنگ، بدون خط زیر سربرگ */}
                 <span
                   aria-hidden
-                  onPointerDown={(e) => {
-                    if (!asDialog && !asDrawer && !reduceMotion) dragControls.start(e)
-                  }}
                   className={cn(
                     "mx-auto mb-1.5 grid h-5 w-16 cursor-grab touch-none place-items-center active:cursor-grabbing",
                     (asDialog || asDrawer) && "hidden"

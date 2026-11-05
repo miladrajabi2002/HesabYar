@@ -5,6 +5,7 @@
  * کلیک روی هر کالا: شیت جزئیات (آمار خرید/فروش + گردش اخیر)
  * + عکس کالا (ADV-05): اختیاری؛ در فرم کالا اضافه می‌شود، بندانگشتی در لیست و گالری جزئیات
  */
+import { ListSkeleton } from "@/components/ui/page-skeletons"
 import { Suspense, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -399,9 +400,7 @@ function ProductDetailsSheet({
       }
     >
       {isLoading || !s ? (
-        <div className="flex min-h-[30vh] items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
+        <ListSkeleton rows={6} />
       ) : (
         <div className="space-y-4">
           {/* گالری عکس کالا (ADV-05) — اختیاری؛ کلیک = پیش‌نمایش */}
@@ -761,9 +760,7 @@ function ProductsPageInner() {
 
       {/* لیست */}
       {isLoading ? (
-        <div className="flex min-h-[30vh] items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
+        <ListSkeleton rows={6} />
       ) : products.length === 0 ? (
         <EmptyState
           icon={q || stockFilter !== "all" ? Search : Package}

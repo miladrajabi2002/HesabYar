@@ -4,6 +4,7 @@
  * تنظیمات — ربات تلگرام، ورود بیومتریک (Passkey)، اعلان‌های Push،
  * هشدار سررسید چک، بکاپ/بازیابی (با رمز اختیاری SEC-08)، پاک‌سازی داده
  */
+import { SettingsSkeleton } from "@/components/ui/page-skeletons"
 import { useEffect, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -114,6 +115,7 @@ export default function SettingsPage() {
   const [pwOpen, setPwOpen] = useState(false)
   const { isStandalone } = usePWA()
   const [autoBusy, setAutoBusy] = useState<string | null>(null)
+  const pendingSaves = useRef(0)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [wiping, setWiping] = useState(false)
@@ -456,19 +458,29 @@ export default function SettingsPage() {
     }
   }
 
-  /** ذخیرهٔ فوری یک تنظیم (کلید، سوییچ، انتخاب) */
+  /**
+   * ذخیرهٔ فوری یک تنظیم (کلید، سوییچ، انتخاب) — خوش‌بینانه: سوییچ همان لحظهٔ لمس جابه‌جا می‌شود، نه
+   * بعد از رفت‌وبرگشت PUT و GET، و بقیهٔ سوییچ‌ها هم وسط ذخیره کم‌رنگ و قفل نمی‌شوند. اگر ذخیره نشد
+   * فقط کلیدهای همین درخواست برمی‌گردند. تا ذخیره‌ای در راه است دوباره نمی‌خوانیم.
+   */
   const update = async (patch: Record<string, unknown>, okMsg: string) => {
-    setAutoBusy(Object.keys(patch)[0])
+    const before = queryClient.getQueryData<Settings>(["settings"])
+    const keys = Object.keys(patch).filter((k) => before && k in before)
+    if (before && keys.length) {
+      await queryClient.cancelQueries({ queryKey: ["settings"] })
+      queryClient.setQueryData<Settings>(["settings"], (cur) => (cur ? { ...cur, ...Object.fromEntries(keys.map((k) => [k, patch[k]])) } : cur))
+    }
+    pendingSaves.current++
     try {
       await apiPut("/api/settings", patch)
       toast.success(okMsg)
-      await refetch()
       return true
     } catch (e) {
+      if (before) queryClient.setQueryData<Settings>(["settings"], (cur) => (cur ? { ...cur, ...Object.fromEntries(keys.map((k) => [k, before[k as keyof Settings]])) } : cur))
       toast.error(e instanceof Error ? e.message : "ذخیره نشد")
       return false
     } finally {
-      setAutoBusy(null)
+      if (--pendingSaves.current === 0) void refetch()
     }
   }
 
@@ -492,11 +504,7 @@ export default function SettingsPage() {
 
   if (isLoading || !data) {
     return (
-      <div className="mx-auto max-w-4xl space-y-4">
-        {[3, 2, 1].map((n) => (
-          <Skeleton key={n} className="rounded-2xl" style={{ height: n * 52 }} />
-        ))}
-      </div>
+      <SettingsSkeleton />
     )
   }
 

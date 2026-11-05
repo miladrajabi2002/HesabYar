@@ -4,6 +4,7 @@
  * پروفایل شخص — مشخصات، تراز، فاکتورها، چک‌ها، تسویه‌ها + ثبت تسویه
  * + صورتحساب PDF + گالری تصاویر شخص (ADV-04)
  */
+import { DetailSkeleton } from "@/components/ui/page-skeletons"
 import { use, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -313,11 +314,7 @@ export default function PersonPage({ params }: { params: Promise<{ id: string }>
   }, [data, id])
 
   if (isLoading || !data) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-primary" />
-      </div>
-    )
+    return <DetailSkeleton />
   }
 
   const p = data.person

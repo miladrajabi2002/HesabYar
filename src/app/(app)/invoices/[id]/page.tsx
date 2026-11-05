@@ -4,6 +4,7 @@
  * جزئیات فاکتور — اقلام، پرداخت‌ها، چک‌ها + تسویه مانده + چاپ رسمی (UI-04)
  * + پیوست‌های تصویری (ADV-04) + تأیید حذف با ConfirmSheet یکدست (UI-05)
  */
+import { DetailSkeleton } from "@/components/ui/page-skeletons"
 import { use, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -252,11 +253,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }, [settleHandled])
 
   if (isLoading || !data) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-primary" />
-      </div>
-    )
+    return <DetailSkeleton />
   }
 
   const inv = data.invoice

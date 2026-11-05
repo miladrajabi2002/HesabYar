@@ -3,13 +3,66 @@
 /**
  * فیلتر قرصی با نشانگر لغزان — جایگزین ردیف دکمه‌های جدا در لیست‌ها
  *  • هر گزینه می‌تواند رنگ امضا (tone) و شمارنده (count) داشته باشد
- *  • نشانگر با فنر بین گزینه‌ها لیز می‌خورد (layoutId یکتا برای هر نمونه)
+ *  • نشانگر با transform CSS بین گزینه‌ها لیز می‌خورد (useSlidingPill)، نه layoutId framer:
+ *    انیمیشن layout در هر فریم روی رشتهٔ اصلی اندازه می‌گرفت و درست همان لحظه که فهرست زیرش با
+ *    فیلتر تازه رندر می‌شد فریم می‌انداخت. حالا یک بار اندازه گرفته می‌شود و حرکت روی compositor است.
  *  • size="sm" برای ردیف دوم فیلترها
  */
-import { useId, type ReactNode } from "react"
+import { useLayoutEffect, useRef, type ReactNode } from "react"
 import { motion } from "framer-motion"
 import { toPersianDigits } from "@/lib/money"
 import { cn } from "@/lib/utils"
+
+/**
+ * نشانگر لغزان مشترک تب‌ها. ظرف `relative` باشد و گزینهٔ فعال `data-pill-active` داشته باشد.
+ * `layoutKey` هر چیزی است که اندازهٔ گزینه‌ها را عوض می‌کند (مثلاً شمارنده‌ها).
+ * پیش از اندازه‌گیری اول (رندر سرور) گزینهٔ فعال پس‌زمینهٔ خودش را دارد — PILL_FALLBACK.
+ */
+export function useSlidingPill<C extends HTMLElement = HTMLDivElement>(activeKey: string | null | undefined, layoutKey = "") {
+  const containerRef = useRef<C>(null)
+  const pillRef = useRef<HTMLSpanElement>(null)
+  const placed = useRef(false)
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    const pill = pillRef.current
+    if (!container || !pill) return
+    const place = (animate: boolean) => {
+      const target = container.querySelector<HTMLElement>("[data-pill-active]")
+      if (!target || !target.offsetWidth) {
+        pill.style.opacity = "0"
+        return
+      }
+      if (!animate) pill.style.transition = "none"
+      pill.style.opacity = "1"
+      pill.style.width = `${target.offsetWidth}px`
+      pill.style.height = `${target.offsetHeight}px`
+      pill.style.transform = `translate3d(${target.offsetLeft}px, ${target.offsetTop}px, 0)`
+      if (!animate) {
+        void pill.offsetWidth // جای تازه بدون انیمیشن ثبت شود، بعد transition برگردد
+        pill.style.transition = ""
+      }
+      container.setAttribute("data-pill-ready", "")
+    }
+    place(placed.current)
+    placed.current = true
+    // تغییر اندازهٔ ظرف (چرخش گوشی، باز شدن سایدبار): بی‌انیمیشن جابه‌جا شود
+    let width = container.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (container.clientWidth === width) return
+      width = container.clientWidth
+      place(false)
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [activeKey, layoutKey])
+  return { containerRef, pillRef }
+}
+
+/** کلاس‌های حرکت نشانگر: فقط transform روی compositor؛ عرض فقط وقتی گزینه‌ها هم‌اندازه نیستند عوض می‌شود */
+export const PILL_MOTION =
+  "pointer-events-none absolute left-0 top-0 opacity-0 transition-[transform,width,height,opacity] duration-[340ms] ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform motion-reduce:transition-none"
+/** گزینهٔ فعال تا وقتی نشانگر جا نیفتاده (رندر سرور، اولین فریم) خودش پس‌زمینه دارد */
+export const PILL_FALLBACK = "[:not([data-pill-ready])>&]:bg-card [:not([data-pill-ready])>&]:shadow-[0_1px_2px_rgb(16_24_40/0.08)]"
 
 export interface SegmentOption<T extends string> {
   key: T
@@ -33,16 +86,22 @@ export function Segmented<T extends string>({
   size?: "sm" | "md"
   className?: string
 }) {
-  const layoutId = useId()
+  const { containerRef, pillRef } = useSlidingPill(value, options.map((o) => `${o.key}:${o.count ?? ""}`).join("|"))
   return (
     <div
+      ref={containerRef}
       role="tablist"
       className={cn(
-        "relative flex rounded-md bg-[color-mix(in_srgb,var(--muted)_100%,var(--border)_35%)] p-1",
+        "relative isolate flex rounded-md bg-[color-mix(in_srgb,var(--muted)_100%,var(--border)_35%)] p-1",
         size === "sm" ? "gap-0.5" : "gap-1",
         className
       )}
     >
+      <span
+        ref={pillRef}
+        aria-hidden
+        className={cn(PILL_MOTION, "-z-10 rounded-sm bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08),0_2px_8px_-3px_rgb(16_24_40/0.12)]")}
+      />
       {options.map((o) => {
         const on = o.key === value
         return (
@@ -51,27 +110,21 @@ export function Segmented<T extends string>({
             type="button"
             role="tab"
             aria-selected={on}
+            data-pill-active={on ? "" : undefined}
             onClick={() => onChange(o.key)}
             style={{ ["--seg" as string]: o.tone ?? "var(--primary)" }}
             className={cn(
-              "relative z-10 flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm font-bold transition-colors duration-200",
+              "relative flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm font-bold transition-[color,transform] duration-200 active:scale-[0.97]",
               size === "sm" ? "h-8 px-2 text-caption" : "h-9 px-3 text-label",
-              on ? "text-[color:var(--seg)]" : "text-muted-foreground hover:text-foreground"
+              on ? cn("text-[color:var(--seg)]", PILL_FALLBACK) : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {on && (
-              <motion.span
-                layoutId={`seg-${layoutId}`}
-                className="absolute inset-0 -z-10 rounded-sm bg-card shadow-[0_1px_2px_rgb(16_24_40/0.08),0_2px_8px_-3px_rgb(16_24_40/0.12)]"
-                transition={{ type: "spring", stiffness: 520, damping: 38 }}
-              />
-            )}
             {o.icon}
             {o.label}
             {o.count !== undefined && o.count > 0 && (
               <span
                 className={cn(
-                  "nums grid h-4 min-w-4 place-items-center rounded-full px-1 text-caption leading-none",
+                  "nums grid h-4 min-w-4 place-items-center rounded-full px-1 text-caption leading-none transition-colors duration-200",
                   on ? "bg-[color:var(--seg)] text-white" : "bg-foreground/8 text-muted-foreground"
                 )}
               >

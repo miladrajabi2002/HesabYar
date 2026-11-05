@@ -5,6 +5,7 @@
  * مرتب‌سازی: بیشترین مانده / بیشترین فروش / بیشترین خرید / قدیمی‌ترین مانده
  * حلقهٔ آواتار = چند روز است حساب باز مانده (بیش از ۳۰ روز قرمز)
  */
+import { ListSkeleton } from "@/components/ui/page-skeletons"
 import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -254,9 +255,7 @@ function PeoplePageInner() {
 
       {/* لیست — کشیدن به چپ: تسویه • کشیدن به راست: تماس */}
       {isLoading ? (
-        <div className="flex min-h-[30vh] items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
+        <ListSkeleton rows={6} />
       ) : people.length === 0 ? (
         <EmptyState
           icon={debouncedQ ? Search : Users}
